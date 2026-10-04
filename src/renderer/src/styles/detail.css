@@ -1,0 +1,361 @@
+/**
+ * 详情页（歌单 / 专辑 / 歌手）与共享交互组件（Dialog / ContextMenu / Toast）的样式。
+ *
+ * 只使用 global.css / base.css 里的设计令牌；类名统一走 detail- / dialog /
+ * context-menu / toast 前缀，避免与并行开发的其他页面样式表撞名。
+ * 通用外观（.button、.card、.song-row、.hero、.page__empty…）一律复用，不在这里重画。
+ */
+
+/* --- 详情页公共 --------------------------------------------------------- */
+
+/* 标题上方的分类小字（歌单 / 专辑 / 歌手 / 排行榜）。 */
+.detail-kicker {
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.hero__art--round {
+  border-radius: 50%;
+}
+
+.detail-creator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.detail-creator img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.detail-creator__fallback {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  font-size: 12px;
+}
+
+.detail-sub {
+  color: var(--text-tertiary);
+}
+
+/* 可点击的歌手名（专辑页跳歌手）。 */
+.detail-link {
+  padding: 0;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.detail-link:hover {
+  text-decoration: underline;
+}
+
+/* 简介折叠态：两行截断，整块可点开完整简介。 */
+.detail-desc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 680px;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.detail-desc__text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: pre-line;
+}
+
+.detail-desc:hover .detail-desc__text {
+  color: var(--text);
+}
+
+.detail-desc__more {
+  flex: none;
+  color: var(--accent);
+}
+
+.detail-section {
+  margin-bottom: 30px;
+}
+
+.detail-pager {
+  display: flex;
+  justify-content: center;
+  margin: -10px 0 26px;
+}
+
+.detail-status__action {
+  margin-top: 12px;
+}
+
+/* Dialog 里的长文：保留换行，并允许选中复制。 */
+.detail-dialog-text {
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-line;
+}
+
+/* --- 加载骨架 ----------------------------------------------------------- */
+
+.detail-skeleton {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-skeleton__row {
+  height: 34px;
+}
+
+/* --- Dialog ------------------------------------------------------------- */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.38);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(78vh, 620px);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  outline: none;
+  animation: detail-pop 0.14s ease;
+}
+
+.dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dialog__body {
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  /* 弹窗里的正文通常是要复制出去的内容，覆盖 body 的全局禁选。 */
+  user-select: text;
+}
+
+.dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+@keyframes detail-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/* --- 添加歌曲选择器 ----------------------------------------------------- */
+
+.detail-pick__input {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.detail-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.detail-pick__hint {
+  padding: 24px 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.detail-pick__row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: left;
+}
+
+.detail-pick__row:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.detail-pick__row.is-selected {
+  background: var(--bg-active);
+}
+
+.detail-pick__row:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.detail-pick__check {
+  color: var(--accent);
+  text-align: center;
+}
+
+.detail-pick__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-pick__meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- ContextMenu -------------------------------------------------------- */
+
+.context-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 172px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.context-menu__item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.context-menu__item--danger {
+  color: var(--accent);
+}
+
+.context-menu__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* --- Toast -------------------------------------------------------------- */
+
+/* 落在播放条上方，避免遮住进度与音量。 */
+.toast-stack {
+  position: fixed;
+  right: 20px;
+  bottom: calc(var(--player-height) + 16px);
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 380px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  cursor: pointer;
+  pointer-events: auto;
+  animation: detail-slide-in 0.16s ease;
+}
+
+.toast__icon {
+  flex: none;
+  font-weight: 700;
+}
+
+.toast__message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toast--success {
+  border-color: #2e9e5b;
+}
+
+.toast--success .toast__icon {
+  color: #2e9e5b;
+}
+
+.toast--error {
+  border-color: var(--accent);
+}
+
+.toast--error .toast__icon {
+  color: var(--accent);
+}
+
+.toast--info .toast__icon {
+  color: var(--text-secondary);
+}
+
+@keyframes detail-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}

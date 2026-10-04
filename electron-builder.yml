@@ -1,0 +1,64 @@
+# electron-builder 配置。
+#
+# 目标：Windows 上产出 NSIS 安装包与免安装 portable exe。
+# mpv 作为独立可执行文件随包分发（extraResources），主进程用
+# `resolveMpvBinary()` 在 process.resourcesPath/mpv 下找它。
+appId: im.kumone.windows
+productName: Kumone
+copyright: LGPL-3.0-only · 基于 missuo/kumone 二开
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/node_modules/**/{test,__tests__,tests,examples,example,doc,docs}/**'
+
+extraResources:
+  # 音频后端。缺失也能启动（会提示播放不可用），但正常发布应包含它。
+  - from: vendor/mpv
+    to: mpv
+    filter:
+      - '**/*'
+
+asar: true
+asarUnpack:
+  # 没有需要解包的运行时依赖：mpv 走 extraResources，不走 asar。
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  # 关闭 exe 资源编辑与签名。
+  #
+  # 原因：electron-builder 为了 rcedit / signtool 会解压 winCodeSign 包，而该包内含
+  # macOS 符号链接（darwin/10.12/lib/libcrypto.dylib 等）。在未开启「开发者模式」且
+  # 非管理员的 Windows 上创建符号链接会被拒绝，解压报错后整条打包中断。
+  #
+  # 代价：exe 不带自定义图标、版本信息与公司名（应用内部名称仍是 Kumone）。
+  # 恢复方式（任选其一）：
+  #   1) 开启「开发者模式」（设置 → 系统 → 开发者选项），把此项改回 true；
+  #   2) 以管理员身份运行一次 npm run dist，让 winCodeSign 解压进缓存，再改回 true；
+  #   3) 配置代码签名证书后在 CI（非 Windows）上打包。
+  signAndEditExecutable: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Kumone
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
+
+# 自动更新走 electron-updater；未配置发布源时保持关闭，不影响本地打包。
+publish: null

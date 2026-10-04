@@ -1,0 +1,399 @@
+/**
+ * Feature stylesheet — 我的音乐 / 每日推荐 / 私人 FM / 音乐云盘。
+ *
+ * 只消费 global.css 的设计令牌与既有类名（.card/.song-row/.page/.placeholder/
+ * .button/.chip…），这里新增的都是这四个页面自己的版式。共享组件（.dialog*、
+ * .context-menu*、.toast*）的样式由各自的 owner 负责，本文件不重定义。
+ */
+
+/* --- 我的音乐 ---------------------------------------------------------- */
+
+.library__tabs {
+  margin-bottom: 18px;
+}
+
+.library__tab-icon {
+  margin-right: 6px;
+}
+
+.library__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.library__group {
+  margin-bottom: 24px;
+}
+
+.library__group-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* 卡片右上角的「⋯」：默认隐形，悬停才出现，免得整页都是按钮。 */
+.library-tile {
+  position: relative;
+}
+
+.library-tile__more {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.library-tile:hover .library-tile__more,
+.library-tile__more:focus-visible {
+  opacity: 1;
+}
+
+.library-tile__more:hover {
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+}
+
+.library__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.library__field .text-input {
+  width: 100%;
+  flex: none;
+}
+
+.library__dialog-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* 最近播放：列数比 SongList 少一列专辑，多一列播放次数。 */
+.library-recent {
+  display: flex;
+  flex-direction: column;
+}
+
+.library-recent__row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(120px, 220px) 90px 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.library-recent__row:hover {
+  background: var(--bg-hover);
+}
+
+.library-recent__row.is-current {
+  background: var(--bg-active);
+  color: var(--accent);
+}
+
+.library-recent__index {
+  color: var(--text-tertiary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.library-recent__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.library-recent__album {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-recent__count {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 每日推荐 ---------------------------------------------------------- */
+
+.daily__banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--accent-soft), var(--bg-elevated) 58%);
+  box-shadow: var(--shadow-soft);
+}
+
+.daily__headline {
+  min-width: 0;
+}
+
+.daily__date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.daily__title {
+  margin: 4px 0 2px;
+  font-size: 24px;
+  font-weight: 650;
+}
+
+.daily__hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* --- 私人 FM ----------------------------------------------------------- */
+
+.fm {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 480px;
+  padding: 40px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+/* 封面放大后模糊成背景；用负 inset 让模糊边缘留在裁切区外。 */
+.fm__backdrop {
+  position: absolute;
+  inset: -80px;
+  background-position: center;
+  background-size: cover;
+  filter: blur(60px) saturate(1.5);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.fm__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 560px;
+  text-align: center;
+}
+
+.fm__art {
+  width: 240px;
+  height: 240px;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  background: var(--bg-hover);
+  box-shadow: var(--shadow);
+}
+
+.fm__art--empty {
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+  font-size: 56px;
+}
+
+.fm__meta {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fm__title {
+  font-size: 22px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm__artist {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.fm__controls {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 6px;
+}
+
+.fm__control {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+.fm__control:hover {
+  color: var(--accent);
+}
+
+.fm__control:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fm__control--primary {
+  width: 62px;
+  height: 62px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 22px;
+}
+
+.fm__control--primary:hover {
+  background: #d63a3a;
+  color: #fff;
+}
+
+.fm__queue {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* --- 音乐云盘 ---------------------------------------------------------- */
+
+.cloud__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.cloud__quota {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cloud__bar {
+  flex: none;
+  width: 240px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+
+.cloud__bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.cloud__hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cloud__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cloud__row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(110px, 200px) 90px 60px 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.cloud__row:hover {
+  background: var(--bg-hover);
+}
+
+.cloud__row.is-current {
+  background: var(--bg-active);
+  color: var(--accent);
+}
+
+.cloud__row.is-disabled {
+  opacity: 0.55;
+}
+
+.cloud__index {
+  color: var(--text-tertiary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cloud__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cloud__artist {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud__size {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cloud__cell {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cloud__cell .icon-button:disabled,
+.song-row__play:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cloud__foot {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 4px;
+}
+
+.cloud__dialog-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}

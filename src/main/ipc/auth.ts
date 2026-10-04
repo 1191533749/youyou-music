@@ -1,0 +1,154 @@
+/**
+ * Authentication IPC.
+ *
+ * Login is QR-first, matching the macOS client: fetch a unikey, render
+ * `https://music.163.com/login?codekey=<unikey>` as a QR code, then poll. The
+ * poll owns the state machine (800 expired · 801 waiting · 802 scanned · 803
+ * success) and absorbs the auth cookies the client's transport already caught.
+ */
+import { defineHandler } from './registry.js'
+import { NeteaseAPIError } from '../netease/client.js'
+import type { AppContext } from '../context.js'
+import type { QRLoginStateDTO, UserProfileDTO } from '@shared/types'
+
+/** QR codes are valid for roughly two minutes; the UI shows a countdown. */
+const QR_TTL_MS = 120_000
+
+interface Session {
+  unikey: string
+  startedAt: number
+  scanned: boolean
+}
+
+let session: Session | undefined
+
+function profileDTO(context: AppContext, profile: {
+  userId: number
+  nickname: string
+  avatarUrl?: string
+  backgroundUrl?: string
+  signature?: string
+  vipType: number
+}): UserProfileDTO {
+  void context
+  return {
+    userId: profile.userId,
+    nickname: profile.nickname,
+    avatarUrl: profile.avatarUrl,
+    backgroundUrl: profile.backgroundUrl,
+    signature: profile.signature,
+    vipType: profile.vipType
+  }
+}
+
+export function registerAuthHandlers(context: AppContext): void {
+  defineHandler('auth:state', async () => {
+    if (!context.client.isLoggedIn) return { loggedIn: false }
+    try {
+      const profile = await context.api.userAccount()
+      return { loggedIn: true, profile: profile ? profileDTO(context, profile) : undefined }
+    } catch {
+      // A valid cookie jar with a failing profile call is still a login.
+      return { loggedIn: true }
+    }
+  })
+
+  defineHandler('auth:qrStart', async (): Promise<QRLoginStateDTO> => {
+    const unikey = await context.api.qrKey()
+    session = { unikey, startedAt: Date.now(), scanned: false }
+    return {
+      status: 'waiting',
+      unikey,
+      url: context.api.qrLoginURL(unikey)
+    }
+  })
+
+  defineHandler('auth:qrPoll', async ({ unikey }): Promise<QRLoginStateDTO> => {
+    if (!session || session.unikey !== unikey) {
+      return { status: 'expired', message: '二维码已失效，请刷新' }
+    }
+    if (Date.now() - session.startedAt > QR_TTL_MS && !session.scanned) {
+      session = undefined
+      return { status: 'expired', message: '二维码已过期，请刷新' }
+    }
+
+    const response = await context.api.qrCheck(unikey)
+    switch (response.code) {
+      case 800:
+        session = undefined
+        return { status: 'expired', message: '二维码已过期，请刷新' }
+      case 801:
+        return { status: 'waiting', url: context.api.qrLoginURL(unikey), unikey }
+      case 802:
+        session.scanned = true
+        return {
+          status: 'scanned',
+          url: context.api.qrLoginURL(unikey),
+          unikey,
+          nickname: response.nickname,
+          avatarUrl: response.avatarUrl,
+          message: '已扫码，请在手机上确认'
+        }
+      case 803: {
+        if (!context.client.isLoggedIn) {
+          // 803 can arrive before the Set-Cookie is applied on a slow hop.
+          return { status: 'waiting', url: context.api.qrLoginURL(unikey), unikey }
+        }
+        session = undefined
+        // Fetch the profile and VIP tier right away: the tier decides whether
+        // 无损 and Hi-Res are playable.
+        let profile: UserProfileDTO | undefined
+        try {
+          const account = await context.api.userAccount()
+          if (account) profile = profileDTO(context, account)
+        } catch (cause) {
+          context.log(`登录后获取账户信息失败: ${String(cause)}`)
+        }
+        return { status: 'confirmed', nickname: profile?.nickname ?? response.nickname, profile }
+      }
+      default:
+        return {
+          status: 'error',
+          message: response.message ?? `未知的扫码状态 (${response.code})`,
+          url: context.api.qrLoginURL(unikey)
+        }
+    }
+  })
+
+  defineHandler('auth:qrCancel', () => {
+    session = undefined
+  })
+
+  defineHandler('auth:profile', async () => {
+    if (!context.client.isLoggedIn) return undefined
+    const profile = await context.api.userAccount()
+    return profile ? profileDTO(context, profile) : undefined
+  })
+
+  defineHandler('auth:logout', async () => {
+    session = undefined
+    await context.api.logout()
+    context.lyrics.clear()
+    await context.player.clearQueue()
+  })
+
+  defineHandler('auth:sendSMSCode', async ({ phone, countryCode }) => {
+    if (!/^\d{5,15}$/.test(phone)) {
+      throw new NeteaseAPIError('business', { code: -1, message: '手机号格式不正确' })
+    }
+    await context.api.sendSMSCode(phone, countryCode ?? '86')
+  })
+
+  defineHandler('auth:loginCellphone', async ({ phone, captcha, countryCode }) => {
+    await context.api.loginCellphone(phone, captcha, countryCode ?? '86')
+    try {
+      const profile = await context.api.userAccount()
+      if (profile) {
+        context.emit('auth:changed', { loggedIn: true, profile: profileDTO(context, profile) })
+      }
+    } catch (cause) {
+      context.log(`手机号登录后获取账户信息失败: ${String(cause)}`)
+      context.emit('auth:changed', { loggedIn: true })
+    }
+  })
+}
