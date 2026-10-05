@@ -7,7 +7,7 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import { EventEmitter } from 'node:events'
-import { DEFAULT_SETTINGS, type SettingsDTO } from '@shared/types'
+import { DEFAULT_SETTINGS, DESKTOP_LYRICS_EFFECTS, type SettingsDTO } from '@shared/types'
 
 type Listener = (settings: SettingsDTO) => void
 
@@ -62,6 +62,9 @@ export class SettingsStore extends EventEmitter {
   }
 }
 
+/** 取值来自 @shared/types，避免主进程与渲染进程各维护一份枚举。 */
+const VALID_DESKTOP_LYRICS_EFFECTS = new Set<string>(DESKTOP_LYRICS_EFFECTS)
+
 const VALID_QUALITIES = new Set([
   'standard',
   'higher',
@@ -99,6 +102,12 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
           out.desktopLyricsOpacity = Math.min(1, Math.max(0.2, value))
         }
         break
+      case 'desktopLyricsEffect':
+        // 只接受已知特效；手改配置写成别的字符串时保留默认值。
+        if (typeof value === 'string' && VALID_DESKTOP_LYRICS_EFFECTS.has(value)) {
+          out.desktopLyricsEffect = value as SettingsDTO['desktopLyricsEffect']
+        }
+        break
       case 'cacheLimitMB':
         if (typeof value === 'number' && Number.isFinite(value)) {
           out.cacheLimitMB = Math.max(0, Math.round(value))
@@ -114,6 +123,20 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
         const position = value as { x?: unknown; y?: unknown }
         if (typeof position?.x === 'number' && typeof position?.y === 'number') {
           out.desktopLyricsPosition = { x: position.x, y: position.y }
+        }
+        break
+      }
+      case 'unblockSources': {
+        // 只接受已知音源，且去重；顺序保留用户配置（即优先级）。
+        const known = new Set(['pyncmd', 'kugou', 'kuwo'])
+        if (Array.isArray(value)) {
+          const list: Array<'pyncmd' | 'kugou' | 'kuwo'> = []
+          for (const item of value) {
+            if (typeof item === 'string' && known.has(item) && !list.includes(item as never)) {
+              list.push(item as 'pyncmd' | 'kugou' | 'kuwo')
+            }
+          }
+          out.unblockSources = list
         }
         break
       }

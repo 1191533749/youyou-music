@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { artistLine, call, coverUrl, usePlayerStore } from '../lib/contract'
+import { IconMusic, IconNext, IconPause, IconPlay, IconTrash } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import type { TrackDTO } from '@shared/types'
 
@@ -102,12 +103,12 @@ export default function FM(): JSX.Element {
 
       <div className="fm__body">
         {starting ? (
-          <div className="placeholder">正在为你挑选漫游曲目…</div>
+          <div className="placeholder">正在为你挑选漫游曲目</div>
         ) : startError ? (
           <div className="placeholder">
             <div className="placeholder__title">私人漫游启动失败</div>
             <div>{startError}</div>
-            <button type="button" className="button" onClick={retry}>
+            <button type="button" className="button glass-btn" onClick={retry}>
               重试
             </button>
           </div>
@@ -115,7 +116,7 @@ export default function FM(): JSX.Element {
           <div className="placeholder">
             <div className="placeholder__title">暂时没有可漫游的歌曲</div>
             <div>登录并多听几首歌之后，网易云会给出更准的推荐</div>
-            <button type="button" className="button" onClick={retry}>
+            <button type="button" className="button glass-btn" onClick={retry}>
               重新漫游
             </button>
           </div>
@@ -124,7 +125,9 @@ export default function FM(): JSX.Element {
             {cover ? (
               <img className="fm__art" src={cover} alt="" />
             ) : (
-              <div className="fm__art fm__art--empty">♪</div>
+              <div className="fm__art fm__art--empty">
+                <IconMusic size={54} />
+              </div>
             )}
 
             <div className="fm__meta">
@@ -137,23 +140,31 @@ export default function FM(): JSX.Element {
             <div className="fm__controls">
               <button
                 type="button"
-                className="fm__control"
+                className={`fm__control${trashing ? ' is-busy' : ''}`}
                 title="不喜欢，换一首"
+                aria-label="不喜欢，换一首"
                 disabled={trashing}
                 onClick={() => void trash(track)}
               >
-                {trashing ? '…' : '🗑'}
+                <IconTrash size={18} />
               </button>
               <button
                 type="button"
-                className="fm__control fm__control--primary"
+                className={`fm__control fm__control--primary${player.state.loading ? ' is-busy' : ''}`}
                 title={player.state.playing ? '暂停' : '播放'}
+                aria-label={player.state.playing ? '暂停' : '播放'}
                 onClick={() => void player.toggle()}
               >
-                {player.state.loading ? '⏳' : player.state.playing ? '⏸' : '▶'}
+                {player.state.playing ? <IconPause size={20} /> : <IconPlay size={20} />}
               </button>
-              <button type="button" className="fm__control" title="下一首" onClick={() => void player.next()}>
-                ⏭
+              <button
+                type="button"
+                className="fm__control"
+                title="下一首"
+                aria-label="下一首"
+                onClick={() => void player.next()}
+              >
+                <IconNext size={18} />
               </button>
             </div>
 

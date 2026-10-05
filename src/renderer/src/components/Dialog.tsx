@@ -20,6 +20,7 @@
  */
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { IconClose } from './Icons'
 
 export interface DialogProps {
   title: string
@@ -67,7 +68,9 @@ export default function Dialog({ title, open, onClose, children, footer, width =
     >
       <div
         ref={panel}
-        className="dialog"
+        // .glass 提供半透明底 + backdrop-filter + 亮边，.dialog 只管布局、圆角与投影，
+        // 两个类各管一段，避免后加载的规则把玻璃背景覆盖掉。
+        className="dialog glass"
         style={{ maxWidth: width }}
         role="dialog"
         aria-modal="true"
@@ -76,8 +79,8 @@ export default function Dialog({ title, open, onClose, children, footer, width =
       >
         <header className="dialog__header">
           <h2 className="dialog__title">{title}</h2>
-          <button type="button" className="icon-button" title="关闭" onClick={onClose}>
-            ✕
+          <button type="button" className="icon-button" title="关闭" aria-label="关闭" onClick={onClose}>
+            <IconClose size={16} />
           </button>
         </header>
         <div className="dialog__body">{children}</div>

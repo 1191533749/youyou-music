@@ -28,7 +28,7 @@ import { createPortal } from 'react-dom'
 
 export interface ContextMenuItem {
   label: string
-  /** 危险操作：红色文字（删除、取消收藏等）。 */
+  /** 危险操作：用 --accent-3（品红）标出，例如删除歌单。 */
   danger?: boolean
   disabled?: boolean
   onSelect: () => void
@@ -86,7 +86,13 @@ export default function ContextMenu({ items, x, y, onClose }: ContextMenuProps):
   if (items.length === 0) return null
 
   return createPortal(
-    <div ref={menu} className="context-menu" style={{ left: position.left, top: position.top }} role="menu">
+    // .glass 负责玻璃底与亮边，.context-menu 只负责定位、内边距与动效。
+    <div
+      ref={menu}
+      className="context-menu glass"
+      style={{ left: position.left, top: position.top }}
+      role="menu"
+    >
       {items.map((item) => (
         <button
           key={item.label}

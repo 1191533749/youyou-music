@@ -28,6 +28,8 @@ export function useAuthStore(): AuthStore {
   const [qr, setQR] = useState<QRLoginStateDTO | undefined>()
   const pollTimer = useRef<number | undefined>(undefined)
   const stopped = useRef(true)
+  /** Consecutive poll failures; a lone hiccup must not abort the handshake. */
+  const failures = useRef(0)
 
   const stopPolling = useCallback(() => {
     stopped.current = true
@@ -61,6 +63,7 @@ export function useAuthStore(): AuthStore {
       if (stopped.current) return
       try {
         const state = await call('auth:qrPoll', { unikey })
+        failures.current = 0
         setQR(state)
         if (state.status === 'confirmed') {
           stopPolling()
@@ -77,12 +80,18 @@ export function useAuthStore(): AuthStore {
           return
         }
       } catch (cause) {
-        setQR({
-          status: 'error',
-          message: cause instanceof Error ? cause.message : String(cause)
-        })
-        stopPolling()
-        return
+        // A single failed poll is usually a transient network hiccup; giving up
+        // on it would strand the user on "请使用 App 扫码" forever. Three in a
+        // row is a real failure.
+        failures.current += 1
+        if (failures.current >= 3) {
+          setQR({
+            status: 'error',
+            message: cause instanceof Error ? cause.message : String(cause)
+          })
+          stopPolling()
+          return
+        }
       }
       pollTimer.current = window.setTimeout(() => void poll(unikey), POLL_INTERVAL_MS)
     },
@@ -92,6 +101,7 @@ export function useAuthStore(): AuthStore {
   const startQR = useCallback(async () => {
     stopPolling()
     stopped.current = false
+    failures.current = 0
     setQR({ status: 'waiting' })
     try {
       const state = await call('auth:qrStart')

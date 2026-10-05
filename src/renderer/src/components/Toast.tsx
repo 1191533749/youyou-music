@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { IconCheck, IconClose } from './Icons'
 
 export type ToastKind = 'info' | 'success' | 'error'
 
@@ -35,10 +36,14 @@ const DURATION_MS = 3000
 /** 同时最多显示几条；再多的挤掉最旧的，避免刷屏遮住播放条。 */
 const MAX_VISIBLE = 4
 
-const ICONS: Record<ToastKind, string> = {
-  info: 'ℹ',
-  success: '✓',
-  error: '!'
+/**
+ * 提示前缀图标：成功用对勾、失败用叉，普通通知用自绘圆点。
+ * 两条渲染路径（应用级容器 / 页面级 node）共用它，避免图标在两处走样。
+ */
+function ToastIcon({ kind }: { kind: ToastKind }): JSX.Element {
+  if (kind === 'success') return <IconCheck size={16} />
+  if (kind === 'error') return <IconClose size={16} />
+  return <span className="toast__dot" aria-hidden="true" />
 }
 
 /** 应用级提示总线：App 挂载的容器订阅它，页面只负责发。 */
@@ -93,7 +98,9 @@ export function AppToastStack(): JSX.Element {
           title="点击关闭"
           onClick={() => dismiss(item.id)}
         >
-          <span className="toast__icon">{ICONS[item.kind]}</span>
+          <span className="toast__icon">
+            <ToastIcon kind={item.kind} />
+          </span>
           <span className="toast__message">{item.message}</span>
         </div>
       ))}
@@ -151,7 +158,9 @@ export function useToast(): ToastApi {
               title="点击关闭"
               onClick={() => dismiss(item.id)}
             >
-              <span className="toast__icon">{ICONS[item.kind]}</span>
+              <span className="toast__icon">
+                <ToastIcon kind={item.kind} />
+              </span>
               <span className="toast__message">{item.message}</span>
             </div>
           ))}

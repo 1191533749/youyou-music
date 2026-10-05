@@ -8,7 +8,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArtCard, call, coverUrl, formatPlayCount, useNavigation } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
+import { IconDiamond, IconDisc, IconLayers, IconPlus, IconUser } from '../components/Icons'
 import type { ArtistSummaryDTO, PlaylistSummaryDTO } from '@shared/types'
+
+/** 图标组件的公共形状：尺寸与类名可传，颜色跟随 currentColor。 */
+type IconComponent = (props: { size?: number; className?: string }) => JSX.Element
 
 /** 网易云真实分类词，顺序与官方客户端一致。 */
 const CATEGORIES = [
@@ -34,13 +38,13 @@ const ORDERS: Array<{ value: string; label: string }> = [
   { value: 'new', label: '最新' }
 ]
 
-const TABS = [
-  { value: 'top', label: '分类歌单' },
-  { value: 'high', label: '精品歌单' },
-  { value: 'artists', label: '热门歌手' }
-] as const
+type Tab = 'top' | 'high' | 'artists'
 
-type Tab = (typeof TABS)[number]['value']
+const TABS: Array<{ value: Tab; label: string; Icon: IconComponent }> = [
+  { value: 'top', label: '分类歌单', Icon: IconLayers },
+  { value: 'high', label: '精品歌单', Icon: IconDiamond },
+  { value: 'artists', label: '热门歌手', Icon: IconUser }
+]
 
 const PAGE_SIZE = 50
 /** 分类歌单最多翻到 500 首，与上游客户端一致，避免一直翻下去拖垮接口。 */
@@ -112,6 +116,7 @@ export default function Explore(): JSX.Element {
               className={`chip${tab === item.value ? ' is-active' : ''}`}
               onClick={() => setTab(item.value)}
             >
+              <item.Icon size={14} />
               {item.label}
             </button>
           ))}
@@ -191,7 +196,10 @@ function PlaylistGrid({
 
       {list.loading ? (
         <div className="explore__loading">
-          <div className="page__subtitle">正在加载歌单…</div>
+          <div className="loading-state">
+            <IconDisc size={16} className="spin" />
+            <span>正在加载歌单…</span>
+          </div>
           <div className="skeleton explore__skeleton" />
         </div>
       ) : null}
@@ -256,9 +264,13 @@ function InfiniteFooter({ list }: { list: InfiniteList }): JSX.Element | null {
     <div className="explore__footer">
       <div ref={sentinelRef} className="explore__sentinel" aria-hidden="true" />
       {list.loadingMore ? (
-        <div className="page__subtitle">正在加载更多…</div>
+        <div className="loading-state">
+          <IconDisc size={15} className="spin" />
+          <span>正在加载更多…</span>
+        </div>
       ) : (
         <button type="button" className="button" onClick={list.loadMore}>
+          <IconPlus size={15} />
           加载更多
         </button>
       )}
@@ -282,7 +294,10 @@ function ArtistsGrid({
   if (loading) {
     return (
       <div className="explore__loading">
-        <div className="page__subtitle">正在加载歌手…</div>
+        <div className="loading-state">
+          <IconDisc size={16} className="spin" />
+          <span>正在加载歌手…</span>
+        </div>
         <div className="skeleton explore__skeleton" />
       </div>
     )
@@ -313,7 +328,7 @@ function ArtistsGrid({
         <ArtCard
           key={artist.id}
           title={artist.name}
-          subtitle={`${artist.musicSize} 首 · ${artist.albumSize} 张专辑`}
+          subtitle={`${artist.musicSize} 首歌曲，${artist.albumSize} 张专辑`}
           imageUrl={coverUrl(artist.picUrl, 240)}
           round
           onClick={() => onOpen(artist)}

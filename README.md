@@ -1,4 +1,4 @@
-# 雲の音 Kumone · Windows
+# 悠悠音乐 · Windows
 
 基于 [missuo/kumone](https://github.com/missuo/kumone)（macOS/iOS 原生客户端，**LGPL-3.0**）的**协议与功能**，
 用 Electron + React + TypeScript 重写的 Windows 桌面客户端，音频后端为 **mpv**。
@@ -17,11 +17,21 @@
 | 60+ 网易云接口 | ✅ 已实测 | 搜索、歌单、专辑、歌手、日推、FM、心动模式、云盘、排行榜等，均有回归测试 |
 | 歌词解析 | ✅ 已移植 | LRC / 逐字 yrc / 翻译 / 罗马音，两级接口降级 + 传输降级 |
 | mpv 音频后端 | ✅ 已实测 | JSON IPC（Windows 命名管道），播放/暂停/跳转/音量/静音/设备枚举 |
-| 本地缓存 | ✅ 已实测 | 音频与封面缓存、LRU 淘汰、上限可配；播放优先命中缓存 |
-| 桌面歌词 | ✅ | 置顶透明条、可拖动、位置持久化 |
+| 本地缓存 | ✅ 已实测 | 音频与封面缓存、LRU 淘汰、上限可配；播放优先命中缓存（换源文件与官方文件分开归档） |
+| **受限歌曲自动换源** | ✅ 已实测 | 移植上游 UnblockNeteaseMusic 方案：pyncmd / 酷狗 / 酷我；严格匹配时长·歌名·歌手·版本，找不到就明确报错，绝不播半截 |
+| **音质诚实降档** | ✅ | 达不到所选音质自动降到可播最高档；换源音源码率未知时不虚报档位 |
+| **全屏播放页** | ✅ | 黑胶/胶片/波形/星海四种视觉 + 卡拉OK/渐变放大/淡入淡出/霓虹四种歌词特效（选择持久化） |
+| 桌面歌词 | ✅ 已实测 | 置顶透明条、按歌词行自适配高度、透明区域点击穿透、位置持久化、四种特效 |
+| **内置更新** | ✅ | 启动检测 GitHub Releases，30 秒倒计时自动更新（可稍后）；便携版下载新版 exe 自替换，安装版静默安装，更新后自动重开 |
 | 系统集成 | ✅ | 媒体键、任务栏缩略图按钮、进度条、托盘、单实例 |
-| 界面 | ✅ 全部页面完成 | 首页/发现/搜索/播放页/歌单/专辑/歌手/我的音乐/日推/FM/云盘/排行榜/设置/登录 |
-| 打包 exe | ✅ 已验证 | NSIS 安装包 + 免安装 exe（各约 113MB，含 mpv）；产物布局与随包 mpv 播放均已自检 |
+| 界面 | ✅ 全部页面完成 | 液态玻璃 + 手机端暖橙红配色；深色主题独立配色；全站零 emoji |
+| 应用图标 | ✅ 已嵌入 | 红色小鱼图标写入 exe（图标 + 产品名 + 版本信息），安装包同款 |
+
+## 发布与更新
+
+- 产物命名：`悠悠音乐安装版<版本>.exe`（安装版）与 `悠悠音乐便携版<版本>.exe`（免安装）。
+- 内置更新从 GitHub Releases 拉取最新版本资产；**新版本只有在仓库所有者确认后才打包发布**。
+- 许可文本：`LICENSE`（LGPL-3.0）与 `THIRD-PARTY-NOTICES.txt` 随包分发，界面不展示上游信息。
 
 ## 快速开始
 
@@ -29,19 +39,24 @@
 # 1. 安装依赖
 npm install
 
-# 2. 下载 mpv（音频后端，约 32MB，仓库不提交二进制）
+# 2. 下载音频后端与打包工具（各约 32MB / 1.3MB，仓库不提交二进制）
 pwsh -File scripts/fetch-mpv.ps1
+pwsh -File scripts/fetch-rcedit.ps1
 
-# 3. 开发模式
+# 3. 生成应用图标（源图 build/icon-source.jpg → build/icon.png + build/icon.ico）
+python scripts/make-icon.py
+
+# 4. 开发模式
 npm run dev
 
-# 4. 生产构建 + 冒烟自检（无需人工点击，会真实启动窗口并跑一遍 IPC）
+# 5. 生产构建 + 冒烟自检（无需人工点击，会真实启动窗口并跑一遍 IPC）
 npm run build
 npm run smoke
 
-# 5. 打包 Windows exe
+# 6. 打包 Windows exe
 npm run dist            # NSIS 安装包
 npm run dist:portable   # 免安装单文件 exe
+npm run verify:packaged # 校验产物布局，并用随包 mpv 真实解码播放
 ```
 
 ## 架构
@@ -73,10 +88,13 @@ src/
 - **主进程是唯一的特权方。** 渲染进程没有 Node、没有 `fetch`，所有网络/文件/音频操作都是具名 IPC 通道。
   这样 CSP 与 cookie 都只有一处需要管。
 - **音频交给 mpv，不自己解。** mpv 直接输出到 WASAPI，支持 mp3/flac/Hi-Res；本进程只通过 JSON IPC 驱动它。
-  这与上游「AVFoundation 解码、PlaybackEngine 调度」的分工一致，只是把 AVFoundation 换成了 mpv。
+  这与上游「AVFoundation 解码、PlaybackEngine 调度」的分工一致。
+- **受限歌曲一律换源补齐。** 官方接口拿不到完整音频（或只给试听片段）时，依次尝试
+  站内替代版本 → pyncmd → 酷狗 → 酷我，只在「时长 ±5 秒、歌名归一化相同、版本标记一致、
+  歌手命中」四条全中时才采用；宁可报错也不播半截或播翻唱。
 - **主进程与 preload 输出 CommonJS。** Electron 33 的 ESM 加载器无法 `import` electron 模块本身
   （连 `import { app } from 'electron'` 都会在 `cjsPreparseModuleExports` 崩），因此只有渲染进程走 ESM。
-- **音质自动降级。** 请求无损但账号未开通时，按 `jymaster → hires → lossless → exhigh → higher → standard`
+- **音质自动降级。** 请求的档位拿不到时按 `jymaster → hires → lossless → exhigh → higher → standard`
   逐档下降，并把「实际播放音质」显示在播放条上，而不是直接报错。
 
 ## 上游对照

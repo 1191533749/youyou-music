@@ -22,15 +22,14 @@ export function registerAppHandlers(context: AppContext): void {
       context.log(`读取 mpv 版本失败: ${String(cause)}`)
     }
     return {
-      name: '雲の音 Kumone',
+      name: '悠悠音乐',
       version: app.getVersion(),
       electron: process.versions.electron,
       chrome: process.versions.chrome,
       node: process.versions.node,
       platform: process.platform,
       mpv,
-      mpvPath,
-      upstream: 'https://github.com/missuo/kumone'
+      mpvPath
     }
   })
 
@@ -125,6 +124,23 @@ export function registerAppHandlers(context: AppContext): void {
 
   defineHandler('lyrics:desktopMove', async ({ x, y }) => {
     await context.settings.update({ desktopLyricsPosition: { x, y } })
+  })
+
+  defineHandler('lyrics:desktopResize', async ({ height, width }) => {
+    const window = context.lyricsWindow()
+    if (!window || window.isDestroyed()) return
+    const bounds = window.getBounds()
+    const targetWidth = Math.max(140, Math.min(Math.round(width ?? bounds.width), 1200))
+    const targetHeight = Math.max(30, Math.min(Math.round(height), 320))
+    window.setBounds({ x: bounds.x, y: bounds.y, width: targetWidth, height: targetHeight }, false)
+  })
+
+  defineHandler('lyrics:desktopClickThrough', async ({ through }) => {
+    const window = context.lyricsWindow()
+    if (!window || window.isDestroyed()) return
+    // forward: true —— 点击穿透给桌面，但鼠标移动仍会送到页面，
+    // 渲染进程据此判断「鼠标悬在歌词上」时再切回可交互。
+    window.setIgnoreMouseEvents(through, { forward: true })
   })
 }
 

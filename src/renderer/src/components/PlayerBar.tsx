@@ -1,14 +1,27 @@
 /**
- * The player bar.
+ * 播放条：玻璃底 + 线性图标。
  *
- * Layout follows the macOS client's bottom bar: artwork and title on the left
- * (clicking the artwork opens the immersive now-playing page), transport in the
- * centre with an inline lyric line, and volume / queue / quality on the right.
+ * 布局沿用 macOS 版底部条的分工：左侧是封面与曲目信息（点封面进播放页），
+ * 中间是传输控件与进度，右侧是音质、队列与音量。
  */
 import { useMemo } from 'react'
 import { usePlayerStore, repeatLabel } from '../store/player'
 import { useNavigation } from '../store/navigation'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
+import {
+  IconMore,
+  IconMusic,
+  IconNext,
+  IconPause,
+  IconPlay,
+  IconPrevious,
+  IconQueue,
+  IconRepeat,
+  IconRepeatOne,
+  IconShuffle,
+  IconVolume,
+  IconVolumeMute
+} from './Icons'
 import type { PlayerStore } from '../store/player'
 
 const QUALITY_LABELS: Record<string, string> = {
@@ -32,7 +45,7 @@ export default function PlayerBar(): JSX.Element {
     return Math.min(100, (state.position / state.duration) * 100)
   }, [state.position, state.duration])
 
-  const unavailable = current ? current.playability !== 'playable' : false
+  const max = Math.max(1, Math.floor(state.duration))
 
   return (
     <footer className="player-bar" data-testid="player-bar">
@@ -43,10 +56,12 @@ export default function PlayerBar(): JSX.Element {
           title="打开播放页"
           onClick={() => navigation.push({ name: 'nowPlaying' })}
         >
-          {coverUrl(current?.album.picUrl, 96) ? (
-            <img src={coverUrl(current?.album.picUrl, 96)} alt="" />
+          {coverUrl(current?.album.picUrl, 120) ? (
+            <img src={coverUrl(current?.album.picUrl, 120)} alt="" />
           ) : (
-            <span className="player-bar__art-placeholder">雲</span>
+            <span className="player-bar__art-placeholder">
+              <IconMusic size={22} />
+            </span>
           )}
         </button>
         <div className="player-bar__meta">
@@ -55,39 +70,56 @@ export default function PlayerBar(): JSX.Element {
           </div>
           <div className="player-bar__artist">
             {current ? artistLine(current) : '选择一首歌开始'}
-            {unavailable && current?.playabilityReason ? (
-              <span className="badge badge--warn">{current.playabilityReason}</span>
-            ) : null}
           </div>
         </div>
       </div>
 
       <div className="player-bar__center">
         <div className="player-bar__controls">
-          <button type="button" className="icon-button" title={repeatLabel(state.repeat)} onClick={() => void player.cycleRepeat()}>
-            {state.repeat === 'one' ? '🔂' : state.repeat === 'all' ? '🔁' : '➡️'}
+          <button
+            type="button"
+            className={`icon-button${state.repeat !== 'off' ? ' is-active' : ''}`}
+            title={repeatLabel(state.repeat)}
+            aria-label={repeatLabel(state.repeat)}
+            onClick={() => void player.cycleRepeat()}
+          >
+            {state.repeat === 'one' ? <IconRepeatOne size={18} /> : <IconRepeat size={18} />}
           </button>
-          <button type="button" className="icon-button" title="上一首" onClick={() => void player.previous()}>
-            ⏮
+          <button
+            type="button"
+            className="icon-button"
+            title="上一首"
+            aria-label="上一首"
+            onClick={() => void player.previous()}
+          >
+            <IconPrevious size={18} />
           </button>
           <button
             type="button"
             className="icon-button icon-button--primary"
             title={state.playing ? '暂停' : '播放'}
+            aria-label={state.playing ? '暂停' : '播放'}
             onClick={() => void player.toggle()}
           >
-            {state.loading ? '⏳' : state.playing ? '⏸' : '▶'}
+            {state.loading ? <IconMore size={18} /> : state.playing ? <IconPause size={18} /> : <IconPlay size={18} />}
           </button>
-          <button type="button" className="icon-button" title="下一首" onClick={() => void player.next()}>
-            ⏭
+          <button
+            type="button"
+            className="icon-button"
+            title="下一首"
+            aria-label="下一首"
+            onClick={() => void player.next()}
+          >
+            <IconNext size={18} />
           </button>
           <button
             type="button"
             className={`icon-button${state.shuffle ? ' is-active' : ''}`}
             title={state.shuffle ? '随机播放：开' : '随机播放：关'}
+            aria-label="随机播放"
             onClick={() => void player.setShuffle(!state.shuffle)}
           >
-            🔀
+            <IconShuffle size={18} />
           </button>
         </div>
         <div className="player-bar__progress">
@@ -96,8 +128,8 @@ export default function PlayerBar(): JSX.Element {
             type="range"
             className="slider"
             min={0}
-            max={Math.max(1, Math.floor(state.duration))}
-            value={Math.min(state.position, Math.max(1, Math.floor(state.duration)))}
+            max={max}
+            value={Math.min(state.position, max)}
             onChange={(event) => void player.seek(Number(event.target.value))}
             aria-label="播放进度"
           />
@@ -111,16 +143,23 @@ export default function PlayerBar(): JSX.Element {
 
       <div className="player-bar__right">
         <QualityMenu player={player} />
-        <button type="button" className="icon-button" title="播放队列" onClick={() => navigation.push({ name: 'nowPlaying' })}>
-          ☰
+        <button
+          type="button"
+          className="icon-button"
+          title="播放队列"
+          aria-label="播放队列"
+          onClick={() => navigation.push({ name: 'nowPlaying' })}
+        >
+          <IconQueue size={18} />
         </button>
         <button
           type="button"
           className="icon-button"
           title={state.muted ? '取消静音' : '静音'}
+          aria-label={state.muted ? '取消静音' : '静音'}
           onClick={() => void player.setMuted(!state.muted)}
         >
-          {state.muted ? '🔇' : '🔊'}
+          {state.muted ? <IconVolumeMute size={18} /> : <IconVolume size={18} />}
         </button>
         <input
           type="range"
@@ -138,17 +177,21 @@ export default function PlayerBar(): JSX.Element {
 
 function QualityMenu({ player }: { player: PlayerStore }): JSX.Element {
   const { state } = player
-  const served = state.servedQuality && state.servedQuality !== state.quality ? state.servedQuality : undefined
+  // 音质策略：达不到所选音质时自动降档（主进程保证），
+  // 界面不提示、不虚报、不说来源——只保留用户的首选档位控件。
   return (
-    <label className="quality-select" title={served ? `实际播放音质：${QUALITY_LABELS[served]}` : '播放音质'}>
-      <select value={state.quality} onChange={(event) => void player.setQuality(event.target.value)}>
+    <label className="quality-select" title="首选音质；达不到时自动降至可播放的最高音质">
+      <select
+        value={state.quality}
+        aria-label="首选音质"
+        onChange={(event) => void player.setQuality(event.target.value)}
+      >
         {Object.entries(QUALITY_LABELS).map(([value, label]) => (
           <option key={value} value={value}>
             {label}
           </option>
         ))}
       </select>
-      {served ? <span className="quality-select__hint">实际 {QUALITY_LABELS[served]}</span> : null}
     </label>
   )
 }

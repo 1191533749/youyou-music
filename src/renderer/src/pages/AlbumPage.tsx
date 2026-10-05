@@ -26,6 +26,7 @@ import { useAsync } from '../lib/hooks'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
 import { useToast, type ToastKind } from '../components/Toast'
+import { IconCheck, IconMore, IconMusic, IconPlay, IconPlus } from '../components/Icons'
 
 export default function AlbumPage({ id }: { id: number }): JSX.Element {
   // 换专辑时重建实例，否则会短暂显示上一张专辑的封面与曲目。
@@ -72,8 +73,14 @@ function AlbumDetail({ id }: { id: number }): JSX.Element {
   const playAll = useCallback(() => {
     if (songs.length === 0) return
     const firstPlayable = songs.findIndex((track) => track.playability === 'playable')
-    void player.playTracks(songs, firstPlayable < 0 ? 0 : firstPlayable)
-  }, [player, songs])
+    // 整表播放入口带 randomStart：由主进程随机起播（点具体某一行时不带）。
+    // store 的 playTracks 只转发 startIndex，这里直接调通道；状态靠 player:state 广播同步。
+    void call('player:playTracks', {
+      tracks: songs,
+      startIndex: firstPlayable < 0 ? 0 : firstPlayable,
+      randomStart: true
+    })
+  }, [songs])
 
   const appendAll = useCallback(() => {
     if (songs.length === 0) return
@@ -172,7 +179,9 @@ function AlbumDetail({ id }: { id: number }): JSX.Element {
           {coverUrl(album.picUrl, 512) ? (
             <img src={coverUrl(album.picUrl, 512)} alt="" />
           ) : (
-            <span className="card__placeholder">♪</span>
+            <span className="card__placeholder">
+              <IconMusic size={26} />
+            </span>
           )}
         </div>
 
@@ -209,36 +218,45 @@ function AlbumDetail({ id }: { id: number }): JSX.Element {
           ) : null}
 
           <div className="hero__actions">
-            <button type="button" className="button button--primary" disabled={songs.length === 0} onClick={playAll}>
-              ▶ 播放全部{songs.length > 0 ? ` (${songs.length})` : ''}
+            <button
+              type="button"
+              className="button button--primary detail-btn"
+              disabled={songs.length === 0}
+              onClick={playAll}
+            >
+              <IconPlay size={16} />
+              播放全部{songs.length > 0 ? ` (${songs.length})` : ''}
             </button>
             {auth.loggedIn ? (
-              <button type="button" className="button" onClick={() => void toggleSubscribe()}>
-                {isSubscribed ? '✓ 已收藏' : '+ 收藏专辑'}
+              <button type="button" className="button detail-btn" onClick={() => void toggleSubscribe()}>
+                {isSubscribed ? <IconCheck size={16} /> : <IconPlus size={16} />}
+                {isSubscribed ? '已收藏' : '收藏专辑'}
               </button>
             ) : null}
             <button
               type="button"
-              className="button"
+              className="button detail-btn"
+              aria-label="更多操作"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect()
                 setMenuAt({ x: rect.left, y: rect.bottom + 4 })
               }}
             >
-              ⋯ 更多
+              <IconMore size={16} />
+              更多
             </button>
           </div>
         </div>
       </section>
 
-      <section className="detail-section">
+      <section className="detail-section detail-panel">
         <div className="section__header">
           <h2 className="section__title">曲目</h2>
           <span className="section__more">{songs.length} 首</span>
         </div>
 
         {songs.length === 0 ? (
-          <div className="page__empty">这张专辑暂时没有可播放的曲目</div>
+          <div className="page__empty">这张专辑还没有曲目</div>
         ) : (
           <SongList
             tracks={songs}
@@ -248,7 +266,7 @@ function AlbumDetail({ id }: { id: number }): JSX.Element {
             showAlbum={false}
             likedTrackIDs={likedIDs}
             onToggleLike={auth.loggedIn ? (track) => void toggleLike(track) : undefined}
-            emptyMessage="这张专辑暂时没有可播放的曲目"
+            emptyMessage="这张专辑还没有曲目"
           />
         )}
       </section>

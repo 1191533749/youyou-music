@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TrackDTO } from '@shared/types'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
+import { IconHeart, IconHeartFilled, IconMore, IconMusic, IconPause, IconPlay } from './Icons'
 
 export interface SongListProps {
   tracks: TrackDTO[]
@@ -92,13 +93,19 @@ export default function SongList({
             className={`song-row${currentTrackID === track.id ? ' is-current' : ''}${disabled ? ' is-disabled' : ''}`}
             style={{ gridTemplateColumns: columns }}
             onDoubleClick={() => onPlay(index)}
-            title={disabled ? (track.playabilityReason ?? '不可播放') : `${track.name} — ${artistLine(track)}`}
+            title={`${track.name} — ${artistLine(track)}`}
           >
             {showIndex ? <div className="song-row__index">{index + 1}</div> : null}
 
             <div className="song-row__title">
-              <button type="button" className="song-row__play" onClick={() => onPlay(index)} title="播放">
-                {currentTrackID === track.id ? '♪' : '▶'}
+              <button
+                type="button"
+                className="song-row__play"
+                onClick={() => onPlay(index)}
+                title={currentTrackID === track.id ? '正在播放' : '播放'}
+                aria-label={currentTrackID === track.id ? '正在播放' : '播放'}
+              >
+                {currentTrackID === track.id ? <IconPause size={14} /> : <IconPlay size={14} />}
               </button>
               <div style={{ minWidth: 0 }}>
                 <div className="song-row__name">
@@ -107,9 +114,6 @@ export default function SongList({
                 </div>
                 {track.alias[0] ? <div className="song-row__sub">{track.alias[0]}</div> : null}
               </div>
-              {disabled && track.playabilityReason ? (
-                <span className="badge badge--warn">{track.playabilityReason}</span>
-              ) : null}
               {track.isCloud ? <span className="badge">云盘</span> : null}
             </div>
 
@@ -123,12 +127,13 @@ export default function SongList({
                   type="button"
                   className={`icon-button${liked ? ' is-active' : ''}`}
                   title={liked ? '取消喜欢' : '喜欢'}
+                  aria-label={liked ? '取消喜欢' : '喜欢'}
                   onClick={(event) => {
                     event.stopPropagation()
                     onToggleLike(track)
                   }}
                 >
-                  {liked ? '♥' : '♡'}
+                  {liked ? <IconHeartFilled size={16} /> : <IconHeart size={16} />}
                 </button>
               ) : null}
               {rowAction ? (
@@ -136,6 +141,7 @@ export default function SongList({
                   type="button"
                   className="icon-button"
                   title={rowAction.label}
+                  aria-label={rowAction.label}
                   onClick={(event) => {
                     event.stopPropagation()
                     if (menuFor === index) {
@@ -146,7 +152,7 @@ export default function SongList({
                     }
                   }}
                 >
-                  ⋯
+                  <IconMore size={16} />
                 </button>
               ) : null}
             </div>
@@ -177,7 +183,13 @@ export function ArtCard({
   return (
     <button type="button" className="card" onClick={onClick} title={title}>
       <div className={`card__art${round ? ' card__art--round' : ''}`}>
-        {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <span className="card__placeholder">♪</span>}
+        {imageUrl ? (
+          <img src={imageUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="card__placeholder">
+            <IconMusic size={26} />
+          </span>
+        )}
         {badge ? <span className="card__badge">{badge}</span> : null}
       </div>
       <div className="card__title">{title}</div>

@@ -1,9 +1,12 @@
 /**
  * 详情页（歌单 / 专辑 / 歌手）与共享交互组件（Dialog / ContextMenu / Toast）的样式。
  *
- * 只使用 global.css / base.css 里的设计令牌；类名统一走 detail- / dialog /
- * context-menu / toast 前缀，避免与并行开发的其他页面样式表撞名。
- * 通用外观（.button、.card、.song-row、.hero、.page__empty…）一律复用，不在这里重画。
+ * 三条约束：
+ *   1. 颜色只走 global.css 的令牌（--accent / --accent-2 / --accent-3 / --ok / --warn
+ *      与玻璃系列），不写死色值，深浅主题共用一套规则。
+ *   2. 浮层与面板是玻璃：半透明底 + backdrop-filter + 1px 亮边，能透出 .backdrop 光斑。
+ *   3. 通用外观（.button/.card/.song-row/.hero/.chip 等）由 global.css / base.css 提供，
+ *      这里只补充详情页专属的细节，不重复定义同名类。
  */
 
 /* --- 详情页公共 --------------------------------------------------------- */
@@ -16,8 +19,82 @@
   color: var(--text-tertiary);
 }
 
+/* .hero 的玻璃底现在由 base.css 提供（--glass-weak + blur + 亮边 + 投影），
+   这里不再覆盖：详情页与其他页面的 hero 保持完全一致的观感。
+   本文件只补充确实属于详情页的类名。 */
+
 .hero__art--round {
   border-radius: 50%;
+}
+
+/* 歌单 / 专辑 / 歌手的曲目列表容器：手机上那种白玻璃面板，
+   18px 内边距 + --radius-lg 圆角 + 柔和阴影，模糊与 hero 用同一档 --blur。 */
+.detail-panel {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(170%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+/* --- 按钮：详情页与浮层统一液态毛玻璃 ----------------------------------
+   半透明底 + backdrop-filter 模糊 + 1px 亮边 + 柔和投影，hover 抬亮一档。
+   .detail-btn 覆盖 hero 里的操作按钮，另外三个选择器覆盖重试按钮、分页按钮和
+   Dialog 页脚按钮，这样不必为了样式去改 JSX。 */
+.detail-btn,
+.detail-status__action,
+.detail-pager .button,
+.dialog__footer .button {
+  background: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-soft);
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.detail-btn:hover,
+.detail-status__action:hover,
+.detail-pager .button:hover,
+.dialog__footer .button:hover {
+  background: var(--glass-strong);
+  border-color: var(--accent);
+  box-shadow: var(--glass-shadow);
+  transform: translateY(-1px);
+}
+
+.detail-btn:active,
+.detail-status__action:active,
+.detail-pager .button:active,
+.dialog__footer .button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* 主按钮保留强调色渐变（CTA 不该被玻璃冲淡），只补玻璃亮边与强调色光晕 ——
+   顺带把 global.css 里那圈上一版遗留的蓝色投影换成 accent 色。 */
+.detail-btn.button--primary,
+.dialog__footer .button--primary {
+  background: var(--accent-gradient);
+  border-color: var(--glass-border);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 32%, transparent),
+    var(--glass-shadow-soft);
+}
+
+.detail-btn.button--primary:hover,
+.dialog__footer .button--primary:hover {
+  border-color: var(--glass-border);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 38%, transparent),
+    var(--glass-shadow);
+}
+
+/* 图标 + 文字按钮：让线框图标与标签居中对齐，间距统一。 */
+.detail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .detail-creator {
@@ -40,8 +117,8 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--bg-hover);
-  font-size: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .detail-sub {
@@ -131,6 +208,7 @@
 
 /* --- Dialog ------------------------------------------------------------- */
 
+/* 遮罩：跟随主题的半透明蒙层 + 轻微模糊，不做成死黑，背后光斑仍然可见。 */
 .dialog-overlay {
   position: fixed;
   inset: 0;
@@ -138,19 +216,21 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.38);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
 }
 
+/* 背景、模糊与 1px 亮边全部来自 .glass；这里只管布局、圆角与投影。 */
 .dialog {
   display: flex;
   flex-direction: column;
   width: 100%;
   max-height: min(78vh, 620px);
   border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
   outline: none;
-  animation: detail-pop 0.14s ease;
+  animation: detail-pop 0.16s ease;
 }
 
 .dialog__header {
@@ -159,13 +239,13 @@
   justify-content: space-between;
   gap: 12px;
   padding: 13px 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .dialog__title {
   margin: 0;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 640;
 }
 
 .dialog__body {
@@ -181,7 +261,7 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-border);
 }
 
 @keyframes detail-pop {
@@ -193,9 +273,14 @@
 
 /* --- 添加歌曲选择器 ----------------------------------------------------- */
 
+/* 搜索框：白玻璃底 + 胶囊圆角，对齐手机端的圆角搜索条。 */
 .detail-pick__input {
   width: 100%;
   margin-bottom: 10px;
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
 }
 
 .detail-pick {
@@ -220,17 +305,26 @@
   gap: 8px;
   width: 100%;
   padding: 7px 8px;
+  /* 透明边框占位，hover 时换成亮边不会让整行跳动。 */
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-size: 13px;
   text-align: left;
+  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
+/* 列表行不再逐行加 backdrop-filter：外层 Dialog 已经模糊过一遍，
+   这里用半透明底 + 亮边 + 柔和投影就够，省一层合成的开销。 */
 .detail-pick__row:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--glass-weak);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow-soft);
 }
 
-.detail-pick__row.is-selected {
+/* 放在 hover 之后且同权重，选中态才不会被 hover 顶掉。 */
+.detail-pick__row.is-selected:not(:disabled) {
   background: var(--bg-active);
+  border-color: var(--accent);
 }
 
 .detail-pick__row:disabled {
@@ -238,9 +332,22 @@
   cursor: not-allowed;
 }
 
-.detail-pick__check {
-  color: var(--accent);
-  text-align: center;
+/* 勾选框：空框用描边画，选中后填强调色并显示对勾图标。 */
+.detail-pick__box {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 0 auto;
+  border-radius: 5px;
+  border: 1.5px solid var(--border-strong);
+  color: transparent;
+}
+
+.detail-pick__box.is-on {
+  border-color: transparent;
+  background: var(--accent-gradient);
+  color: var(--text-on-accent);
 }
 
 .detail-pick__name {
@@ -257,33 +364,43 @@
 
 /* --- ContextMenu -------------------------------------------------------- */
 
+/* 定位与动效在这里，玻璃底与亮边来自 .glass。 */
 .context-menu {
   position: fixed;
   z-index: 70;
-  min-width: 172px;
-  padding: 5px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
+  min-width: 176px;
+  padding: 6px;
+  /* 浮层圆角统一到 --radius-lg（与 Dialog 一致）。 */
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  animation: detail-pop 0.12s ease;
 }
 
 .context-menu__item {
   display: block;
   width: 100%;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  /* 透明边框占位，hover 换成亮边时不会串位。 */
+  border: 1px solid transparent;
+  /* 外框 24px − 6px 内边距，圆角由此收紧一档，视觉上才贴合。 */
+  border-radius: var(--radius);
   font-size: 13px;
   text-align: left;
   white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
+/* 菜单整体已经是玻璃，逐项再叠 backdrop-filter 只会多一层合成；
+   这里用半透明底 + 亮边 + 柔和投影，观感与毛玻璃一致。 */
 .context-menu__item:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--glass-weak);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow-soft);
 }
 
+/* 危险操作（删除歌单等）：用品红强调色，而不是旧版的红色。 */
 .context-menu__item--danger {
-  color: var(--accent);
+  color: var(--accent-3);
 }
 
 .context-menu__item:disabled {
@@ -297,7 +414,7 @@
 .toast-stack {
   position: fixed;
   right: 20px;
-  bottom: calc(var(--player-height) + 16px);
+  bottom: calc(var(--player-height) + 20px);
   z-index: 80;
   display: flex;
   flex-direction: column;
@@ -306,25 +423,47 @@
   pointer-events: none;
 }
 
+/* 用 --glass-strong：提示浮在内容之上，比普通玻璃更实一点才读得清。 */
 .toast {
   display: flex;
   align-items: center;
   gap: 8px;
   max-width: 380px;
-  padding: 9px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: var(--glass-shadow);
   font-size: 13px;
   cursor: pointer;
   pointer-events: auto;
   animation: detail-slide-in 0.16s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+/* 提示本身可点（点一下关闭），hover 抬一下更像一个可点的玻璃片。 */
+.toast:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .toast__icon {
+  display: grid;
+  place-items: center;
   flex: none;
-  font-weight: 700;
+  width: 18px;
+  height: 18px;
+}
+
+/* 普通通知没有合适的线性图标，自绘一个发光圆点。 */
+.toast__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
 }
 
 .toast__message {
@@ -333,24 +472,16 @@
   overflow-wrap: anywhere;
 }
 
-.toast--success {
-  border-color: #2e9e5b;
-}
-
 .toast--success .toast__icon {
-  color: #2e9e5b;
-}
-
-.toast--error {
-  border-color: var(--accent);
+  color: var(--ok);
 }
 
 .toast--error .toast__icon {
-  color: var(--accent);
+  color: var(--accent-3);
 }
 
 .toast--info .toast__icon {
-  color: var(--text-secondary);
+  color: var(--accent);
 }
 
 @keyframes detail-slide-in {

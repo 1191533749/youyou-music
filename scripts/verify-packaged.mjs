@@ -11,7 +11,7 @@
  *   3. **随包的 mpv 真的能解码并输出音频**（播放上游测试 flac，位置要往前走）
  */
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 import * as net from 'node:net'
@@ -24,12 +24,16 @@ const fixture =
   process.env.KUMONE_FIXTURE ??
   path.resolve('..', 'kumone-upstream', 'Tests', 'KumoneCoreTests', 'Fixtures', 'offline.m4a')
 
+// 主可执行文件名跟随 electron-builder 的 productName（当前为 YouyouMusic）。
+const appExe = readdirSync(unpacked).find((name) => name.toLowerCase().endsWith('.exe'))
+const appExePath = appExe ? path.join(unpacked, appExe) : path.join(unpacked, 'YouyouMusic.exe')
+
 const results = []
 const check = (name, ok, detail) => {
   results.push({ name, ok, detail })
 }
 
-check('Kumone.exe 存在', existsSync(path.join(unpacked, 'Kumone.exe')), path.join(unpacked, 'Kumone.exe'))
+check(`${appExe ?? '主程序'} 存在`, existsSync(appExePath), appExePath)
 check('app.asar 存在', existsSync(asar), asar)
 check('随包 mpv 存在', existsSync(mpv), mpv)
 

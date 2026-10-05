@@ -7,6 +7,7 @@
 import { useMemo, useState } from 'react'
 import { SongList, call, usePlayerStore } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
+import { IconCalendar, IconPlay } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import type { TrackDTO } from '@shared/types'
 
@@ -32,6 +33,15 @@ export default function DailyPage(): JSX.Element {
     void player.playTracks(tracks, index)
   }
 
+  /**
+   * 整表播放：让主进程随机起播（store 的 playTracks 还没暴露 randomStart，
+   * 这里直接走通道；状态变化由 player:state 广播回 store）。
+   */
+  const playAll = (): void => {
+    if (tracks.length === 0) return
+    void call('player:playTracks', { tracks, startIndex: 0, randomStart: true }).catch(() => undefined)
+  }
+
   const dislike = async (track: TrackDTO, index: number): Promise<void> => {
     if (replacing !== undefined) return
     setReplacing(track.id)
@@ -50,27 +60,31 @@ export default function DailyPage(): JSX.Element {
     <div className="page">
       <div className="daily__banner">
         <div className="daily__headline">
-          <div className="daily__date">📅 {today}</div>
+          <div className="daily__date">
+            <IconCalendar size={15} />
+            {today}
+          </div>
           <h1 className="daily__title">每日推荐</h1>
           <div className="daily__hint">根据你的音乐口味 · 每天 6:00 更新</div>
         </div>
         <button
           type="button"
-          className="button button--primary"
+          className="button button--primary icon-label glass-btn"
           disabled={tracks.length === 0}
-          onClick={() => play(0)}
+          onClick={playAll}
         >
-          ▶ 播放全部
+          <IconPlay size={14} />
+          播放全部
         </button>
       </div>
 
       {daily.loading ? (
-        <div className="placeholder">正在获取今天的推荐…</div>
+        <div className="placeholder">正在获取今天的推荐</div>
       ) : daily.error ? (
         <div className="placeholder">
           <div className="placeholder__title">每日推荐加载失败</div>
           <div>{daily.error}</div>
-          <button type="button" className="button" onClick={daily.reload}>
+          <button type="button" className="button glass-btn" onClick={daily.reload}>
             重试
           </button>
         </div>
@@ -80,12 +94,14 @@ export default function DailyPage(): JSX.Element {
           <div>多听几首歌培养口味，推荐每天 6:00 更新</div>
         </div>
       ) : (
-        <SongList
-          tracks={tracks}
-          currentTrackID={player.state.track?.id}
-          onPlay={play}
-          rowAction={{ label: '不喜欢，换一首', onSelect: (track, index) => void dislike(track, index) }}
-        />
+        <div className="daily__panel">
+          <SongList
+            tracks={tracks}
+            currentTrackID={player.state.track?.id}
+            onPlay={play}
+            rowAction={{ label: '不喜欢，换一首', onSelect: (track, index) => void dislike(track, index) }}
+          />
+        </div>
       )}
 
       {toast.node}

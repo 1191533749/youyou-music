@@ -1,0 +1,30 @@
+悠悠音乐（YouyouMusic）第三方组件与许可声明
+================================================
+
+本应用以 GNU Lesser General Public License v3.0 (LGPL-3.0) 发布，
+完整许可文本见安装目录下的 LICENSE 文件。
+
+本应用的部分网络协议实现与业务规则移植自开源项目 missuo/kumone
+(https://github.com/missuo/kumone)，该项目以 LGPL-3.0 发布。
+依据 LGPL-3.0 的要求，此处保留其来源与许可说明。
+
+随包分发的其他第三方组件：
+
+1. mpv (https://mpv.io)
+   许可：GPL-2.0-or-later
+   用途：音频解码与输出（作为独立进程调用，未链接进本程序）
+   位置：resources/mpv/
+
+2. Electron (https://www.electronjs.org)
+   许可：MIT
+   用途：应用运行时
+
+3. qrcode (https://github.com/soldair/node-qrcode)
+   许可：MIT
+   用途：登录二维码编码
+
+4. React (https://react.dev)
+   许可：MIT
+   用途：界面渲染
+
+以上组件各自保留其原始许可；本声明不改变任何组件的许可条款。

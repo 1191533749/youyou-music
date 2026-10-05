@@ -1,11 +1,12 @@
 /**
- * The application shell: sidebar, page area, player bar.
+ * 应用外壳：玻璃导航、内容区、玻璃播放条，以及背后的光斑背景。
  *
- * Pages are resolved from the navigation stack; a page that a teammate owns but
- * that is not implemented yet renders `PagePlaceholder` rather than crashing,
- * so the shell stays runnable while the feature set fills in.
+ * 视觉基调是液态玻璃（liquid glass）：整体压在一块柔和的彩色光斑之上，
+ * 所有面板都是半透明玻璃片，靠 `backdrop-filter` 做真实模糊，而不是画一个灰色方块。
+ * 亮色是主色，深色只是同一套令牌的另一种取值。
  */
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { NavigationProvider, useNavigation } from './store/navigation'
 import { useAuthStore } from './store/auth'
 import { usePlayerStore } from './store/player'
@@ -25,18 +26,73 @@ import ToplistPage from './pages/ToplistPage'
 import Cloud from './pages/Cloud'
 import Settings from './pages/Settings'
 import NowPlaying from './pages/NowPlaying'
+import {
+  IconCalendar,
+  IconClose,
+  IconCloud,
+  IconCompass,
+  IconHome,
+  IconLibrary,
+  IconRadio,
+  IconSearch,
+  IconSettings,
+  IconUser,
+  LogoMark
+} from './components/Icons'
 import { call, onEvent } from './lib/ipc'
 import type { AppInfoDTO } from '@shared/types'
 
 const NAV_ITEMS = [
-  { route: { name: 'home' } as const, label: '首页', icon: '🏠' },
-  { route: { name: 'explore' } as const, label: '发现', icon: '🧭' },
-  { route: { name: 'library' } as const, label: '我的音乐', icon: '📚' },
-  { route: { name: 'search' } as const, label: '搜索', icon: '🔍' },
-  { route: { name: 'daily' } as const, label: '每日推荐', icon: '📅' },
-  { route: { name: 'fm' } as const, label: '私人 FM', icon: '📻' },
-  { route: { name: 'cloud' } as const, label: '云盘', icon: '☁️' }
-]
+  { name: 'home', label: '首页', Icon: IconHome },
+  { name: 'explore', label: '发现', Icon: IconCompass },
+  { name: 'library', label: '我的音乐', Icon: IconLibrary },
+  // 搜索不再占侧边栏：每页顶部的搜索框直达搜索页，入口更顺手。
+  { name: 'daily', label: '每日推荐', Icon: IconCalendar },
+  { name: 'fm', label: '私人漫游', Icon: IconRadio },
+  { name: 'cloud', label: '云盘', Icon: IconCloud }
+] as const
+
+/**
+ * 顶部搜索条：每页可见，回车直达搜索页。
+ * 放在内容区顶部并 sticky，滚动内容时依然可用。
+ */
+function TopSearch(): JSX.Element {
+  const navigation = useNavigation()
+  const [keywords, setKeywords] = useState('')
+
+  const submit = (): void => {
+    const trimmed = keywords.trim()
+    if (!trimmed) return
+    navigation.push({ name: 'search', keywords: trimmed })
+  }
+
+  return (
+    <div className="top-search">
+      <IconSearch size={16} />
+      <input
+        type="text"
+        className="top-search__input"
+        placeholder="搜索音乐、歌手、专辑、歌单"
+        value={keywords}
+        aria-label="搜索"
+        onChange={(event) => setKeywords(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') submit()
+        }}
+      />
+      {keywords ? (
+        <button
+          type="button"
+          className="top-search__clear"
+          aria-label="清空搜索词"
+          onClick={() => setKeywords('')}
+        >
+          <IconClose size={14} />
+        </button>
+      ) : null}
+    </div>
+  )
+}
 
 function Shell(): JSX.Element {
   const navigation = useNavigation()
@@ -50,78 +106,114 @@ function Shell(): JSX.Element {
   }, [])
 
   useThemeSync()
+  const updatePrompt = useUpdatePrompt()
 
   useEffect(() => {
-    // Errors pushed from the main process (mpv missing, playback refused) are
-    // surfaced as a dismissible banner instead of a modal.
-    return window.kumone.on('app:error', (payload: { message: string }) => setError(payload.message))
+    // 主进程推来的错误（mpv 缺失、播放被拒）用可关闭的横幅呈现，不弹模态框打断听歌。
+    return onEvent('app:error', (payload) => setError(payload.message))
   }, [])
 
   if (auth.loading) {
-    return <div className="boot">正在启动…</div>
+    return (
+      <>
+        <Backdrop />
+        <div className="boot">
+          <LogoMark size={56} />
+          <span>正在启动…</span>
+        </div>
+      </>
+    )
   }
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="sidebar__brand">
-          <span className="sidebar__brand-mark">雲</span>
-          <div>
-            <div className="sidebar__brand-name">Kumone</div>
-            <div className="sidebar__brand-sub">雲の音 · Windows</div>
+    <>
+      <Backdrop />
+      {updatePrompt}
+      <div className="app">
+        {/* 品牌行直接坐在渐变背景上（不套玻璃面板），
+            导航与账号/设置收进下方玻璃卡片，视觉上「悠悠音乐」融进主背景。 */}
+        <aside className="sidebar">
+          <div className="sidebar__brand">
+            <LogoMark size={38} />
+            <div>
+              <div className="sidebar__brand-name">悠悠音乐</div>
+              <div className="sidebar__brand-sub">小鱼の音乐</div>
+            </div>
           </div>
-        </div>
 
-        <nav className="sidebar__nav">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              className={`sidebar__link${navigation.route.name === item.route.name ? ' is-active' : ''}`}
-              onClick={() => navigation.push(item.route)}
-            >
-              <span className="sidebar__icon">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
+          <div className="sidebar__panel glass">
+            <nav className="sidebar__nav">
+              {NAV_ITEMS.map(({ name, label, Icon }) => (
+                <button
+                  key={name}
+                  type="button"
+                  className={`sidebar__link${navigation.route.name === name ? ' is-active' : ''}`}
+                  onClick={() => navigation.push({ name } as never)}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
 
-        <div className="sidebar__footer">
-          <button
-            type="button"
-            className={`sidebar__link${navigation.route.name === 'settings' ? ' is-active' : ''}`}
-            onClick={() => navigation.push({ name: 'settings' })}
-          >
-            <span className="sidebar__icon">⚙️</span>
-            设置
-          </button>
-          {auth.loggedIn ? (
-            <button type="button" className="sidebar__account" onClick={() => navigation.push({ name: 'settings' })}>
-              {auth.profile?.avatarUrl ? (
-                <img src={auth.profile.avatarUrl} alt="" />
-              ) : (
-                <span className="sidebar__account-fallback">👤</span>
-              )}
-              <span className="sidebar__account-name">{auth.profile?.nickname ?? '已登录'}</span>
-            </button>
+            <div className="sidebar__footer">
+              <button
+                type="button"
+                className={`sidebar__link${navigation.route.name === 'settings' ? ' is-active' : ''}`}
+                onClick={() => navigation.push({ name: 'settings' })}
+              >
+                <IconSettings size={18} />
+                <span>设置</span>
+              </button>
+              {auth.loggedIn ? (
+                <button
+                  type="button"
+                  className="sidebar__account"
+                  onClick={() => navigation.push({ name: 'settings' })}
+                >
+                  {auth.profile?.avatarUrl ? (
+                    <img src={auth.profile.avatarUrl} alt="" />
+                  ) : (
+                    <span className="sidebar__account-fallback">
+                      <IconUser size={16} />
+                    </span>
+                  )}
+                  <span className="sidebar__account-name">{auth.profile?.nickname ?? '已登录'}</span>
+                </button>
+              ) : null}
+              {info ? <div className="sidebar__version">v{info.version}</div> : null}
+            </div>
+          </div>
+        </aside>
+
+        <main className="content">
+          {error ? (
+            <div className="banner banner--error glass">
+              <span>{error}</span>
+              <button type="button" className="banner__close" onClick={() => setError(undefined)} aria-label="关闭">
+                <IconClose size={16} />
+              </button>
+            </div>
           ) : null}
-          {info ? <div className="sidebar__version">v{info.version}</div> : null}
-        </div>
-      </aside>
+          <TopSearch />
+          <PageRouter authLoggedIn={auth.loggedIn} />
+        </main>
 
-      <main className="content">
-        {error ? (
-          <div className="banner banner--error">
-            <span>{error}</span>
-            <button type="button" className="banner__close" onClick={() => setError(undefined)}>
-              ✕
-            </button>
-          </div>
-        ) : null}
-        <PageRouter authLoggedIn={auth.loggedIn} />
-      </main>
+        <PlayerBar />
+      </div>
+    </>
+  )
+}
 
-      <PlayerBar />
+/** 背景光斑：玻璃面板背后必须有东西可透，否则 blur 看起来只是灰色。 */
+function Backdrop(): JSX.Element {
+  return (
+    <div className="backdrop" aria-hidden>
+      <span className="backdrop__blob backdrop__blob--a" />
+      <span className="backdrop__blob backdrop__blob--b" />
+      <span className="backdrop__blob backdrop__blob--c" />
+      <span className="backdrop__blob backdrop__blob--d" />
+      <span className="backdrop__grain" />
     </div>
   )
 }
@@ -148,7 +240,7 @@ function PageRouter({ authLoggedIn }: { authLoggedIn: boolean }): JSX.Element {
     case 'fm':
       return <FM />
     case 'toplist':
-      return <PlaylistPage id={route.id} />
+      return <ToplistPage id={route.id} />
     case 'cloud':
       return authLoggedIn ? <Cloud /> : <Login />
     case 'settings':
@@ -171,9 +263,63 @@ export default function App(): JSX.Element {
 }
 
 /**
- * Applies the stored theme and keeps following the OS while the setting is
- * "system". Done here rather than per page so switching is instant everywhere,
- * including pages that are not mounted yet.
+ * 更新提示：启动时检测。有新版本弹玻璃对话框，30 秒倒计时后自动更新；
+ * 「稍后更新」本次会话不再打扰。返回要渲染的节点（无更新时为 null）。
+ */
+function useUpdatePrompt(): JSX.Element | null {
+  const [update, setUpdate] = useState<{ version: string; notes?: string } | undefined>()
+  const [remaining, setRemaining] = useState(30)
+
+  useEffect(() => {
+    void call('update:check')
+      .then((result) => {
+        if (result.version) setUpdate({ version: result.version, notes: result.notes })
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (!update || remaining <= 0) return
+    const timer = window.setTimeout(() => setRemaining((n) => n - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [update, remaining])
+
+  useEffect(() => {
+    if (update && remaining <= 0) {
+      void call('update:install').catch(() => setUpdate(undefined))
+    }
+  }, [update, remaining])
+
+  if (!update) return null
+
+  const install = (): void => {
+    setUpdate(undefined)
+    void call('update:install').catch(() => undefined)
+  }
+
+  return createPortal(
+    <div className="update-prompt" role="dialog" aria-modal="true" aria-label="发现新版本">
+      <div className="update-prompt__card glass">
+        <div className="update-prompt__title">发现新版本 v{update.version}</div>
+        {update.notes ? <div className="update-prompt__notes">{update.notes.slice(0, 320)}</div> : null}
+        <div className="update-prompt__countdown">{remaining} 秒后自动更新</div>
+        <div className="update-prompt__actions">
+          <button type="button" className="button glass-btn" onClick={() => setUpdate(undefined)}>
+            稍后更新
+          </button>
+          <button type="button" className="button button--primary glass-btn" onClick={install}>
+            立即更新
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+/**
+ * 应用主题并在「跟随系统」时持续跟随。放在这里而不是每个页面里，
+ * 切换主题才能立刻作用于已挂载与未挂载的页面。
  */
 function useThemeSync(): void {
   useEffect(() => {

@@ -17,7 +17,11 @@ import {
   usePlayerStore
 } from '../lib/contract'
 import { useDebounced } from '../lib/hooks'
+import { IconDisc, IconLayers, IconMusic, IconPlay, IconPlus, IconSearch, IconUser } from '../components/Icons'
 import type { SearchResultDTO, SearchSuggestDTO } from '@shared/ipc'
+
+/** 图标组件的公共形状：尺寸与类名可传，颜色跟随 currentColor。 */
+type IconComponent = (props: { size?: number; className?: string }) => JSX.Element
 
 const TABS = [
   { value: 'comprehensive', label: '综合' },
@@ -38,6 +42,8 @@ interface Suggestion {
   key: string
   label: string
   hint: string
+  /** 联想项的类别图标，替代原来的「单曲」文字前缀。 */
+  Icon: IconComponent
   /** 点联想后用于搜索的关键词。 */
   keywords: string
 }
@@ -74,6 +80,13 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
       .then((value) => setDefaultKeyword(value))
       .catch(() => undefined)
   }, [])
+
+  /**
+   * 热搜词本身可能带表情符号（网易云会把它混进热搜文案里）。它只作为界面文案
+   * 出现，这里抹掉表情符号，免得破坏全站线性图标的视觉语言；搜索结果里的歌名、
+   * 歌手名属于内容，一律不动。
+   */
+  const defaultKeywordText = defaultKeyword?.replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim()
 
   const submit = useCallback((value: string): void => {
     const trimmed = value.trim()
@@ -216,13 +229,13 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 
       <div className="search__box" ref={boxRef}>
         <div className="search__field">
-          <span className="search__icon" aria-hidden="true">
-            🔍
+          <span className="search__icon">
+            <IconSearch size={17} />
           </span>
           <input
             className="search__input"
             value={input}
-            placeholder={defaultKeyword ? `搜索「${defaultKeyword}」` : '搜索歌曲、歌手、专辑或歌单'}
+            placeholder={defaultKeywordText ? `搜索「${defaultKeywordText}」` : '搜索歌曲、歌手、专辑或歌单'}
             onChange={(event) => {
               setInput(event.target.value)
               setSuggestOpen(true)
@@ -261,7 +274,10 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
                   onClick={() => submit(item.keywords)}
                 >
                   <span className="search__suggest-label">{item.label}</span>
-                  <span className="search__suggest-hint">{item.hint}</span>
+                  <span className="search__suggest-hint">
+                    <item.Icon size={13} />
+                    {item.hint}
+                  </span>
                 </button>
               </li>
             ))}
@@ -297,7 +313,10 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 
       {loading ? (
         <div className="search__loading">
-          <div className="page__subtitle">正在搜索…</div>
+          <div className="loading-state">
+            <IconDisc size={16} className="spin" />
+            <span>正在搜索…</span>
+          </div>
           <div className="skeleton search__skeleton" />
           <div className="skeleton search__skeleton" />
         </div>
@@ -306,7 +325,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
       {!loading && !keywords ? (
         <div className="placeholder">
           <div className="placeholder__title">输入关键词开始搜索</div>
-          {defaultKeyword ? <div>试试搜索「{defaultKeyword}」</div> : null}
+          {defaultKeywordText ? <div>试试搜索「{defaultKeywordText}」</div> : null}
         </div>
       ) : null}
 
@@ -322,8 +341,11 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           {songs.length > 0 ? (
             <section className="page__section">
               <SectionHeader
+                icon={IconMusic}
                 title="单曲"
                 count={result.songCount}
+                // 整表播放入口：随机起播；点具体某一行仍然从那一行开始。
+                onPlayAll={() => void player.playTracks(songs, 0, { randomStart: true })}
                 action={overview ? { label: '查看全部', onClick: () => setTab('songs') } : undefined}
               />
               <SongList
@@ -337,6 +359,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           {artists.length > 0 ? (
             <section className="page__section">
               <SectionHeader
+                icon={IconUser}
                 title="歌手"
                 count={result.artistCount}
                 action={overview ? { label: '查看全部', onClick: () => setTab('artists') } : undefined}
@@ -359,6 +382,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           {albums.length > 0 ? (
             <section className="page__section">
               <SectionHeader
+                icon={IconDisc}
                 title="专辑"
                 count={result.albumCount}
                 action={overview ? { label: '查看全部', onClick: () => setTab('albums') } : undefined}
@@ -380,6 +404,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           {playlists.length > 0 ? (
             <section className="page__section">
               <SectionHeader
+                icon={IconLayers}
                 title="歌单"
                 count={result.playlistCount}
                 action={overview ? { label: '查看全部', onClick: () => setTab('playlists') } : undefined}
@@ -402,6 +427,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           {!overview && more ? (
             <div className="search__more">
               <button type="button" className="button" disabled={loadingMore} onClick={() => void loadMore()}>
+                <IconPlus size={15} />
                 {loadingMore ? '正在加载…' : '加载更多'}
               </button>
             </div>
@@ -413,24 +439,40 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 }
 
 function SectionHeader({
+  icon: Icon,
   title,
   count,
-  action
+  action,
+  onPlayAll
 }: {
+  icon: IconComponent
   title: string
   count?: number
   action?: { label: string; onClick: () => void }
+  /** 整表播放入口（随机起播）；不传则不显示。 */
+  onPlayAll?: () => void
 }): JSX.Element {
   return (
     <div className="section__header">
-      <h2 className="section__title">{title}</h2>
-      {action ? (
-        <button type="button" className="section__more search__more-link" onClick={action.onClick}>
-          {action.label}
-        </button>
-      ) : count !== undefined && count > 0 ? (
-        <span className="section__more">共 {count} 条</span>
-      ) : null}
+      <h2 className="section__title">
+        <Icon size={16} className="section__icon" />
+        {title}
+      </h2>
+      <div className="section__actions">
+        {onPlayAll ? (
+          <button type="button" className="button section-action" onClick={onPlayAll}>
+            <IconPlay size={14} />
+            播放全部
+          </button>
+        ) : null}
+        {action ? (
+          <button type="button" className="section__more search__more-link" onClick={action.onClick}>
+            {action.label}
+          </button>
+        ) : count !== undefined && count > 0 ? (
+          <span className="section__more">共 {count} 条</span>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -443,18 +485,26 @@ function flattenSuggestions(value: SearchSuggestDTO | undefined): Suggestion[] {
     items.push({
       key: `song-${track.id}-${index}`,
       label: track.name,
-      hint: `单曲 · ${artistLine(track)}`,
+      hint: artistLine(track),
+      Icon: IconMusic,
       keywords: track.name
     })
   }
   for (const artist of value.artists ?? []) {
-    items.push({ key: `artist-${artist.id}`, label: artist.name, hint: '歌手', keywords: artist.name })
+    items.push({
+      key: `artist-${artist.id}`,
+      label: artist.name,
+      hint: '歌手',
+      Icon: IconUser,
+      keywords: artist.name
+    })
   }
   for (const album of value.albums ?? []) {
     items.push({
       key: `album-${album.id}`,
       label: album.name,
-      hint: `专辑 · ${album.artistName}`,
+      hint: album.artistName,
+      Icon: IconDisc,
       keywords: album.name
     })
   }
@@ -462,7 +512,8 @@ function flattenSuggestions(value: SearchSuggestDTO | undefined): Suggestion[] {
     items.push({
       key: `playlist-${playlist.id}`,
       label: playlist.name,
-      hint: `歌单 · ${playlist.trackCount} 首`,
+      hint: `${playlist.trackCount} 首`,
+      Icon: IconLayers,
       keywords: playlist.name
     })
   }

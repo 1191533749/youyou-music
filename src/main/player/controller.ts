@@ -9,11 +9,34 @@
  * over IPC.
  */
 import { EventEmitter } from 'node:events'
-import type { NeteaseAPI } from '../netease/api.js'
+import { NeteaseAPI, SearchType } from '../netease/api.js'
 import { NeteaseAPIError } from '../netease/client.js'
 import { playability, playabilityReason, type Track } from '../netease/models.js'
+import { matchesTrack, AUDIO_SOURCE_NAMES, type AudioSourceID } from '../unblock/providers.js'
+import type { UnblockService } from '../unblock/service.js'
 import type { MpvController, MpvState } from '../audio/mpv.js'
 import type { QualityLevel, RepeatMode, TrackDTO } from '@shared/types'
+
+/** 一次解析的最终落点：谁提供了音频、什么音质、能不能缓存。 */
+interface ResolvedPlayback {
+  /** mpv 直接打开的东西：本地缓存路径或远程 URL。 */
+  source: string
+  /** 缓存归档用的音质档位（也作为 claimedLevel 缺省时的兜底）。 */
+  level: QualityLevel
+  /** 对用户声称的音质档位；第三方音源码率未知时为 undefined（不虚报）。 */
+  claimedLevel?: QualityLevel
+  /** 已知码率（kbps），用于诚实的音质提示。 */
+  bitrate?: number
+  format?: string
+  cached: boolean
+  remoteURL?: string
+  /** 缓存归档用的音源标记（netease / pyncmd / kugou / kuwo）。 */
+  cacheVariant: string
+  /** 走了第三方音源时显示给用户的来源名。 */
+  servedFrom?: string
+  /** 走了站内替代版本时的说明。 */
+  servedNote?: string
+}
 
 /** Quality tiers tried in order when the requested one is not entitled. */
 const QUALITY_LADDER: QualityLevel[] = [
@@ -28,14 +51,21 @@ const QUALITY_LADDER: QualityLevel[] = [
 export interface PlayerDeps {
   api: NeteaseAPI
   mpv: MpvController
+  /** 灰色/受限歌曲的第三方音源解析。 */
+  unblock: UnblockService
+  /** 换源总开关。 */
+  isUnblockEnabled: () => boolean
+  /** 已启用的音源，顺序即优先级。 */
+  unblockSourceIds: () => AudioSourceID[]
   /** Optional audio cache: playback prefers a cached file over the network. */
   cache?: {
-    audioPath: (trackID: number, level: QualityLevel) => Promise<string | undefined>
+    audioPath: (trackID: number, level: QualityLevel, variant?: string) => Promise<string | undefined>
     cacheAudio: (
       trackID: number,
       level: QualityLevel,
       url: string,
-      extensionHint?: string
+      extensionHint?: string,
+      variant?: string
     ) => Promise<string | undefined>
   }
   getQuality: () => QualityLevel
@@ -67,7 +97,12 @@ export interface PlayerSnapshot {
   repeat: RepeatMode
   shuffle: boolean
   quality: QualityLevel
+  /** 实际正在播放的音质档位；第三方音源码率未知时为 undefined（不虚报）。 */
   servedQuality?: QualityLevel
+  /** 实际码率（kbps），音源提供了才填。 */
+  servedBitrate?: number
+  /** 非空表示当前音频来自第三方音源（例如「酷我音乐」）。 */
+  servedFrom?: string
   error?: string
   source?: string
 }
@@ -91,8 +126,10 @@ export class PlayerController extends EventEmitter {
   private repeatMode: RepeatMode = 'off'
   private shuffle = false
   private servedQuality?: QualityLevel
+  private servedBitrate?: number
   private error?: string
   private source?: string
+  private servedFrom?: string
   private volume = 80
   private scrobbleSent = false
   private positionTimer?: NodeJS.Timeout
@@ -100,6 +137,8 @@ export class PlayerController extends EventEmitter {
   private switching = false
   /** Guards against an in-flight resolve being overtaken by a newer play(). */
   private resolveGeneration = 0
+  /** 每首歌已尝试失败过的第三方音源，避免重复撞死源。 */
+  private unblockAttempts = new Map<number, Set<AudioSourceID>>()
 
   constructor(private readonly deps: PlayerDeps) {
     super()
@@ -128,6 +167,8 @@ export class PlayerController extends EventEmitter {
       shuffle: this.shuffle,
       quality: this.deps.getQuality(),
       servedQuality: this.servedQuality,
+      servedBitrate: this.servedBitrate,
+      servedFrom: this.servedFrom,
       error: this.error,
       source: this.source
     }
@@ -151,9 +192,21 @@ export class PlayerController extends EventEmitter {
   /**
    * Replaces the queue. `startIndex` picks the track to play; `-1` queues
    * without starting playback.
+   *
+   * 「点播放就随机起播」：调用方显式要求（options.randomStart，即分类页的
+   * 「播放全部」按钮）且原本队列为空时，随机选一首开始；点具体某一行不受影响。
    */
-  async setQueue(tracks: Track[], startIndex = 0, privileges?: Map<number, any>): Promise<void> {
+  async setQueue(
+    tracks: Track[],
+    startIndex = 0,
+    privileges?: Map<number, any>,
+    options: { randomStart?: boolean } = {}
+  ): Promise<void> {
+    const wasEmpty = this.queue.length === 0
     this.queue = tracks.map((track) => this.toEntry(track, privileges?.get(track.id)))
+    if (options.randomStart && wasEmpty && this.queue.length > 1) {
+      startIndex = Math.floor(Math.random() * this.queue.length)
+    }
     this.index = this.queue.length === 0 ? -1 : clamp(startIndex, 0, this.queue.length - 1)
     this.emitSnapshot()
     if (this.index >= 0) await this.playIndex(this.index, { keepQueue: true })
@@ -212,6 +265,8 @@ export class PlayerController extends EventEmitter {
     this.index = index
     this.error = undefined
     this.servedQuality = undefined
+    this.servedBitrate = undefined
+    this.servedFrom = undefined
     this.loading = true
     this.scrobbleSent = false
     this.position = 0
@@ -223,17 +278,34 @@ export class PlayerController extends EventEmitter {
     try {
       const resolved = await this.resolveSource(entry.track)
       if (generation !== this.resolveGeneration) return
-      this.servedQuality = resolved.level
+      // 第三方音源只在码率已知时才声称音质档位；不知道就不虚报。
+      this.servedQuality = resolved.servedFrom
+        ? resolved.claimedLevel
+        : (resolved.claimedLevel ?? resolved.level)
+      this.servedBitrate = resolved.bitrate
+      this.servedFrom = resolved.servedFrom ?? resolved.servedNote
       this.source = resolved.source
       // A local cache hit is a file path, not a stream.
       await this.deps.mpv.play(resolved.source, 0)
-      if (resolved.level !== this.deps.getQuality()) {
-        this.deps.log?.(`音质降级: 请求 ${this.deps.getQuality()}，实际 ${resolved.level}`)
+      const actual = resolved.claimedLevel ?? resolved.level
+      if (actual !== this.deps.getQuality()) {
+        this.deps.log?.(
+          `音质降级: 请求 ${this.deps.getQuality()}，实际 ${actual}${resolved.servedFrom ? `（来自 ${resolved.servedFrom}）` : ''}`
+        )
+      }
+      if (resolved.servedFrom) {
+        this.deps.log?.(`已换源播放：${entry.track.name} 来自 ${resolved.servedFrom}`)
       }
       if (!resolved.cached && resolved.remoteURL) {
         // Cache in the background: the user should hear the track now, not
         // after a full download.
-        void this.cacheInBackground(entry.track, resolved.level, resolved.remoteURL, resolved.format)
+        void this.cacheInBackground(
+          entry.track,
+          resolved.level,
+          resolved.remoteURL,
+          resolved.format,
+          resolved.cacheVariant
+        )
       }
       this.playing = true
       this.startPositionTimer()
@@ -256,71 +328,211 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
-   * Decides what mpv should open: the cached file when we have it, otherwise
-   * the CDN URL — plus the resolved quality and format, which the cache needs
-   * to key its entry and pick a file extension.
+   * Decides what mpv should open.
+   *
+   * 顺序：本次请求音质的本地缓存 → 网易云官方地址 → （受限时）站内替代版本 →
+   * 第三方音源。缓存命中是最好情况（完全不联网）。
    */
-  private async resolveSource(
-    track: Track
-  ): Promise<{ source: string; level: QualityLevel; format?: string; cached: boolean; remoteURL?: string }> {
+  private async resolveSource(track: Track): Promise<ResolvedPlayback> {
     const requested = this.deps.getQuality()
 
-    // A cached copy at the requested tier is the best case: no network at all.
     const cachedAtRequested = await this.deps.cache
-      ?.audioPath(track.id, requested)
+      ?.audioPath(track.id, requested, 'netease')
       .catch(() => undefined)
     if (cachedAtRequested) {
-      return { source: cachedAtRequested, level: requested, cached: true }
+      return {
+        source: cachedAtRequested,
+        level: requested,
+        claimedLevel: requested,
+        cached: true,
+        cacheVariant: 'netease'
+      }
     }
 
-    const remote = await this.resolveURL(track)
-    return { ...remote, cached: false, remoteURL: remote.url, source: remote.url }
+    // 1. 官方地址：受版权限制时会拿不到 url 或只给试听片段。
+    try {
+      const official = await this.resolveOfficialURL(track, requested)
+      if (official && !official.trialOnly) {
+        return {
+          source: official.url,
+          level: official.level,
+          claimedLevel: official.level,
+          format: official.format,
+          cached: false,
+          remoteURL: official.url,
+          cacheVariant: 'netease'
+        }
+      }
+    } catch (cause) {
+      this.deps.log?.(`官方音源不可用 (${track.id}): ${describeError(cause)}`)
+    }
+
+    if (!this.deps.unblock.enabled) {
+      throw new NeteaseAPIError('business', {
+        code: -1,
+        message: this.unblockEnabledButEmpty()
+          ? '该歌曲受版权限制，且未启用任何可用音源'
+          : '该歌曲在当前账号下不可播放（可在设置中开启灰色歌曲解锁）'
+      })
+    }
+
+    // 2. 站内替代版本：同一首歌常因版权在不同专辑/合辑里重复上架，
+    //    原条目灰掉时换一个条目往往就能完整播放，且仍是官方音源。
+    const substitute = await this.findSubstitute(track).catch(() => undefined)
+    if (substitute) {
+      try {
+        const resolved = await this.resolveOfficialURL(substitute, requested)
+        if (resolved && !resolved.trialOnly) {
+          this.deps.log?.(`换用站内替代版本：${track.name} → #${substitute.id}`)
+          return {
+            source: resolved.url,
+            level: resolved.level,
+            claimedLevel: resolved.level,
+            format: resolved.format,
+            cached: false,
+            remoteURL: resolved.url,
+            cacheVariant: 'netease',
+            servedNote: '网易云其他版本'
+          }
+        }
+      } catch (cause) {
+        this.deps.log?.(`站内替代版本播放失败: ${describeError(cause)}`)
+      }
+    }
+
+    // 3. 第三方音源（pyncmd / 酷狗 / 酷我）。
+    for (const level of [requested, 'exhigh', 'standard'] as QualityLevel[]) {
+      for (const id of this.deps.unblockSourceIds()) {
+        const cached = await this.deps.cache?.audioPath(track.id, level, id).catch(() => undefined)
+        if (cached) {
+          return {
+            source: cached,
+            level,
+            claimedLevel: level,
+            cached: true,
+            cacheVariant: id,
+            servedFrom: AUDIO_SOURCE_NAMES[id] ?? id
+          }
+        }
+      }
+    }
+
+    const { source } = await this.deps.unblock.resolve(track, this.attemptedSources(track.id))
+    if (source) {
+      // 第三方音源的码率往往不确定：知道码率就如实映射到音质档位，
+      // 不知道就不声称任何档位，只告诉用户「来自哪个音源」。
+      const bitrate = source.bitrate && source.bitrate > 0 ? source.bitrate : undefined
+      return {
+        source: source.url,
+        level: qualityForBitrate(bitrate) ?? 'standard',
+        claimedLevel: qualityForBitrate(bitrate),
+        bitrate,
+        cached: false,
+        remoteURL: source.url,
+        cacheVariant: source.id,
+        servedFrom: source.displayName
+      }
+    }
+
+    throw new NeteaseAPIError('business', {
+      code: -1,
+      message: '该歌曲受版权限制，所有已启用音源都没有找到匹配的完整版本'
+    })
+  }
+
+  /** 本会话内某首歌已经失败过的音源，避免反复撞同一个死源。 */
+  private attemptedSources(trackID: number): Set<AudioSourceID> {
+    let set = this.unblockAttempts.get(trackID)
+    if (!set) {
+      set = new Set<AudioSourceID>()
+      this.unblockAttempts.set(trackID, set)
+      // 只保留最近若干首，避免长会话里无限增长。
+      if (this.unblockAttempts.size > 200) {
+        const oldest = this.unblockAttempts.keys().next().value
+        if (oldest !== undefined) this.unblockAttempts.delete(oldest)
+      }
+    }
+    return set
+  }
+
+  /** 设置了换源、但没有勾选任何音源时给出更准确的提示。 */
+  private unblockEnabledButEmpty(): boolean {
+    return this.deps.isUnblockEnabled() && this.deps.unblockSourceIds().length === 0
+  }
+
+  /**
+   * 站内替代版本：按「歌名 + 首位歌手」搜索，要求时长相差 ≤ 5 秒、
+   * 标题归一化一致、版本标记一致，且该条目自身有播放权限。
+   */
+  private async findSubstitute(track: Track): Promise<Track | undefined> {
+    const keyword = `${track.name} ${track.artists[0]?.name ?? ''}`.trim()
+    if (!keyword) return undefined
+    const result = await this.deps.api.search(keyword, SearchType.songs, 20, 0)
+    const candidates = result.songs ?? []
+    for (const candidate of candidates) {
+      if (candidate.id === track.id) continue
+      if (!matchesTrack(track, {
+        title: candidate.name,
+        artist: candidate.artists[0]?.name ?? '',
+        durationMS: candidate.durationMS
+      })) {
+        continue
+      }
+      // pl > 0 或 cs 表示这条记录对当前账号可播（含可用的付费/会员判定）。
+      const privilege = candidate.embeddedPrivilege
+      if (!privilege) {
+        // 搜索结果常不带 privilege，这时交给 URL 接口去判定。
+        return candidate
+      }
+      if ((privilege.pl ?? 0) > 0 || privilege.cs === true) return candidate
+    }
+    return undefined
+  }
+
+  /**
+   * 官方地址：按音质阶梯尝试。返回的 `trialOnly` 表示接口只给了试听片段
+   * （付费歌曲未购买时的典型响应），调用方应当继续尝试换源，而不是播半首。
+   */
+  private async resolveOfficialURL(
+    track: Track,
+    requested: QualityLevel
+  ): Promise<{ url: string; level: QualityLevel; format?: string; trialOnly: boolean } | undefined> {
+    const ladder = this.deps.autoDowngrade() ? ladderFrom(requested) : [requested]
+    for (const level of ladder) {
+      try {
+        const results = await this.deps.api.songURL([track.id], level)
+        const data = results.find((item) => item.id === track.id) ?? results[0]
+        if (!data?.url) continue
+        if (data.freeTrialInfo) {
+          // 试听片段：不返回地址，交给换源逻辑继续找完整版本。
+          return { url: httpsURL(data.url), level, format: data.type, trialOnly: true }
+        }
+        return {
+          url: httpsURL(data.url),
+          level: (data.level as QualityLevel) ?? level,
+          format: data.type,
+          trialOnly: false
+        }
+      } catch {
+        // 这一档拿不到就试下一档。
+      }
+    }
+    return undefined
   }
 
   private async cacheInBackground(
     track: Track,
     level: QualityLevel,
     url: string,
-    format?: string
+    format: string | undefined,
+    variant: string
   ): Promise<void> {
     if (!this.deps.cache) return
     try {
-      await this.deps.cache.cacheAudio(track.id, level, url, format)
+      await this.deps.cache.cacheAudio(track.id, level, url, format, variant)
     } catch (cause) {
       this.deps.log?.(`后台缓存失败 (${track.id}): ${describeError(cause)}`)
     }
-  }
-
-  /**
-   * Resolves a playable URL, walking down the quality ladder when the account
-   * is not entitled to the requested tier. Explicit grey-track unblocking is
-   * handled upstream by the caller, which substitutes a track before it ever
-   * reaches the queue.
-   */
-  private async resolveURL(track: Track): Promise<{ url: string; level: QualityLevel; format?: string }> {
-    const requested = this.deps.getQuality()
-    const ladder = this.deps.autoDowngrade() ? ladderFrom(requested) : [requested]
-    let lastError: unknown
-    for (const level of ladder) {
-      try {
-        const results = await this.deps.api.songURL([track.id], level)
-        const data = results.find((item) => item.id === track.id) ?? results[0]
-        if (data?.url) {
-          return {
-            url: httpsURL(data.url),
-            level: (data.level as QualityLevel) ?? level,
-            format: data.type
-          }
-        }
-        lastError = new NeteaseAPIError('business', {
-          code: data?.code ?? -1,
-          message: `该音质暂不可用 (${level})`
-        })
-      } catch (cause) {
-        lastError = cause
-      }
-    }
-    throw lastError ?? new Error('没有可用的播放地址')
   }
 
   async play(): Promise<void> {
@@ -520,6 +732,15 @@ function ladderFrom(requested: QualityLevel): QualityLevel[] {
   const start = QUALITY_LADDER.indexOf(requested)
   if (start < 0) return [requested, ...QUALITY_LADDER]
   return QUALITY_LADDER.slice(start)
+}
+
+/** 把第三方音源报告的码率映射到我们自己的音质档位；未知返回 undefined。 */
+function qualityForBitrate(bitrate: number | undefined): QualityLevel | undefined {
+  if (!bitrate || bitrate <= 0) return undefined
+  if (bitrate >= 900) return 'lossless'
+  if (bitrate >= 256) return 'exhigh'
+  if (bitrate >= 160) return 'higher'
+  return 'standard'
 }
 
 function httpsURL(url: string): string {

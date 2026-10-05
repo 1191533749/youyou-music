@@ -36,38 +36,47 @@
 }
 
 .chip {
-  padding: 5px 12px;
-  border-radius: 999px;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--glass-strong);
   font-size: 12px;
   color: var(--text-secondary);
+  transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.chip:hover {
+  color: var(--text);
 }
 
 .chip.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+  box-shadow: 0 6px 16px rgba(255, 90, 31, 0.3);
 }
 
 .text-input {
   flex: 1;
   min-width: 180px;
-  padding: 9px 12px;
+  padding: 9px 13px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background: var(--glass-strong);
 }
 
 .hero {
   display: flex;
   align-items: flex-end;
   gap: 20px;
-  padding: 20px;
+  padding: 22px;
   margin-bottom: 22px;
   border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-soft);
+  background: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(170%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .hero__art {
@@ -77,7 +86,7 @@
   overflow: hidden;
   flex: none;
   background: var(--bg-hover);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow-soft);
 }
 
 .hero__art img {
@@ -124,6 +133,143 @@
   }
 }
 
+/* --- 登录页 ------------------------------------------------------------ */
+
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 24px 0;
+}
+
+.login__card {
+  width: 372px;
+  padding: 28px 26px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  text-align: center;
+}
+
+.login__brand h1 {
+  margin: 12px 0 3px;
+  font-size: 24px;
+  font-weight: 680;
+  letter-spacing: 0.01em;
+}
+
+.login__brand p {
+  margin: 0 0 18px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.login__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-weak);
+  border: 1px solid var(--border);
+}
+
+.login__tabs button {
+  flex: 1;
+  padding: 8px;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.login__tabs button.is-active {
+  background: var(--accent-gradient);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(255, 90, 31, 0.3);
+}
+
+.login__qr-frame {
+  display: grid;
+  place-items: center;
+  width: 212px;
+  height: 212px;
+  margin: 0 auto 14px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.qr-grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+}
+
+.qr-grid__on {
+  background: #0d1220;
+}
+
+.qr-grid__off {
+  background: #fff;
+}
+
+.login__qr-placeholder {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.login__status {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.login__status--confirmed {
+  color: var(--ok);
+}
+
+.login__status--expired,
+.login__status--error {
+  color: var(--warn);
+}
+
+.login__hint,
+.login__message {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.login__phone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.login__phone label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.login__phone input {
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--glass-strong);
+}
+
+.login__code-row {
+  display: flex;
+  gap: 8px;
+}
+
 /* --- settings ---------------------------------------------------------- */
 
 .settings {
@@ -134,8 +280,11 @@
   padding: 16px 18px;
   margin-bottom: 14px;
   border-radius: var(--radius);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-soft);
+  background: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(170%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-soft);
 }
 
 .settings__group h2 {
@@ -163,6 +312,14 @@
   border-top: none;
 }
 
+.settings__row.is-disabled {
+  opacity: 0.45;
+}
+
+.settings__row.is-disabled .switch {
+  cursor: not-allowed;
+}
+
 .settings__row-label {
   display: flex;
   flex-direction: column;
@@ -187,21 +344,22 @@
   padding: 6px 9px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--glass-strong);
   min-width: 120px;
 }
 
 .switch {
   position: relative;
-  width: 42px;
-  height: 24px;
-  border-radius: 12px;
+  width: 44px;
+  height: 25px;
+  border-radius: var(--radius-pill);
   background: var(--border-strong);
-  transition: background 0.15s ease;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .switch.is-on {
-  background: var(--accent);
+  background: var(--accent-gradient);
+  box-shadow: 0 4px 12px rgba(255, 90, 31, 0.4);
 }
 
 .switch::after {
@@ -209,15 +367,16 @@
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
   background: #fff;
-  transition: transform 0.15s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease;
 }
 
 .switch.is-on::after {
-  transform: translateX(18px);
+  transform: translateX(19px);
 }
 
 .settings__about {

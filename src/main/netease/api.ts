@@ -253,17 +253,25 @@ export class NeteaseAPI {
   /**
    * Codes: 800 expired · 801 waiting · 802 scanned · 803 success.
    * On 803 the auth cookies arrive via Set-Cookie and are absorbed by the client.
+   *
+   * These are *returned* statuses, not success/failure: a 801 reply is the
+   * normal answer while nobody has scanned yet, so this endpoint must be read
+   * without the `code != 200` guard — treating 801 as an error would abort the
+   * poll on its very first tick. It also needs the transport fallback: when
+   * weapi is throttled the reply is an empty body, which would leave the login
+   * screen waiting forever.
    */
   async qrCheck(unikey: string): Promise<QRCheckResponse> {
     return this.weapi<QRCheckResponse>(
       '/login/qrcode/client/login',
       { key: unikey, type: 1 },
       {
+        decoded: { allowNon200: true },
         decode: (j) => ({
-          code: Number(j.code ?? 0),
-          message: typeof j.message === 'string' ? j.message : undefined,
-          nickname: typeof j.nickname === 'string' ? j.nickname : undefined,
-          avatarUrl: typeof j.avatarUrl === 'string' ? j.avatarUrl : undefined
+          code: Number(j?.code ?? 0),
+          message: typeof j?.message === 'string' ? j.message : undefined,
+          nickname: typeof j?.nickname === 'string' ? j.nickname : undefined,
+          avatarUrl: typeof j?.avatarUrl === 'string' ? j.avatarUrl : undefined
         })
       }
     )
@@ -278,9 +286,18 @@ export class NeteaseAPI {
     })
   }
 
-  /** Phone-number login with an SMS code. Auth cookies arrive via Set-Cookie. */
+  /**
+   * Phone-number login with an SMS code. The auth cookies arrive via Set-Cookie
+   * and are absorbed by the client's transport, on either channel.
+   *
+   * The eapi fallback matters more here than anywhere else: with weapi
+   * throttled, an empty reply used to surface as "the endpoint is unreachable",
+   * hiding the server's real answer (`{"code":503,"message":"验证码错误"}`).
+   * The response's `code` is checked explicitly so a rejected code reads as a
+   * rejected code.
+   */
   async loginCellphone(phone: string, captcha: string, countryCode = '86'): Promise<void> {
-    await this.weapi(
+    const response = await this.weapi(
       '/w/login/cellphone',
       {
         type: '1',
@@ -291,13 +308,22 @@ export class NeteaseAPI {
         remember: 'true',
         secureCaptcha: ''
       },
-      // Sign-in state is delivered as Set-Cookie on this response; the eapi
-      // fallback would not reproduce that, so a silent "success" there would be
-      // worse than a visible failure.
-      { noTransportFallback: true }
+      { decoded: { allowNon200: true } }
     )
+    const code = Number(response?.code ?? 0)
+    if (code !== 200) {
+      throw new NeteaseAPIError('business', {
+        code,
+        message:
+          typeof response?.message === 'string'
+            ? response.message
+            : typeof response?.msg === 'string'
+              ? response.msg
+              : '登录失败，请重试'
+      })
+    }
     if (!this.client.isLoggedIn) {
-      throw new NeteaseAPIError('business', { code: -1, message: '登录失败，请重试' })
+      throw new NeteaseAPIError('business', { code: -1, message: '登录未生效，请改用扫码登录' })
     }
   }
 

@@ -16,30 +16,65 @@ import { MpvController, resolveMpvBinary } from './audio/mpv.js'
 import { PlayerController } from './player/controller.js'
 import { LyricsService } from './lyrics/service.js'
 import { MediaKeys } from './media/keys.js'
+import { UnblockService } from './unblock/service.js'
+import type { AudioSourceID } from './unblock/providers.js'
 import { contextRef, sendEvent, assertAllChannelsRegistered } from './ipc/registry.js'
 import { registerAuthHandlers } from './ipc/auth.js'
 import { registerPlayerHandlers } from './ipc/player.js'
+import { registerUpdateHandlers } from './ipc/update.js'
 import { registerLibraryHandlers } from './ipc/library.js'
 import { registerExploreHandlers } from './ipc/explore.js'
 import { registerAppHandlers } from './ipc/app.js'
 import type { AppContext } from './context.js'
 import type { PlayerSnapshot } from './player/controller.js'
+import { bootLog } from './diagnostics.js'
 import { DEFAULT_SETTINGS } from '@shared/types'
-
-// A second instance would fight over the mpv instance and the cookie jar.
-if (!app.requestSingleInstanceLock()) {
-  console.log('已有实例在运行，本次启动退出。')
-  app.quit()
-  process.exit(0)
-}
 
 // The self-check runs against a throwaway profile so it neither reads the
 // user's real login/settings nor leaves state behind — and so a stale
 // single-instance lock from a killed run cannot silence it.
+// It must be applied *before* the single-instance lock: Electron keys the lock
+// to the userData path, so with the default path the smoke instance would
+// collide with the user's running app (or a zombie lock) and silently exit.
+bootLog('module loaded; userData=' + app.getPath('userData') + '; argv=' + process.argv.slice(1).join(' '))
 const smokeUserData = process.env.KUMONE_USER_DATA
 if (smokeUserData) {
   fs.mkdirSync(smokeUserData, { recursive: true })
   app.setPath('userData', smokeUserData)
+} else {
+  migrateLegacyUserData()
+}
+
+/**
+ * 应用改名前用户的数据目录是 `%APPDATA%\kumone-windows`（由 package.json 的 name 决定）。
+ * 这里把登录态与设置一次性搬到新目录，避免升级后要求用户重新扫码登录。
+ * 只搬这两个小文件；缓存与 Chromium 的临时数据留在原处由用户自行清理。
+ */
+function migrateLegacyUserData(): void {
+  try {
+    const legacy = path.join(app.getPath('appData'), 'kumone-windows')
+    const current = app.getPath('userData')
+    if (legacy === current || !fs.existsSync(legacy)) return
+    fs.mkdirSync(current, { recursive: true })
+    for (const name of ['cookies.json', 'settings.json']) {
+      const from = path.join(legacy, name)
+      const to = path.join(current, name)
+      if (fs.existsSync(from) && !fs.existsSync(to)) {
+        fs.copyFileSync(from, to)
+      }
+    }
+  } catch {
+    // 迁移失败只意味着需要重新登录一次，不应该阻断启动。
+  }
+}
+
+// A second instance would fight over the mpv instance and the cookie jar.
+bootLog('requesting single-instance lock')
+if (!app.requestSingleInstanceLock()) {
+  bootLog('LOCK FAILED -> exiting')
+  console.log('已有实例在运行，本次启动退出。')
+  app.quit()
+  process.exit(0)
 }
 
 const logLines: string[] = []
@@ -57,6 +92,7 @@ let quitting = false
 
 const rendererUrl = process.env['ELECTRON_RENDERER_URL']
 
+
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
@@ -64,8 +100,8 @@ function createMainWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 620,
     show: false,
-    backgroundColor: '#f5f5f7',
-    title: '雲の音 Kumone',
+    backgroundColor: '#eef2fb',
+    title: '悠悠音乐',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -106,8 +142,10 @@ function createMainWindow(): BrowserWindow {
 function createLyricsWindow(): BrowserWindow {
   const settings = contextRef.value?.settings.current ?? DEFAULT_SETTINGS
   const window = new BrowserWindow({
-    width: 900,
-    height: 180,
+    // 初始大小故意给得紧凑（渲染进程会按当前行内容自适配高度），
+    // 避免一整条透明区域挡在桌面上：窗口只罩住歌词本身。
+    width: 560,
+    height: 72,
     show: false,
     frame: false,
     transparent: true,
@@ -150,13 +188,30 @@ function createLyricsWindow(): BrowserWindow {
   return window
 }
 
-function toggleLyricsWindow(visible: boolean): void {
+/**
+ * 按设置显示/隐藏桌面歌词窗口，**不**回写设置。
+ *
+ * 回写会把「用户改了设置」与「我们应用了设置」混成一次写操作，
+ * 从而在 settings.on('change') 里形成自激循环；所以这里只负责窗口，
+ * 持久化由调用方（托盘菜单、设置页的 settings:update）各自完成。
+ */
+function applyLyricsVisibility(visible: boolean): void {
   if (visible) {
     lyricsWindow ??= createLyricsWindow()
     lyricsWindow.showInactive()
   } else {
     lyricsWindow?.hide()
   }
+}
+
+/** 当前桌面歌词窗口是否可见；未创建视作不可见。 */
+function lyricsVisible(): boolean {
+  return !!lyricsWindow && !lyricsWindow.isDestroyed() && lyricsWindow.isVisible()
+}
+
+/** 托盘菜单用：切换并持久化。 */
+function toggleLyricsWindow(visible: boolean): void {
+  applyLyricsVisibility(visible)
   void contextRef.value?.settings.update({ showDesktopLyrics: visible })
 }
 
@@ -165,13 +220,14 @@ const MPV_LOG_TAIL = 20
 function createTray(context: AppContext): void {
   if (tray) return
   tray = new Tray(makeTrayIcon())
-  tray.setToolTip('雲の音 Kumone')
+  tray.setToolTip('悠悠音乐')
   const rebuild = (): void => {
     const snapshot = context.player.snapshot()
+    const artists = snapshot.track ? snapshot.track.artists.map((a) => a.name).join(' / ') : ''
     tray?.setContextMenu(
       Menu.buildFromTemplate([
         {
-          label: snapshot.track ? `${snapshot.track.name} — ${snapshot.track.artists.map((a) => a.name).join(' / ')}` : '未在播放',
+          label: snapshot.track ? `${snapshot.track.name} — ${artists}` : '未在播放',
           enabled: false
         },
         { type: 'separator' },
@@ -180,7 +236,7 @@ function createTray(context: AppContext): void {
         { label: '上一首', click: () => void context.player.previous() },
         { type: 'separator' },
         {
-          label: '显示/隐藏桌面歌词',
+          label: '显示桌面歌词',
           type: 'checkbox',
           checked: context.settings.current.showDesktopLyrics,
           click: (item) => toggleLyricsWindow(item.checked)
@@ -233,6 +289,7 @@ function showMainWindow(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  bootLog('bootstrap entered')
   const userData = app.getPath('userData')
   const settings = new SettingsStore(userData)
   await settings.load()
@@ -272,12 +329,22 @@ async function bootstrap(): Promise<void> {
   /** The track the engine is on, so media-key updates can report its duration. */
   let currentTrack: import('./netease/models.js').Track | undefined
 
+  const unblock = new UnblockService({
+    isEnabled: () => settings.current.unblockGreyTracks,
+    enabledSources: () => settings.current.unblockSources as AudioSourceID[],
+    log
+  })
+
   const player = new PlayerController({
     api,
     mpv,
+    unblock,
+    isUnblockEnabled: () => settings.current.unblockGreyTracks,
+    unblockSourceIds: () => settings.current.unblockSources as AudioSourceID[],
     cache: {
-      audioPath: (trackID, level) => cache.audioPath(trackID, level),
-      cacheAudio: (trackID, level, url, format) => cache.cacheAudio(trackID, level, url, format)
+      audioPath: (trackID, level, variant) => cache.audioPath(trackID, level, variant),
+      cacheAudio: (trackID, level, url, format, variant) =>
+        cache.cacheAudio(trackID, level, url, format, variant)
     },
     getQuality: () => settings.current.quality,
     autoDowngrade: () => settings.current.autoDowngradeQuality,
@@ -318,6 +385,13 @@ async function bootstrap(): Promise<void> {
     media,
     cache,
     mainWindow: () => mainWindow,
+    lyricsWindow: () => lyricsWindow,
+    windows: () => {
+      const list: BrowserWindow[] = []
+      if (mainWindow && !mainWindow.isDestroyed()) list.push(mainWindow)
+      if (lyricsWindow && !lyricsWindow.isDestroyed()) list.push(lyricsWindow)
+      return list
+    },
     emit: (event, payload) => sendEvent(context, event, payload),
     log
   }
@@ -342,6 +416,7 @@ async function bootstrap(): Promise<void> {
   registerLibraryHandlers(context)
   registerExploreHandlers(context)
   registerAppHandlers(context)
+  registerUpdateHandlers()
 
   player.on('state', (snapshot: PlayerSnapshot) => {
     sendEvent(context, 'player:state', snapshot)
@@ -352,6 +427,11 @@ async function bootstrap(): Promise<void> {
   settings.on('change', (next) => {
     sendEvent(context, 'settings:changed', next)
     media.sync()
+    // 界面上的「桌面歌词」开关只改设置，窗口必须在这里跟着走；
+    // 只在可见状态真的不一致时操作，避免无谓的显示/隐藏。
+    if (next.showDesktopLyrics !== lyricsVisible()) {
+      applyLyricsVisibility(next.showDesktopLyrics)
+    }
     if (!next.tray && tray) {
       tray.destroy()
       tray = undefined
@@ -360,10 +440,12 @@ async function bootstrap(): Promise<void> {
     }
   })
 
+  bootLog('creating main window')
   mainWindow = createMainWindow()
+  bootLog('bootstrap finished')
   if (settings.current.tray) createTray(context)
   media.sync()
-  if (settings.current.showDesktopLyrics) toggleLyricsWindow(true)
+  if (settings.current.showDesktopLyrics) applyLyricsVisibility(true)
 
   // Volume from the previous session is applied once mpv is up; a missing mpv
   // must not stop the rest of the app from working.
@@ -508,7 +590,7 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
         const track = {
           id: 999000001,
           name: '播放自检',
-          artists: [{ id: 1, name: 'Kumone' }],
+          artists: [{ id: 1, name: '悠悠音乐' }],
           album: { id: 1, name: 'Smoke' },
           durationMS: 3000,
           alias: [],
@@ -540,6 +622,37 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
       )
       record('播放走的是缓存文件', (state?.source ?? '').includes('audio'), state?.source ?? '(空)')
       void planted
+
+      // 桌面歌词窗口必须收到广播事件，否则歌词永远不会更新
+      // （这是「一首歌放完了桌面歌词还没出现」的真凶）。
+      // 注意要在 clearQueue 之前检查：清空队列后 track 就是 null 了。
+      try {
+        const lyrics = (lyricsWindow ??= createLyricsWindow())
+        await new Promise<void>((resolve) => {
+          if (!lyrics.webContents.isLoading()) {
+            resolve()
+            return
+          }
+          lyrics.webContents.once('did-finish-load', () => resolve())
+        })
+        await new Promise((resolve) => setTimeout(resolve, 1200))
+        const result = (await lyrics.webContents.executeJavaScript(`(async () => {
+          window.__smokeState = null
+          window.kumone.on('player:state', (s) => { window.__smokeState = s })
+          await window.kumone.invoke('player:setVolume', { volume: 79 })
+          await new Promise((resolve) => setTimeout(resolve, 400))
+          return { track: window.__smokeState?.track?.name ?? null, volume: window.__smokeState?.volume ?? null }
+        })()`)) as { track: string | null; volume: number | null }
+        record(
+          '桌面歌词窗口收到播放状态广播',
+          result.track === '播放自检' && result.volume === 79,
+          `track=${result.track} volume=${result.volume}`
+        )
+        lyrics.hide()
+      } catch (cause) {
+        record('桌面歌词窗口收到播放状态广播', false, String(cause))
+      }
+
       await context.player.clearQueue().catch(() => undefined)
     } else {
       record('队列 → mpv 播放', true, '跳过：缺少音频样本')

@@ -25,6 +25,13 @@ export interface AppContext {
   cache: CacheStore
   /** The main window, once it exists. */
   mainWindow: () => BrowserWindow | undefined
+  /** 桌面歌词窗口（可能还没创建）。 */
+  lyricsWindow: () => BrowserWindow | undefined
+  /**
+   * 所有需要接收推送事件的窗口（主窗口 + 桌面歌词窗口等）。
+   * `sendEvent` 据此做广播：桌面歌词窗口只有收到 player:state 才知道该显示哪句词。
+   */
+  windows: () => BrowserWindow[]
   /** Sends a push event to the renderer if it is alive. */
   emit: (event: string, payload: unknown) => void
   log: (message: string) => void

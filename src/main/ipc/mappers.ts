@@ -15,6 +15,7 @@ import {
   type PlaylistDetail,
   type PlaylistSummary,
   type Track,
+  type TrackPlayability,
   type TrackPrivilege
 } from '../netease/models.js'
 import type {
@@ -23,15 +24,24 @@ import type {
   PlaylistSummaryDTO,
   TrackDTO
 } from '@shared/types'
+import type { AppContext } from '../context.js'
 
 export interface TrackMappingContext {
   isLoggedIn: boolean
   vipType: number
   privileges?: Map<number, TrackPrivilege>
+  /**
+   * 开启灰色歌曲解锁后，受限曲目也会由第三方音源播放，因此对用户而言
+   * 全部可播——上游同样这么处理（SettingsManager.canResolveUnblockedTracks）。
+   * 界面据此不再显示「VIP 专属 / 无版权」这类灰态。
+   */
+  unblockEnabled?: boolean
 }
 
 export function toTrackDTO(track: Track, context: TrackMappingContext): TrackDTO {
-  const state = playability(track, context.privileges?.get(track.id), context.isLoggedIn, context.vipType)
+  const state: TrackPlayability = context.unblockEnabled
+    ? 'playable'
+    : playability(track, context.privileges?.get(track.id), context.isLoggedIn, context.vipType)
   return {
     id: track.id,
     name: track.name,
@@ -45,12 +55,25 @@ export function toTrackDTO(track: Track, context: TrackMappingContext): TrackDTO
     noCopyright: track.noCopyright,
     isCloud: track.isCloud,
     playability: state,
-    playabilityReason: playabilityReason(state)
+    playabilityReason: context.unblockEnabled ? undefined : playabilityReason(state)
   }
 }
 
 export function toTracksDTO(tracks: Track[], context: TrackMappingContext): TrackDTO[] {
   return tracks.map((track) => toTrackDTO(track, context))
+}
+
+/**
+ * 从运行上下文推导映射参数。集中在这里，才能保证「换源开关一开，
+ * 所有页面返回的 playability 同时变成 playable」，而不是各处各写一遍。
+ */
+export function mappingContextFrom(context: AppContext): TrackMappingContext {
+  const settings = context.settings.current
+  return {
+    isLoggedIn: context.client.isLoggedIn,
+    vipType: 0,
+    unblockEnabled: settings.unblockGreyTracks && settings.unblockSources.length > 0
+  }
 }
 
 export function toPlaylistDTO(playlist: PlaylistSummary): PlaylistSummaryDTO {

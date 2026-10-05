@@ -3,12 +3,12 @@
  * recent plays, the cloud drive, and the mutations that change them.
  */
 import { defineHandler } from './registry.js'
-import { toAlbumDTO, toArtistDTO, toPlaylistDTO, toTracksDTO } from './mappers.js'
+import { mappingContextFrom, toAlbumDTO, toArtistDTO, toPlaylistDTO, toTracksDTO } from './mappers.js'
 import type { AppContext } from '../context.js'
 import type { CloudSongDTO } from '@shared/ipc'
 
 function context0(context: AppContext) {
-  return { isLoggedIn: context.client.isLoggedIn, vipType: 0 }
+  return mappingContextFrom(context)
 }
 
 async function requireProfile(context: AppContext) {

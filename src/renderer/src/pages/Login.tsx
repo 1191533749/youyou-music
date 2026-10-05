@@ -1,12 +1,14 @@
 /**
- * Login screen.
+ * 登录页：扫码优先，手机号登录作为次要路径（与 macOS 版一致）。
  *
- * QR first (scan with the phone app), with phone + SMS as the secondary path —
- * the same two options the macOS client offers.
+ * 二维码由主进程编码，渲染进程只负责把矩阵画成方块。轮询的状态机
+ * （800 过期 / 801 等待 / 802 已扫码 / 803 成功）在 auth store 里，
+ * 这里只负责呈现与重试。
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../store/auth'
 import { call } from '../lib/ipc'
+import { LogoMark } from '../components/Icons'
 import type { QRLoginStateDTO } from '@shared/types'
 
 interface QRMatrix {
@@ -28,31 +30,23 @@ export default function Login(): JSX.Element {
   useEffect(() => {
     void auth.startQR()
     return () => auth.cancelQR()
-    // The QR handshake should start exactly once when the screen mounts.
+    // 仅在挂载时发起一次握手；轮询与取消由 store 内部管理。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // The main process encodes the QR; the renderer only draws the matrix. The
-  // encoder lives there because it is the same trusted side that builds the
-  // login URL.
+  // 登录地址 → 二维码矩阵。编码放在主进程：那里既是可信侧，也是生成地址的地方。
   useEffect(() => {
     const url = auth.qr?.url
     if (!url) return
     let cancelled = false
-    void call('app:info') // warm the bridge; no data needed
-      .catch(() => undefined)
-      .then(() => {
-        if (cancelled) return
-        // The matrix comes from a dedicated channel so the URL never has to be
-        // parsed in the renderer.
-        return window.kumone
-          .invoke('app:qrMatrix', { url })
-          .then((result: { ok: boolean; data?: unknown }) => {
-            if (cancelled || !result.ok) return
-            setMatrix(result.data as QRMatrix)
-          })
+    setQrError(undefined)
+    void call('app:qrMatrix', { url })
+      .then((result) => {
+        if (!cancelled) setMatrix(result)
       })
-      .catch((cause) => setQrError(String(cause)))
+      .catch((cause) => {
+        if (!cancelled) setQrError(cause instanceof Error ? cause.message : String(cause))
+      })
     return () => {
       cancelled = true
     }
@@ -65,6 +59,7 @@ export default function Login(): JSX.Element {
   }, [countdown])
 
   const status = useMemo(() => describeStatus(auth.qr), [auth.qr])
+  const needsRefresh = auth.qr?.status === 'expired' || auth.qr?.status === 'error'
 
   const sendCode = async (): Promise<void> => {
     setBusy(true)
@@ -74,7 +69,7 @@ export default function Login(): JSX.Element {
       setCountdown(60)
       setMessage('验证码已发送')
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause))
+      setMessage(describeLoginError(cause))
     } finally {
       setBusy(false)
     }
@@ -86,7 +81,7 @@ export default function Login(): JSX.Element {
     try {
       await auth.loginWithSMS(phone, code)
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause))
+      setMessage(describeLoginError(cause))
     } finally {
       setBusy(false)
     }
@@ -94,11 +89,11 @@ export default function Login(): JSX.Element {
 
   return (
     <div className="login">
-      <div className="login__card">
+      <div className="login__card glass">
         <div className="login__brand">
-          <span className="login__mark">雲</span>
-          <h1>Kumone</h1>
-          <p>登录网易云音乐账号</p>
+          <LogoMark size={58} />
+          <h1>悠悠音乐</h1>
+          <p>小鱼の音乐 · 登录网易云音乐账号</p>
         </div>
 
         <div className="login__tabs">
@@ -130,8 +125,8 @@ export default function Login(): JSX.Element {
               )}
             </div>
             <p className={`login__status login__status--${auth.qr?.status ?? 'waiting'}`}>{status}</p>
-            {auth.qr?.status === 'expired' || auth.qr?.status === 'error' ? (
-              <button type="button" className="button" onClick={() => void auth.refreshQR()}>
+            {needsRefresh ? (
+              <button type="button" className="button button--primary" onClick={() => void auth.refreshQR()}>
                 刷新二维码
               </button>
             ) : (
@@ -176,9 +171,7 @@ export default function Login(): JSX.Element {
             >
               登录
             </button>
-            <p className="login__hint">
-              短信登录接口由网易云限制，失败时可优先使用扫码登录。
-            </p>
+            <p className="login__hint">短信登录受网易云风控限制，失败时请改用扫码登录。</p>
           </div>
         )}
 
@@ -202,4 +195,16 @@ function describeStatus(state: QRLoginStateDTO | undefined): string {
     case 'error':
       return state.message ?? '扫码失败'
   }
+}
+
+/**
+ * 把接口错误翻译成用户能据以行动的话。未识别的错误原样抛出，
+ * 因为接口自己的中文提示（例如「验证码错误」）比任何兜底文案都准确。
+ */
+function describeLoginError(cause: unknown): string {
+  const raw = cause instanceof Error ? cause.message : String(cause)
+  if (raw.includes('限流')) {
+    return `${raw}；若持续失败，请改用扫码登录。`
+  }
+  return raw
 }

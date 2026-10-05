@@ -1,49 +1,146 @@
 /**
- * Settings.
+ * 设置。
  *
- * One screen, grouped by what the setting affects: playback, cache, output
- * device, desktop lyrics, system integration and about. Every control writes
- * straight through `settings:update`, which persists and broadcasts, so there
- * is no save button and no chance of the UI and the stored value disagreeing.
+ * 分五组：播放（音质与换源）、输出设备、桌面歌词、缓存、系统集成、账号。
+ * 所有控件都直接写回 `settings:update`，由主进程持久化并广播，
+ * 因此没有「保存」按钮，也不会出现界面与存储值不一致。
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { call } from '../lib/contract'
 import {
+  DESKTOP_LYRICS_EFFECTS,
   QUALITY_OPTIONS,
   type AppInfoDTO,
   type AudioDeviceDTO,
   type CacheUsageDTO,
+  type DesktopLyricsEffect,
   type SettingsDTO
 } from '@shared/types'
 import { formatBytes } from '../lib/format'
+import { useAuthStore } from '../store/auth'
+
+/** 音源开关的展示信息；与主进程 `AUDIO_SOURCE_NAMES` 保持一致。 */
+const SOURCES: Array<{ id: 'pyncmd' | 'kugou' | 'kuwo'; name: string; hint: string }> = [
+  { id: 'pyncmd', name: 'pyncmd', hint: '按网易云歌曲 ID 直取，命中率不高但最精确' },
+  { id: 'kugou', name: '酷狗音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' },
+  { id: 'kuwo', name: '酷我音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' }
+]
+
+/** 桌面歌词特效的显示名，与桌面歌词窗口共用同一套枚举。 */
+const EFFECT_LABELS: Record<DesktopLyricsEffect, string> = {
+  classic: '经典',
+  gradient: '渐变',
+  neon: '霓虹',
+  karaoke: '逐字卡拉OK'
+}
+
+/**
+ * 跟手的滑块。
+ *
+ * 直接在 onChange 里同步写主进程，会让滑块在快速拖动时来回跳动
+ * （多次 IPC 响应乱序覆盖，表现为「拖不动」）。这里本地值立刻跟手，
+ * 停顿 140ms 才真正落盘一次；松手/失焦时立即落盘，保证不会丢最后一次调整。
+ */
+function DraftRange({
+  value,
+  min,
+  max,
+  label,
+  onChange
+}: {
+  value: number
+  min: number
+  max: number
+  label: string
+  onChange: (value: number) => void
+}): JSX.Element {
+  const [draft, setDraft] = useState<number | undefined>(undefined)
+  const timer = useRef<number | undefined>(undefined)
+  const shown = draft ?? value
+
+  const schedule = (next: number): void => {
+    setDraft(next)
+    if (timer.current !== undefined) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
+      timer.current = undefined
+      setDraft(undefined)
+      onChange(next)
+    }, 140)
+  }
+
+  const flush = (): void => {
+    if (timer.current !== undefined) {
+      window.clearTimeout(timer.current)
+      timer.current = undefined
+    }
+    if (draft !== undefined && draft !== value) {
+      setDraft(undefined)
+      onChange(draft)
+    }
+  }
+
+  useEffect(
+    () => () => {
+      if (timer.current !== undefined) window.clearTimeout(timer.current)
+    },
+    []
+  )
+
+  return (
+    <input
+      type="range"
+      className="slider"
+      min={min}
+      max={max}
+      value={shown}
+      aria-label={label}
+      onChange={(event) => schedule(Number(event.target.value))}
+      onPointerUp={flush}
+      onKeyUp={flush}
+      onBlur={flush}
+    />
+  )
+}
 
 export default function Settings(): JSX.Element {
+  const auth = useAuthStore()
   const [settings, setSettings] = useState<SettingsDTO | undefined>()
   const [info, setInfo] = useState<AppInfoDTO | undefined>()
   const [usage, setUsage] = useState<CacheUsageDTO | undefined>()
   const [devices, setDevices] = useState<AudioDeviceDTO[]>([])
-  const [available, setAvailable] = useState<string[]>([])
   const [error, setError] = useState<string | undefined>()
   const [message, setMessage] = useState<string | undefined>()
+  const [confirmLogout, setConfirmLogout] = useState(false)
+  // 连续快速修改（比如主题切换、开关连点）时，多个 settings:update 的响应可能乱序
+  // 到达——旧响应后到会把界面值盖回旧值，表现为「点了没生效」。序号守卫只采纳
+  // 最后一次请求的响应。
+  const patchSeq = useRef(0)
 
   useEffect(() => {
     void call('settings:get').then(setSettings).catch((cause) => setError(String(cause)))
     void call('app:info').then(setInfo).catch(() => undefined)
     void call('app:cacheUsage').then(setUsage).catch(() => undefined)
     void call('player:audioDevices').then(setDevices).catch(() => undefined)
-    void call('app:entitlements')
-      .then((entitlement) => setAvailable(entitlement.available))
-      .catch(() => setAvailable([]))
   }, [])
 
   const patch = async (change: Partial<SettingsDTO>): Promise<void> => {
+    const seq = ++patchSeq.current
     setError(undefined)
     try {
       const next = await call('settings:update', change)
-      setSettings(next)
+      if (seq === patchSeq.current) setSettings(next)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
+  }
+
+  const toggleSource = async (id: 'pyncmd' | 'kugou' | 'kuwo', enabled: boolean): Promise<void> => {
+    if (!settings) return
+    const current = settings.unblockSources ?? []
+    const next = enabled ? [...current, id] : current.filter((item) => item !== id)
+    // 保持固定优先级顺序，避免用户勾选顺序影响尝试次序。
+    const ordered = SOURCES.map((source) => source.id).filter((source) => next.includes(source))
+    await patch({ unblockSources: ordered as SettingsDTO['unblockSources'] })
   }
 
   if (!settings) {
@@ -52,10 +149,12 @@ export default function Settings(): JSX.Element {
         <div className="page__header">
           <h1 className="page__title">设置</h1>
         </div>
-        <div className="page__empty">{error ?? '正在读取设置…'}</div>
+        <div className="page__empty">{error ?? '正在读取设置'}</div>
       </div>
     )
   }
+
+  const enabledSources = settings.unblockSources ?? []
 
   return (
     <div className="page settings">
@@ -66,35 +165,28 @@ export default function Settings(): JSX.Element {
 
       <section className="settings__group">
         <h2>播放</h2>
-        <p>音质档位与降级策略。无损及更高档位需要黑胶 VIP。</p>
+        <p>优先使用更高音质；该档位拿不到时自动降档，绝不播放残缺片段。</p>
         <div className="settings__row">
           <div className="settings__row-label">
             <span>默认音质</span>
-            <span className="settings__row-hint">
-              {available.length > 0 ? `当前账号可用：${available.length} 档` : '未登录，仅免费档位可用'}
-            </span>
+            <span className="settings__row-hint">所有档位都可选择，实际以音源能提供的最高档为准</span>
           </div>
           <div className="settings__row-control">
             <select
               value={settings.quality}
               onChange={(event) => void patch({ quality: event.target.value as SettingsDTO['quality'] })}
             >
-              {QUALITY_OPTIONS.map((option) => {
-                const entitled = available.length === 0 ? !option.vip : available.includes(option.level)
-                return (
-                  <option key={option.level} value={option.level}>
-                    {option.label}
-                    {option.vip ? '（VIP）' : ''}
-                    {entitled ? '' : ' · 未开通'}
-                  </option>
-                )
-              })}
+              {QUALITY_OPTIONS.map((option) => (
+                <option key={option.level} value={option.level}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
         <SettingSwitch
-          label="自动降级音质"
-          hint="请求的档位不可用时，自动尝试较低档位，而不是直接报错"
+          label="自动降档"
+          hint="请求的档位拿不到时，依次尝试较低档位，而不是直接报错"
           checked={settings.autoDowngradeQuality}
           onChange={(value) => void patch({ autoDowngradeQuality: value })}
         />
@@ -104,6 +196,33 @@ export default function Settings(): JSX.Element {
           checked={settings.scrobble}
           onChange={(value) => void patch({ scrobble: value })}
         />
+      </section>
+
+      <section className="settings__group">
+        <h2>音源</h2>
+        <p>
+          受版权限制、无法从网易云取得完整音频的歌曲，会自动到已启用的音源里找同一首歌
+          （时长、歌名、歌手、版本全部匹配），找到后直接播放完整版。
+        </p>
+        <SettingSwitch
+          label="受限歌曲自动换源"
+          hint="关闭后，受限歌曲将无法播放"
+          checked={settings.unblockGreyTracks}
+          onChange={(value) => void patch({ unblockGreyTracks: value })}
+        />
+        {SOURCES.map((source) => (
+          <SettingSwitch
+            key={source.id}
+            label={source.name}
+            hint={source.hint}
+            disabled={!settings.unblockGreyTracks}
+            checked={enabledSources.includes(source.id)}
+            onChange={(value) => void toggleSource(source.id, value)}
+          />
+        ))}
+        {enabledSources.length === 0 ? (
+          <p className="settings__row-hint">至少勾选一个音源，否则换源不会生效。</p>
+        ) : null}
       </section>
 
       <section className="settings__group">
@@ -144,16 +263,34 @@ export default function Settings(): JSX.Element {
         />
         <div className="settings__row">
           <div className="settings__row-label">
+            <span>歌词特效</span>
+          </div>
+          <div className="settings__row-control">
+            <select
+              value={settings.desktopLyricsEffect}
+              onChange={(event) =>
+                void patch({ desktopLyricsEffect: event.target.value as SettingsDTO['desktopLyricsEffect'] })
+              }
+            >
+              {DESKTOP_LYRICS_EFFECTS.map((effect) => (
+                <option key={effect} value={effect}>
+                  {EFFECT_LABELS[effect]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="settings__row">
+          <div className="settings__row-label">
             <span>字号</span>
           </div>
           <div className="settings__row-control">
-            <input
-              type="range"
-              className="slider"
+            <DraftRange
+              value={settings.desktopLyricsFontSize}
               min={14}
               max={64}
-              value={settings.desktopLyricsFontSize}
-              onChange={(event) => void patch({ desktopLyricsFontSize: Number(event.target.value) })}
+              label="桌面歌词字号"
+              onChange={(value) => void patch({ desktopLyricsFontSize: value })}
             />
             <span className="settings__row-hint">{settings.desktopLyricsFontSize}px</span>
           </div>
@@ -163,13 +300,12 @@ export default function Settings(): JSX.Element {
             <span>不透明度</span>
           </div>
           <div className="settings__row-control">
-            <input
-              type="range"
-              className="slider"
+            <DraftRange
+              value={Math.round(settings.desktopLyricsOpacity * 100)}
               min={20}
               max={100}
-              value={Math.round(settings.desktopLyricsOpacity * 100)}
-              onChange={(event) => void patch({ desktopLyricsOpacity: Number(event.target.value) / 100 })}
+              label="桌面歌词不透明度"
+              onChange={(value) => void patch({ desktopLyricsOpacity: value / 100 })}
             />
             <span className="settings__row-hint">{Math.round(settings.desktopLyricsOpacity * 100)}%</span>
           </div>
@@ -198,7 +334,7 @@ export default function Settings(): JSX.Element {
                 }
               }}
             >
-              更改…
+              更改
             </button>
           </div>
         </div>
@@ -291,26 +427,56 @@ export default function Settings(): JSX.Element {
       </section>
 
       <section className="settings__group">
+        <h2>账号</h2>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>当前账号</span>
+            <span className="settings__row-hint">
+              {auth.loggedIn ? (auth.profile?.nickname ?? '已登录') : '未登录'}
+            </span>
+          </div>
+          <div className="settings__row-control">
+            {auth.loggedIn ? (
+              confirmLogout ? (
+                <>
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={async () => {
+                      setConfirmLogout(false)
+                      await auth.logout()
+                      setMessage('已退出登录')
+                    }}
+                  >
+                    确认退出
+                  </button>
+                  <button type="button" className="button" onClick={() => setConfirmLogout(false)}>
+                    取消
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="button" onClick={() => setConfirmLogout(true)}>
+                  退出登录
+                </button>
+              )
+            ) : (
+              <span className="settings__row-hint">在左侧「我的音乐」页面登录</span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="settings__group">
         <h2>关于</h2>
         <div className="settings__about">
           <div>
-            <strong>雲の音 Kumone · Windows</strong> v{info?.version ?? '—'}
+            <strong>悠悠音乐</strong> v{info?.version ?? '—'}
           </div>
-          <div>基于 missuo/kumone（LGPL-3.0）的协议与功能二开，音频后端为 mpv。</div>
           <div>
             Electron {info?.electron ?? '—'} · Chromium {info?.chrome?.split('.')[0] ?? '—'} · Node{' '}
             {info?.node ?? '—'}
           </div>
           <div>{info?.mpv ?? '未检测到 mpv'}</div>
-          <div style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              className="button"
-              onClick={() => void call('app:openExternal', { url: 'https://github.com/missuo/kumone' })}
-            >
-              打开上游仓库
-            </button>
-          </div>
         </div>
       </section>
 
@@ -323,15 +489,17 @@ function SettingSwitch({
   label,
   hint,
   checked,
+  disabled,
   onChange
 }: {
   label: string
   hint?: string
   checked: boolean
+  disabled?: boolean
   onChange: (value: boolean) => void
 }): JSX.Element {
   return (
-    <div className="settings__row">
+    <div className={`settings__row${disabled ? ' is-disabled' : ''}`}>
       <div className="settings__row-label">
         <span>{label}</span>
         {hint ? <span className="settings__row-hint">{hint}</span> : null}
@@ -343,6 +511,7 @@ function SettingSwitch({
           role="switch"
           aria-checked={checked}
           aria-label={label}
+          disabled={disabled}
           onClick={() => onChange(!checked)}
         />
       </div>

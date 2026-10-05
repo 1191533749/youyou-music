@@ -1,9 +1,9 @@
 {
-  "name": "kumone-windows",
-  "version": "0.1.0",
-  "description": "雲の音 — NetEase Cloud Music client for Windows (Electron). Ported from missuo/kumone (LGPL-3.0).",
+  "name": "youyou-music",
+  "version": "0.3.0",
+  "description": "悠悠音乐 — NetEase Cloud Music client for Windows (Electron + mpv)",
   "main": "out/main/index.js",
-  "author": "kumone-windows contributors",
+  "author": "悠悠音乐",
   "license": "LGPL-3.0-only",
   "private": true,
   "scripts": {
@@ -14,8 +14,9 @@
     "test": "vitest run",
     "smoke": "electron-vite build && node scripts/smoke.mjs",
     "verify:packaged": "node scripts/verify-packaged.mjs",
-    "dist": "electron-vite build && electron-builder --win",
-    "dist:portable": "electron-vite build && electron-builder --win portable"
+    "dist": "electron-vite build && node scripts/package.mjs",
+    "dist:installer": "electron-vite build && electron-builder --win nsis --publish never",
+    "dist:portable": "electron-vite build && electron-builder --win portable --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",

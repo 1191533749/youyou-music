@@ -1,10 +1,142 @@
 /**
  * 首页 / 发现 / 搜索 / 播放页的样式。
  *
- * 只用 global.css 里的设计令牌，不写死颜色：浅色与深色主题都靠令牌切换。
- * 类名按页面前缀区分（.home- / .explore__ / .search__ / .np-），避免与
- * library.css、detail.css 的并行工作互相覆盖。
+ * 视觉规则跟 global.css 的液态玻璃一致：
+ *   1. 面板是半透明玻璃片（var(--glass-*) + backdrop-filter + 1px 亮边），不是不透明色块 ——
+ *      背后有 .backdrop 的彩色光斑，半透明才透得出颜色。
+ *   2. 颜色只走令牌（--accent / --accent-2 / --accent-3 及渐变），亮色主题是默认，
+ *      深色主题靠同一套令牌取值，所以这里不写死任何色值。
+ *   3. 类名按页面前缀区分（.home- / .explore__ / .search__ / .np-），避免与
+ *      library.css、detail.css 的并行工作互相覆盖。
  */
+
+/* --- 共用零件 ----------------------------------------------------------- */
+
+/* 加载态：转动的唱片 + 文案，比一排灰块更能说明「在做事」。 */
+.loading-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.spin {
+  color: var(--accent);
+  animation: np-spin 1.1s linear infinite;
+}
+
+@keyframes np-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+/* --- 液态毛玻璃按钮（自有页面内统一） ---------------------------------- */
+
+/*
+ * 按钮一律是同一块玻璃：半透明底 + backdrop-filter 模糊 + 1px 亮描边 + 柔和阴影，
+ * hover 把底子提亮一档并轻微抬起。主按钮（渐变）与文字链接按钮保持各自形态。
+ * 用 :is() 收拢页面根，避免把选择器写成四份。
+ */
+:is(.home, .explore, .search, .np-fullscreen) .button:not(.button--primary),
+:is(.home, .explore, .search, .np-fullscreen) .icon-button:not(.icon-button--primary),
+.np-fullscreen .np-fs__back {
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  box-shadow: var(--glass-shadow-soft);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+    box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+:is(.home, .explore, .search, .np-fullscreen) .button:not(.button--primary):hover,
+:is(.home, .explore, .search, .np-fullscreen) .icon-button:not(.icon-button--primary):hover,
+.np-fullscreen .np-fs__back:hover {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transform: translateY(-1px);
+}
+
+/* 带图标的按钮与胶囊：只在自有页面内生效，不动全局的 .button/.chip。 */
+.home .button,
+.explore .button,
+.search .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.home .chip,
+.explore .chip,
+.search .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text-secondary);
+  backdrop-filter: blur(12px) saturate(170%);
+  -webkit-backdrop-filter: blur(12px) saturate(170%);
+  box-shadow: var(--glass-shadow-soft);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+    box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.home .chip:hover,
+.explore .chip:hover,
+.search .chip:hover {
+  background: var(--glass-strong);
+  color: var(--text);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transform: translateY(-1px);
+}
+
+.home .chip.is-active,
+.explore .chip.is-active,
+.search .chip.is-active {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 20px var(--accent-soft);
+}
+
+/* 板块标题带线性图标；只在自有页面内改排版，不影响其它页面。 */
+.home .section__title,
+.explore .section__title,
+.search .section__title,
+.np-fullscreen .section__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section__icon {
+  flex: none;
+  color: var(--accent);
+}
+
+/* 板块标题右侧的操作区：整表播放按钮 + 「查看全部」链接。 */
+.section__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-action {
+  padding: 5px 12px;
+  font-size: 12px;
+}
 
 /* --- 首页 --------------------------------------------------------------- */
 
@@ -32,8 +164,11 @@
   gap: 8px;
   padding: 18px 20px;
   border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-soft);
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: var(--glass-shadow-soft);
 }
 
 .home-hint__title {
@@ -44,6 +179,7 @@
 .home-hint__body {
   font-size: 12px;
   color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 /* 榜单卡片比普通封面卡多一块前三首预览。 */
@@ -142,54 +278,68 @@
 }
 
 .search__icon {
+  display: grid;
+  place-items: center;
+  padding-left: 4px;
   color: var(--text-tertiary);
 }
 
 .search__input {
   flex: 1;
   min-width: 0;
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  padding: 11px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-strong);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.search__input::placeholder {
+  color: var(--text-tertiary);
 }
 
 .search__input:focus {
-  outline: none;
   border-color: var(--accent);
+  box-shadow: 0 6px 20px var(--accent-soft);
 }
 
 .search__suggest {
   position: absolute;
   z-index: 20;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
   max-height: 320px;
   overflow-y: auto;
   margin: 0;
-  padding: 4px;
+  padding: 6px;
   list-style: none;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  box-shadow: var(--glass-shadow);
 }
 
 .search__suggest-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   width: 100%;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   text-align: left;
+  transition: background 0.14s ease, color 0.14s ease;
 }
 
 .search__suggest-item:hover,
 .search__suggest-item.is-active {
-  background: var(--bg-hover);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .search__suggest-label {
@@ -199,9 +349,16 @@
 }
 
 .search__suggest-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   flex: none;
+  max-width: 46%;
   font-size: 11px;
   color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search__tabs {
@@ -210,7 +367,7 @@
 
 .search__summary {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .search__loading {
@@ -229,91 +386,167 @@
   padding: 18px 0;
 }
 
-/* 「查看全部」是文字按钮，不该有按钮的外框。 */
-.search__more-link {
+/* 板块标题右侧的说明文字按手机端习惯用次级灰；「查看全部」是可点的，仍用强调色。 */
+.home .section__more,
+.explore .section__more,
+.search .section__more,
+.np-fullscreen .section__more {
+  color: var(--text-tertiary);
+}
+
+/* 「查看全部」是文字链接式按钮，不该有按钮外框。 */
+.search .search__more-link {
   background: none;
   border: none;
   padding: 0;
   color: var(--accent);
 }
 
-.search__more-link:hover {
+.search .search__more-link:hover {
   text-decoration: underline;
+  box-shadow: none;
 }
 
-/* --- 播放页 ------------------------------------------------------------- */
+/* --- 全屏播放页 --------------------------------------------------------- */
 
-.now-playing {
-  /* 没有取到封面主色时的兜底；取到时由行内 style 覆盖这两个变量。 */
+.np-fullscreen {
+  /* 没取到封面主色时的兜底；取到时由行内 style 覆盖这两个变量。 */
   --np-accent: var(--accent);
-  --np-accent-deep: var(--bg-elevated);
+  --np-accent-deep: var(--accent-2);
   --np-lyric-dim: var(--text-tertiary);
 
-  position: relative;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
   display: flex;
   flex-direction: column;
-  gap: 14px;
   overflow: hidden;
-  /* 抵消 .content 的内边距（22/26/32），让封面底色铺满整个内容区。 */
-  margin: -22px -26px -32px;
-  padding: 22px 26px 26px;
-  height: calc(100vh - var(--player-height) - 54px);
+  background: var(--bg);
 }
 
-/* 背景层：模糊放大的封面 + 渐变蒙版，颜色直接来自专辑图本身。 */
-.np-backdrop {
+/* 背景层：模糊放大的封面 + 玻璃遮罩。整层自带底色，不依赖下面的应用外壳。 */
+.np-fs__bg {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  opacity: 0.55;
   pointer-events: none;
 }
 
-.np-backdrop__art {
+.np-fs__bg-art {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(64px) saturate(1.6);
-  transform: scale(1.2);
+  filter: blur(70px) saturate(1.5);
+  transform: scale(1.25);
+  opacity: 0.5;
 }
 
-.np-backdrop__scrim {
+.np-fs__bg-scrim {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, transparent 0%, var(--bg) 72%),
-    radial-gradient(120% 90% at 10% 0%, var(--np-accent-deep), transparent 70%);
+    radial-gradient(120% 90% at 12% 0%, var(--np-accent-deep), transparent 66%),
+    linear-gradient(180deg, var(--glass-weak) 0%, var(--glass) 48%, var(--glass-strong) 100%);
 }
 
-.np-header {
+.np-fs__bar {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 14px;
   flex: none;
+  padding: 16px 24px;
 }
 
-.np-header__back {
-  flex: none;
+/* 返回入口：按需求只留文字，不带任何箭头符号；材质由上面的玻璃按钮组统一给。 */
+.np-fs__back {
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
 }
 
-.np-header__title {
+.np-fs__back:hover {
+  color: var(--accent);
+}
+
+.np-fs__heading {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.np-header__actions {
+.np-fs__heading-title {
+  font-size: 15px;
+  font-weight: 640;
+}
+
+.np-fs__heading-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.np-fs__bar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-left: auto;
 }
 
-.np-header__hint {
+.np-fs__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text-secondary);
   font-size: 12px;
+  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  box-shadow: var(--glass-shadow-soft);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+    box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.np-fs__tool:hover {
+  background: var(--glass-strong);
+  color: var(--text);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transform: translateY(-1px);
+}
+
+.np-fs__tool.is-active {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+.np-header__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.np-header__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
@@ -321,76 +554,63 @@
   flex: 1;
 }
 
-.np-body {
+.np-fs__main {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) minmax(240px, 330px);
-  gap: 22px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 32px;
   flex: 1;
+  min-height: 0;
+  padding: 0 40px 78px;
+}
+
+.np-fs__stage {
+  display: grid;
+  place-items: center;
+  min-width: 0;
   min-height: 0;
 }
 
-/* --- 播放页 · 封面 ------------------------------------------------------ */
-
-.np-cover {
+.np-fs__side {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 8px;
+  gap: 14px;
   min-width: 0;
-  overflow: hidden;
+  min-height: 0;
 }
 
-.np-cover__art {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
+.np-fs__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: none;
 }
 
-.np-cover__art img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* 播放时封面缓慢呼吸，暂停即停 —— 一眼能看出播放状态。 */
-.np-cover__art.is-playing {
-  animation: np-breathe 4.5s ease-in-out infinite;
-}
-
-@keyframes np-breathe {
-  0%,
-  100% {
-    box-shadow: var(--shadow);
-  }
-  50% {
-    box-shadow: 0 14px 44px var(--np-accent);
-  }
-}
-
-.np-cover__title {
-  margin: 6px 0 0;
-  font-size: 20px;
-  font-weight: 650;
+.np-fs__title {
+  max-width: 100%;
+  margin: 0;
+  font-size: 34px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.np-cover__artist {
-  font-size: 13px;
+.np-fs__artist {
+  max-width: 100%;
+  font-size: 15px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.np-cover__album {
-  font-size: 12px;
+.np-fs__album {
+  max-width: 100%;
+  font-size: 13px;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -404,7 +624,370 @@
   margin-top: 2px;
 }
 
-/* --- 播放页 · 歌词 ------------------------------------------------------ */
+/* 圆形控件按钮，主按钮 40px 由 global.css 的 .icon-button--primary 提供。 */
+.np-cover__controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+/* 控件区下面的细进度条与音量：风格与圆形控件一致（玻璃轨道 + 强调色滑块）。 */
+.np-fs__transport {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 460px;
+  margin-top: 12px;
+}
+
+.np-fs__progress,
+.np-fs__volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.np-fs__time {
+  flex: none;
+  min-width: 38px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.np-fs__range {
+  flex: 1;
+  min-width: 0;
+}
+
+.np-fs__range--volume {
+  max-width: 150px;
+}
+
+/* --- 播放页：四种视觉效果 ----------------------------------------------- */
+
+/* 1) 黑胶：暖黑片基 + 金棕同心纹 + 封面贴圆心；播放时匀速旋转，暂停即停。 */
+.np-vinyl {
+  /* 唱片是实体，颜色不跟主题走：片基/纹路/边缘集中在这里，方便统一调。 */
+  --vinyl-disc: #17120e;
+  --vinyl-disc-2: #2b211a;
+  --vinyl-groove: rgba(198, 154, 84, 0.22);
+  --vinyl-rim: rgba(238, 205, 150, 0.34);
+  --vinyl-sheen: rgba(255, 226, 170, 0.16);
+
+  display: grid;
+  place-items: center;
+}
+
+.np-vinyl__disc {
+  position: relative;
+  width: min(46vh, 420px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background-color: var(--vinyl-disc);
+  background-image:
+    repeating-radial-gradient(circle at 50% 50%, var(--vinyl-groove) 0 1px, transparent 1px 5px),
+    radial-gradient(circle at 50% 50%, var(--vinyl-disc-2) 0 30%, var(--vinyl-disc) 64%);
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--vinyl-rim);
+}
+
+.np-vinyl.is-playing .np-vinyl__disc {
+  animation: np-spin 22s linear infinite;
+}
+
+.np-vinyl__sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 16%,
+    var(--vinyl-sheen) 26%,
+    transparent 38% 56%,
+    var(--vinyl-sheen) 66%,
+    transparent 78%
+  );
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* 封面贴片比整张唱片小一圈，四周留出黑胶边。 */
+.np-vinyl__label {
+  position: absolute;
+  inset: 28%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--vinyl-disc-2);
+  box-shadow: var(--glass-shadow-soft), inset 0 0 0 1px var(--vinyl-rim);
+}
+
+.np-vinyl__label img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.np-vinyl__hole {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--vinyl-disc);
+  box-shadow: inset 0 0 0 1px var(--vinyl-rim);
+}
+
+/* 2) 胶片：老胶片框（上下齿孔）+ 颗粒噪点 + 竖向划痕。 */
+.np-film {
+  display: grid;
+  place-items: center;
+}
+
+.np-film__frame {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.np-film__perfs {
+  height: 14px;
+  border-radius: 4px;
+  background-color: var(--glass-weak);
+  background-image: repeating-linear-gradient(90deg, var(--bg-hover) 0 8px, transparent 8px 20px);
+}
+
+.np-film__window {
+  position: relative;
+  width: min(44vh, 400px);
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-hover);
+}
+
+.np-film__window img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.np-film__grain {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--glass-border) 0.5px, transparent 0.6px);
+  background-size: 3px 3px;
+  opacity: 0.3;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.np-film.is-playing .np-film__grain {
+  animation: np-grain 1.1s steps(4) infinite;
+}
+
+.np-film__scratch {
+  position: absolute;
+  top: -10%;
+  width: 2px;
+  height: 120%;
+  background: linear-gradient(180deg, transparent, var(--glass-border) 45%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.np-film.is-playing .np-film__scratch {
+  animation-name: np-scratch;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes np-grain {
+  0% {
+    background-position: 0 0;
+  }
+  25% {
+    background-position: 2px 1px;
+  }
+  50% {
+    background-position: 1px 3px;
+  }
+  75% {
+    background-position: 3px 2px;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+@keyframes np-scratch {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  8% {
+    opacity: 0.55;
+  }
+  40% {
+    opacity: 0.25;
+    transform: translateY(-2%);
+  }
+  70% {
+    opacity: 0.5;
+    transform: translateY(1%);
+  }
+}
+
+/* 3) 波形：纯 CSS 频谱条，播放时跳动，暂停时定在低幅。 */
+.np-waves {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.np-waves__art {
+  width: min(34vh, 300px);
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-hover);
+  box-shadow: var(--glass-shadow);
+}
+
+.np-waves__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.np-waves__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  width: min(560px, 78%);
+  height: min(18vh, 140px);
+}
+
+.np-waves__bar {
+  flex: 1;
+  min-width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-gradient);
+  transform: scaleY(0.3);
+  transform-origin: center bottom;
+}
+
+.np-waves.is-playing .np-waves__bar {
+  animation-name: np-wave;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes np-wave {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* 4) 星海：漂浮星点 + 中央封面缓慢呼吸。 */
+.np-stars {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(72vh, 640px);
+  aspect-ratio: 1;
+}
+
+.np-stars__field {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, var(--glass-weak), transparent 70%);
+}
+
+.np-stars__dot {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--glass-border);
+  opacity: 0.6;
+  animation-name: np-twinkle;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+.np-stars__dot--accent {
+  background: var(--accent-2);
+}
+
+@keyframes np-twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateY(0) scale(0.9);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translateY(-10px) scale(1.2);
+  }
+}
+
+.np-stars__art {
+  position: relative;
+  width: min(34vh, 300px);
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-hover);
+  box-shadow: var(--glass-shadow);
+  animation: np-float 7s ease-in-out infinite;
+}
+
+.np-stars__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes np-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-14px) scale(1.03);
+  }
+}
+
+/* 右下角：视觉效果与歌词特效两个循环切换按钮。 */
+.np-fs__tools {
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+}
+
+/* --- 播放页：歌词 ------------------------------------------------------- */
 
 .np-lyrics {
   display: flex;
@@ -419,6 +1002,10 @@
 
 .np-lyrics__state {
   flex: 1;
+}
+
+.np-lyrics__note {
+  color: var(--accent);
 }
 
 .np-lyrics__list {
@@ -440,6 +1027,7 @@
 
 .np-lyric {
   border-radius: var(--radius-sm);
+  transition: background 0.18s ease;
 }
 
 .np-lyric__button {
@@ -454,7 +1042,7 @@
 }
 
 .np-lyric__button:hover {
-  background: var(--bg-hover);
+  background: var(--glass-weak);
 }
 
 .np-lyric__text {
@@ -462,10 +1050,6 @@
   line-height: 1.35;
   color: var(--text-secondary);
   transition: color 0.18s ease;
-}
-
-.np-lyric.is-active {
-  background: var(--bg-active);
 }
 
 .np-lyric.is-active .np-lyric__text {
@@ -501,7 +1085,7 @@
 .np-lyric__bar-fill {
   display: block;
   height: 100%;
-  background: var(--np-accent);
+  background: var(--accent-gradient);
   transition: width 0.12s linear;
 }
 
@@ -512,17 +1096,87 @@
   text-align: center;
 }
 
-/* --- 播放页 · 队列 ------------------------------------------------------ */
+/* --- 播放页：四种歌词特效 ----------------------------------------------- */
 
-.np-queue {
+/* 1) 卡拉OK（默认）：唯一使用逐字高亮与行内进度条的效果。 */
+.np-lyrics__list--karaoke .np-lyric.is-active {
+  background: var(--accent-soft);
+}
+
+/* 2) 渐变放大：当前行放大并套上强调色渐变。 */
+.np-lyric--zoom .np-lyric__text {
+  display: inline-block;
+  transform-origin: left center;
+  transition: transform 0.22s ease, color 0.22s ease;
+}
+
+.np-lyric--zoom.is-active .np-lyric__text {
+  transform: scale(1.1);
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 3) 淡入淡出：非当前行压暗。 */
+.np-lyric--fade .np-lyric__text {
+  opacity: 0.28;
+  transition: opacity 0.25s ease, color 0.25s ease;
+}
+
+.np-lyric--fade.is-active .np-lyric__text {
+  opacity: 1;
+  color: var(--text);
+}
+
+/* 4) 霓虹：当前行发光。 */
+.np-lyric--neon .np-lyric__text {
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.np-lyric--neon.is-active .np-lyric__text {
+  color: var(--accent);
+  text-shadow: 0 0 2px var(--accent), 0 0 12px var(--accent-soft), 0 0 26px var(--accent-soft);
+}
+
+/* --- 播放页：队列抽屉 --------------------------------------------------- */
+
+.np-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  padding: 12px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-soft);
+  width: min(380px, 88vw);
+  padding: 18px;
+  background: var(--glass-strong);
+  border-left: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  box-shadow: var(--glass-shadow);
+  transform: translateX(102%);
+  transition: transform 0.26s ease;
+}
+
+.np-drawer.is-open {
+  transform: translateX(0);
+}
+
+.np-drawer__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: var(--bg-hover);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.26s ease;
+}
+
+.np-drawer__scrim.is-open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .np-queue__header {
@@ -547,14 +1201,15 @@
   align-items: center;
   gap: 4px;
   border-radius: var(--radius-sm);
+  transition: background 0.14s ease;
 }
 
 .np-queue__item:hover {
-  background: var(--bg-hover);
+  background: var(--glass-weak);
 }
 
 .np-queue__item.is-current {
-  background: var(--bg-active);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -570,12 +1225,17 @@
 }
 
 .np-queue__index {
+  display: grid;
+  place-items: center;
   flex: none;
   width: 20px;
   color: var(--text-tertiary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+}
+
+.np-queue__item.is-current .np-queue__index {
+  color: var(--accent);
 }
 
 .np-queue__meta {
@@ -607,55 +1267,98 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 删除按钮只在悬停时出现，队列本身保持干净。 */
+/* 删除按钮只在悬停/键盘聚焦时出现，队列本身保持干净。 */
 .np-queue__remove {
   opacity: 0;
+  transition: opacity 0.14s ease;
 }
 
-.np-queue__item:hover .np-queue__remove {
+.np-queue__item:hover .np-queue__remove,
+.np-queue__item:focus-within .np-queue__remove {
   opacity: 1;
 }
 
-/* --- 窄窗口回退 --------------------------------------------------------- */
+/* --- 窄窗口 / 矮窗口回退 ------------------------------------------------ */
 
-@media (max-width: 1100px) {
-  .now-playing {
-    height: auto;
-    overflow: visible;
-    min-height: calc(100vh - var(--player-height) - 54px);
+@media (max-width: 1080px) {
+  .np-fs__bar {
+    flex-wrap: wrap;
+    padding: 12px 18px;
   }
 
-  .np-body {
+  .np-fs__main {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 14px;
+    padding: 0 20px 72px;
   }
 
-  .np-cover__art {
-    max-width: 260px;
-    align-self: center;
+  .np-fs__stage {
+    max-height: 30vh;
   }
 
-  .np-cover {
-    align-items: center;
-    text-align: center;
+  .np-fs__title {
+    font-size: 24px;
   }
 
-  .np-lyrics__list {
-    max-height: 320px;
+  .np-vinyl__disc {
+    width: min(28vh, 230px);
   }
 
-  .np-queue__list {
-    max-height: 280px;
+  .np-film__window {
+    width: min(26vh, 210px);
+  }
+
+  .np-waves__art,
+  .np-stars__art {
+    width: min(18vh, 150px);
+  }
+
+  .np-waves__bars {
+    height: 56px;
+  }
+
+  .np-fs__tools {
+    right: 16px;
+    bottom: 14px;
   }
 }
 
-/* 窗口很矮时优先保证歌词可见，封面缩到 200px 见方。 */
-@media (max-height: 760px) and (min-width: 1101px) {
-  .np-cover__art {
-    max-width: 200px;
-    align-self: center;
+@media (max-height: 740px) and (min-width: 1081px) {
+  .np-vinyl__disc {
+    width: min(38vh, 320px);
   }
 
-  .np-cover {
-    justify-content: flex-start;
+  .np-film__window {
+    width: min(36vh, 300px);
+  }
+
+  .np-waves__art,
+  .np-stars__art {
+    width: min(26vh, 220px);
+  }
+}
+
+/* 动画降级：系统开启「减少动态效果」时全部静态呈现。 */
+@media (prefers-reduced-motion: reduce) {
+  .np-vinyl__disc,
+  .np-waves__bar,
+  .np-stars__dot,
+  .np-stars__art,
+  .np-film__grain,
+  .np-film__scratch {
+    animation: none !important;
+  }
+
+  .np-film__scratch {
+    opacity: 0.35;
+  }
+
+  .np-waves__bar {
+    transform: scaleY(0.6);
+  }
+
+  .np-lyrics__list {
+    scroll-behavior: auto;
   }
 }

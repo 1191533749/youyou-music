@@ -20,7 +20,11 @@ import {
   usePlayerStore
 } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
+import { IconCalendar, IconDisc, IconLayers, IconLibrary, IconMusic, IconPlay, IconRadio } from '../components/Icons'
 import type { HomeFeedDTO, ToplistDTO } from '@shared/ipc'
+
+/** 图标组件的公共形状：尺寸与类名可传，颜色跟随 currentColor。 */
+type IconComponent = (props: { size?: number; className?: string }) => JSX.Element
 
 export default function Home(): JSX.Element {
   const navigation = useNavigation()
@@ -52,7 +56,7 @@ export default function Home(): JSX.Element {
       <header className="page__header">
         <div>
           <h1 className="page__title">{greeting()}</h1>
-          <div className="page__subtitle">今天想听点什么 · {formatDate(Date.now())}</div>
+          <div className="page__subtitle">推荐每天更新，今天是 {formatDate(Date.now())}</div>
         </div>
       </header>
 
@@ -67,7 +71,10 @@ export default function Home(): JSX.Element {
 
       {feed.loading ? (
         <div className="home-skeleton" aria-busy="true">
-          <div className="page__subtitle">正在加载首页内容…</div>
+          <div className="loading-state">
+            <IconDisc size={16} className="spin" />
+            <span>正在加载首页内容…</span>
+          </div>
           <div className="skeleton home-skeleton__row" />
           <div className="skeleton home-skeleton__row" />
           <div className="skeleton home-skeleton__row" />
@@ -105,7 +112,24 @@ export default function Home(): JSX.Element {
       {!feed.loading && data && !empty ? (
         <>
           <section className="page__section">
-            <SectionHeader title="每日推荐" hint="根据你的口味生成" />
+            <SectionHeader
+              icon={IconCalendar}
+              title="每日推荐"
+              hint="根据你的口味生成"
+              // 整表播放入口：随机起播，别总是从第一首开始。
+              action={
+                data.dailySongs.length > 0 ? (
+                  <button
+                    type="button"
+                    className="button section-action"
+                    onClick={() => void player.playTracks(data.dailySongs, 0, { randomStart: true })}
+                  >
+                    <IconPlay size={14} />
+                    播放全部
+                  </button>
+                ) : null
+              }
+            />
             {data.dailySongs.length > 0 ? (
               <SongList
                 tracks={data.dailySongs}
@@ -137,6 +161,7 @@ export default function Home(): JSX.Element {
 
           <section className="page__section">
             <SectionHeader
+              icon={IconLibrary}
               title="推荐歌单"
               hint={publicFallback ? '未登录，展示公共推荐' : '为你精选'}
             />
@@ -162,7 +187,7 @@ export default function Home(): JSX.Element {
 
           {data.radarPlaylists.length > 0 ? (
             <section className="page__section">
-              <SectionHeader title="雷达歌单" hint="按你的收听口味每天更新" />
+              <SectionHeader icon={IconRadio} title="雷达歌单" hint="按你的收听口味每天更新" />
               <div className="grid grid--playlists">
                 {data.radarPlaylists.map((playlist) => (
                   <ArtCard
@@ -180,7 +205,7 @@ export default function Home(): JSX.Element {
           ) : null}
 
           <section className="page__section">
-            <SectionHeader title="新歌速递" hint="点击封面即可播放" />
+            <SectionHeader icon={IconMusic} title="新歌速递" hint="点击封面即可播放" />
             {data.newSongs.length > 0 ? (
               <div className="grid grid--playlists">
                 {data.newSongs.map((track, index) => (
@@ -200,7 +225,11 @@ export default function Home(): JSX.Element {
           </section>
 
           <section className="page__section">
-            <SectionHeader title="排行榜" hint={data.toplists.length > 0 ? `共 ${data.toplists.length} 个榜单` : undefined} />
+            <SectionHeader
+              icon={IconLayers}
+              title="排行榜"
+              hint={data.toplists.length > 0 ? `共 ${data.toplists.length} 个榜单` : undefined}
+            />
             {data.toplists.length > 0 ? (
               <div className="grid grid--albums">
                 {data.toplists.slice(0, 8).map((toplist) => (
@@ -224,16 +253,24 @@ export default function Home(): JSX.Element {
 }
 
 function SectionHeader({
+  icon: Icon,
   title,
-  hint
+  hint,
+  action
 }: {
+  icon: IconComponent
   title: string
   hint?: ReactNode
+  /** 右侧操作（整表播放等）；给了就不再显示 hint。 */
+  action?: ReactNode
 }): JSX.Element {
   return (
     <div className="section__header">
-      <h2 className="section__title">{title}</h2>
-      {hint ? <span className="section__more">{hint}</span> : null}
+      <h2 className="section__title">
+        <Icon size={16} className="section__icon" />
+        {title}
+      </h2>
+      {action ?? (hint ? <span className="section__more">{hint}</span> : null)}
     </div>
   )
 }
@@ -249,7 +286,9 @@ function ToplistCard({ toplist, onOpen }: { toplist: ToplistDTO; onOpen: () => v
         {coverUrl(toplist.coverImgUrl, 320) ? (
           <img src={coverUrl(toplist.coverImgUrl, 320)} alt="" loading="lazy" />
         ) : (
-          <span className="card__placeholder">榜</span>
+          <span className="card__placeholder">
+            <IconLayers size={26} />
+          </span>
         )}
         {toplist.playCount > 0 ? (
           <span className="card__badge">{formatPlayCount(toplist.playCount)}</span>

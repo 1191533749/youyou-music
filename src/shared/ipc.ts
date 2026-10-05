@@ -201,7 +201,7 @@ export interface IPCContract {
   // --- player ---
   'player:state': { request: void; response: PlayerStateDTO }
   'player:playTracks': {
-    request: { tracks: TrackDTO[]; startIndex?: number; playlistID?: number }
+    request: { tracks: TrackDTO[]; startIndex?: number; playlistID?: number; randomStart?: boolean }
     response: PlayerStateDTO
   }
   'player:playFMTracks': { request: { tracks: TrackDTO[] }; response: PlayerStateDTO }
@@ -231,6 +231,19 @@ export interface IPCContract {
   'lyrics:get': { request: { trackID: number }; response: LyricsDTO }
   'lyrics:desktopToggle': { request: { visible: boolean }; response: void }
   'lyrics:desktopMove': { request: { x: number; y: number }; response: void }
+  /** 桌面歌词窗口按内容自适配高度：窗口只罩住当前行，不占整条透明区域。 */
+  'lyrics:desktopResize': { request: { height: number; width?: number }; response: void }
+  /** 鼠标不在歌词文字上时让点击穿透到桌面（forward 模式仍能收到 mousemove）。 */
+  'lyrics:desktopClickThrough': { request: { through: boolean }; response: void }
+
+  // --- update ---
+  /** 检查更新：有新版本时带 version/notes；否则 version 为空。 */
+  'update:check': {
+    request: void
+    response: { current: string; version?: string; notes?: string; updateType: 'installer' | 'portable' | null }
+  }
+  /** 下载并应用更新（下载最新资产 → 排定替换/安装流程 → 应用自动退出重开）。 */
+  'update:install': { request: void; response: void }
 
   // --- settings / app ---
   'settings:get': { request: void; response: SettingsDTO }
@@ -333,6 +346,10 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'lyrics:get',
   'lyrics:desktopToggle',
   'lyrics:desktopMove',
+  'lyrics:desktopResize',
+  'lyrics:desktopClickThrough',
+  'update:check',
+  'update:install',
   'settings:get',
   'settings:update',
   'app:info',

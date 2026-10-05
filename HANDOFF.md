@@ -61,62 +61,93 @@ src/renderer/   lib/(contract,ipc,format,hooks,lyricsUtils) store/(player,auth,n
 6. **样式按功能拆文件**：`global.css`（令牌+骨架）、`base.css`（通用+设置）、`home.css`/`library.css`/`detail.css`（各功能）。
    并行开发时不要多人改同一个样式文件——这是当初拆分的原因。
 
-## 5. 当前进度
+## 5. 当前进度（v0.2.0）
 
-- ✅ 主进程全部完成并测试通过（协议、60+ 接口、**weapi 限流降级**、mpv 后端、队列/音质/上报、缓存并接入播放路径、桌面歌词窗口、媒体键/托盘/单实例、IPC 注册）
-- ✅ 渲染进程全部页面完成（登录、设置、首页、发现、搜索、播放页、歌单/专辑/歌手详情、我的音乐、每日推荐、私人 FM、云盘、排行榜）
-- ✅ 打包已验证（NSIS 安装包 + 免安装 exe，含 mpv）
+- ✅ 主进程：协议（weapi/eapi + 限流降级）、60+ 接口、mpv 后端、队列/音质阶梯/上报、缓存（按音源归档）、
+  桌面歌词窗口（开关双向同步 + **事件广播到全部窗口**）、媒体键/托盘/单实例、IPC 注册
+- ✅ **受限歌曲自动换源**（`src/main/unblock/`）：官方地址失败或仅剩试听片段时，依次尝试
+  站内替代版本 → pyncmd → 酷狗 → 酷我；四条件严格匹配（时长±5s、歌名归一化、版本标记、歌手），
+  宁可报错也不播半截/翻唱；播放条显示「来自 酷我音乐」等来源
+- ✅ **音质诚实显示**（v0.2.0）：达不到所选音质自动降档并「已降至 X」微提示；
+  第三方音源只在码率已知时映射音质档位（≥900 无损 / ≥256 极高 / ≥160 较高 / 其余标准），
+  未知码率只提示来源与码率，不虚报档位；`PlayerStateDTO.servedBitrate`
+- ✅ 界面：登录（扫码/短信）、设置（音质/音源/输出设备/桌面歌词/缓存/系统集成/退出登录/关于）、
+  首页/发现/搜索/播放页/详情页/我的音乐/日推/FM/云盘/排行榜；液态玻璃 + 手机端暖橙红配色；全站零 emoji
+- ✅ **播放页全屏化**（v0.2.0）：createPortal 全屏层 + 四种视觉（黑胶/胶片/波形/星海）+
+  四种歌词特效（卡拉OK/渐变放大/淡入淡出/霓虹）+ 细进度条（拖动本地暂存、松手 seek）+
+  音量/静音 + 右侧队列玻璃抽屉；视觉与歌词特效用 localStorage 记忆；Esc 退出；返回按钮纯文字
+- ✅ **我的音乐重做**（v0.2.0）：顶部渐变用户卡 + 五张区段入口卡网格（喜欢/歌单/专辑/歌手/最近播放）
+- ✅ **搜索移出侧栏**（v0.2.0）：每页顶部 sticky 搜索条直达搜索页
+- ✅ **设置页滑块修复**（v0.2.0）：DraftRange 本地跟手 + 140ms 防抖落盘 + 松手立即提交
+- ✅ **桌面歌词四特效**（v0.2.0）：经典/渐变/霓虹/逐字卡拉OK（`desktopLyricsEffect` 设置项，
+  窗口内右上角循环切换，持久化）
+- ✅ 品牌：应用名「悠悠音乐」（窗口标题/托盘/安装包/快捷方式/PE 版本资源），副标「小鱼の音乐」；
+  exe 内嵌红色小鱼图标；界面不出现上游信息（许可文本见随包的 THIRD-PARTY-NOTICES.txt 与 LICENSE）
+- ✅ 打包：NSIS 安装包 + 免安装 exe（约 104/114MB，含 mpv）；`scripts/package.mjs` 分开构建两个目标（带一次重试）
 
 | 任务 | 范围 | 状态 |
 |---|---|---|
-| task-1 | `pages/Home|Explore|Search|NowPlaying.tsx` + `styles/home.css` | ✅ 完成 |
-| task-2 | `pages/Library|DailyPage|FM|Cloud.tsx` + `styles/library.css` | ✅ 完成 |
-| task-3 | `pages/PlaylistPage|AlbumPage|ArtistPage.tsx` + `components/Dialog|ContextMenu|Toast.tsx` + `styles/detail.css` | ✅ 完成 |
-| Lead 收尾 | 修 `hooks.ts`（usePaged 依赖／useAsync 清数据）、`SongList` 滚动哨兵、`album:detail` 补 artistId/subscribed、应用级 Toast、weapi 传输降级、排行榜页接线 | ✅ 完成 |
+| task-1..3 | 全部页面首版 + 玻璃化 + 去 emoji | ✅ 完成 |
+| task-4..6 | 手机端视觉对齐（暖橙红/白卡） | ✅ 完成 |
+| task-7..9 | 手机端细节 + 清除灰态文案 | ✅ 完成 |
+| task-10 | 全屏播放页 + 四视觉 + 四歌词特效 + 符号微调 | ✅ 完成 |
+| task-11 | 我的音乐网格卡重做 | ✅ 完成 |
+| task-12 | 桌面歌词四特效 + desktopLyricsEffect 持久化 | ✅ 完成 |
 
-收尾验证（顺序固定，全部应通过）：
+收尾验证（顺序固定，全部应通过；终端里先 `Remove-Item Env:ELECTRON_RUN_AS_NODE`）：
 
 ```powershell
 npm run typecheck      # 两个 tsconfig 都要 0 错误
-npm test               # 24 项通过
+npm test               # 33 项通过
 npm run build
 npm run smoke          # 15 项 PASS + SMOKE OK
-npm run dist           # release/Kumone-Setup-0.1.0.exe + Kumone-Portable-0.1.0.exe
+npm run dist           # node scripts/package.mjs：安装包 + 免安装版
 npm run verify:packaged
 ```
 
 ## 6. 已知缺口 / 下一步
 
-1. **exe 无自定义图标与版本信息。** 因为本机解压 winCodeSign 失败而关闭了 `signAndEditExecutable`（见上表）。
-   开启 Windows 开发者模式（或管理员跑一次 `npm run dist`）后把它改回 `true`，并补 `build/icon.png`（256×256），
-   托盘图标取自同一文件，缺失时退化为 `nativeImage.createEmpty()`。
-2. **灰歌解锁（UnblockNeteaseMusic）未实现。** 上游实现了 pyncmd/Kuwo/Kugou 三源替换；
-   设置项 `unblockGreyTracks` 已存在但没有消费方。这是上游 README 里的主打功能，值得补。
+1. **exe 图标与版本信息由 afterPack 钩子写入**（`scripts/after-pack.cjs` + `vendor/rcedit`），
+   因为 electron-builder 自带的资源编辑路径要解压含 macOS 符号链接的 winCodeSign 包，
+   在本机（未开开发者模式、非管理员）会解压失败。三条音源里 **酷我稳定可用、酷狗对本例歌曲返回「需要付费」、
+   pyncmd 对本例无结果**——换源覆盖度取决于第三方接口，属于外部依赖。
+2. **换源覆盖度有限。** 只有「时长 ±5 秒 + 歌名归一化相同 + 版本标记一致 + 歌手命中」四条全中才采用。
+   想提高命中率可以增加音源（Migu / Bilibili 需要各自签名），或对纯音乐/现场版放宽版本判定。
 3. **AutoMix / StemKit（AI 分轨混音）未移植。** 上游用 MLX+Metal，Windows 上需要另找推理后端
-   （onnxruntime-node 等），属于独立大工程。上游设计文档在 `docs/automix-*.md`。
+   （onnxruntime-node 等）。上游设计文档在 `docs/automix-*.md`。
 4. **歌词罗马音 / 振假名未实现。** 上游用 macOS 的 `CFStringTokenizer` 做日语形态素分析；
-   `LyricLine.romaji/furigana` 字段已预留但无生成器（需要 kana→romaji 表 + 分词词典）。
-5. **心动模式未接线。** 主进程已有 `track:intelligence` 通道，页面未使用（契约里也没有对应入口）。
+   `LyricLine.romaji/furigana` 字段已预留但无生成器。
+5. **心动模式未接线。** 主进程已有 `track:intelligence` 通道，页面未使用。
 6. **封面主色采样退回令牌色。** 网易 CDN 无 CORS 头，渲染进程 canvas 取不到像素；
-   若要真采样需在主进程加一个 palette 通道（解码与取色都在主进程）。当前沉浸感由模糊封面 + 渐变蒙层承担。
-7. **`electron-updater` 依赖已装但未接线。** `publish: null`，发布源确定后再开。
-8. **手机号登录受网易云风控限制**，实测常失败；扫码是主路径，UI 已注明。
-9. **队列无「跳到某一首」通道。** 页面用重排队列等价实现；若要更精确，加 `player:jumpTo`。
+   若要真采样需在主进程加 palette 通道。当前沉浸感由模糊封面 + 渐变蒙层承担。
+7. **`electron-updater` 依赖已装但未接线。** `publish: null`。
+8. **手机号登录受网易云风控限制**，扫码是主路径。
+9. **队列无「跳到某一首」通道。** 页面用重排队列等价实现。
+10. **数据目录已改名** `%APPDATA%\youyou-music`，启动时会把旧目录 `kumone-windows` 里的
+    `cookies.json` / `settings.json` 一次性迁移过来（`migrateLegacyUserData`）；旧目录的缓存不迁移。
 
 ## 7. 排错手册
 
 | 现象 | 原因与处理 |
 |---|---|
+| **打包版「双击没反应」，进程瞬退（<300ms，退出码 0）** | **首选检查 `ELECTRON_RUN_AS_NODE` 环境变量**：本机的 DSH 会话默认带 `ELECTRON_RUN_AS_NODE=1`，子进程会继承；Electron 在这种模式下当纯 Node 跑，主进程脚本直接崩掉且无输出。用户从资源管理器双击不受影响（没有这个变量）。终端里先 `Remove-Item Env:ELECTRON_RUN_AS_NODE` 再启动/测试。`scripts/smoke.mjs` 已自动剔除。 |
+| 打包版静默退出，且确认环境干净 | 查 asar 完整性：`node scripts/verify-integrity.mjs`。rcedit 等工具重写 PE 资源会丢掉 `INTEGRITY/ELECTRONASAR` 块；图标必须用 `scripts/after-pack.cjs`（resedit，保留完整性块并自检）。 |
 | `require is not defined in ES module scope` | package.json 又被加了 `"type": "module"`。去掉它。 |
-| `Cannot read properties of undefined (reading 'exports')` in `cjsPreparseModuleExports` | 主进程被当成 ESM 跑了；同上，或 electron.vite.config.ts 的 `format: 'cjs'` 被改掉。 |
-| `Cannot read properties of undefined (reading 'requestSingleInstanceLock')` | 环境里残留 `ELECTRON_RUN_AS_NODE=1`（用普通 Node 探测 electron 后常见）。`scripts/smoke.mjs` 已显式剔除它。 |
-| 某个进程「启动后立刻退出、无输出」 | 单实例锁：另一个实例还在跑，或上次被强杀留下了锁。关掉所有 Kumone/electron 进程，或用 `KUMONE_USER_DATA` 指向临时目录（smoke 就是这么做的）。 |
+| `Cannot read properties of undefined (reading 'requestSingleInstanceLock')` | 同上（`ELECTRON_RUN_AS_NODE=1` 下 `require('electron')` 返回路径字符串，`app` 为 undefined）。 |
 | 界面正常但点播放报错 | 没下载 mpv；跑 `scripts/fetch-mpv.ps1`，或设 `KUMONE_MPV` 指向 mpv.exe。 |
 | 大量页面空数据 + 「可能正在限流」 | 出口 IP 被网易云限流。传输降级已尽力（weapi→eapi），两者都被限时只能等待或换网络。 |
 | 歌词空白但歌在放 | 未登录时歌词接口可能回空响应；确认 `api.lyric()` 的降级链与 `weapi()` 的传输降级没被改坏。 |
 | `npm test` 里 netease/fallback 用例失败 | 需要联网；若刚压测过接口可能被限流，稍后重试。 |
 | smoke 报「IPC 通道全注册」失败 | 新加了 `ipc.ts` 里的通道但没写 handler；按提示补 `defineHandler`。 |
-| 打包 7-Zip「无法创建符号链接」 | 见第 6 节第 1 条。 |
+| 打包 7-Zip「无法创建符号链接」 | 见第 6 节第 1 条（已用 afterPack 绕开）。 |
+| 打包时 7za 退出码 2 | 刚写出的 180MB exe 正被杀软扫描导致共享冲突；`scripts/package.mjs` 会自动清理重试一次。 |
+| 便携版「双击没反应」但解包版正常 | 绝大多数情况下就是 `ELECTRON_RUN_AS_NODE`（见第一行）。排除后再看第 6 节的打包流程说明（nsis 与 portable 必须分开构建且中间清理 `win-unpacked`）。 |
+
+## 7b. 启动诊断
+
+设置 `KUMONE_BOOT_LOG=<路径>` 后启动（便携版同样有效，环境变量会传给解压后的子进程），
+主进程会在每个启动里程碑追加日志（`src/main/diagnostics.ts` + `src/main/index.ts` 里的 bootLog 埋点）。
+未设置时完全零开销。日志为空 = 主进程脚本根本没执行（优先查 ELECTRON_RUN_AS_NODE / asar 完整性）。
 
 ## 8. 协议要点速查
 

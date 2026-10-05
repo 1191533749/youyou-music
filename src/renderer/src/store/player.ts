@@ -27,7 +27,11 @@ export interface PlayerStore {
   state: PlayerStateDTO
   current?: TrackDTO
   /** Queues `tracks` and starts at `startIndex`. */
-  playTracks: (tracks: TrackDTO[], startIndex?: number) => Promise<void>
+  playTracks: (
+    tracks: TrackDTO[],
+    startIndex?: number,
+    options?: { randomStart?: boolean }
+  ) => Promise<void>
   toggle: () => Promise<void>
   play: () => Promise<void>
   pause: () => Promise<void>
@@ -61,8 +65,12 @@ export function usePlayerStore(): PlayerStore {
     () => ({
       state,
       current: state.track,
-      playTracks: async (tracks, startIndex = 0) => {
-        await command('player:playTracks', { tracks, startIndex })
+      playTracks: async (tracks, startIndex = 0, options) => {
+        await command('player:playTracks', {
+          tracks,
+          startIndex,
+          randomStart: options?.randomStart === true
+        })
       },
       toggle: () => command('player:toggle'),
       play: () => command('player:play'),

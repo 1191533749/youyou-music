@@ -25,6 +25,7 @@ import { useAsync, usePaged } from '../lib/hooks'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
 import { useToast, type ToastKind } from '../components/Toast'
+import { IconCheck, IconMore, IconMusic, IconPlay, IconPlus } from '../components/Icons'
 
 export default function ArtistPage({ id }: { id: number }): JSX.Element {
   return <ArtistDetail key={id} id={id} />
@@ -81,8 +82,14 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
   const playHot = useCallback(() => {
     if (hotSongs.length === 0) return
     const firstPlayable = hotSongs.findIndex((track) => track.playability === 'playable')
-    void player.playTracks(hotSongs, firstPlayable < 0 ? 0 : firstPlayable)
-  }, [hotSongs, player])
+    // 整表播放入口带 randomStart：由主进程随机起播（点具体某一行时不带）。
+    // store 的 playTracks 只转发 startIndex，这里直接调通道；状态靠 player:state 广播同步。
+    void call('player:playTracks', {
+      tracks: hotSongs,
+      startIndex: firstPlayable < 0 ? 0 : firstPlayable,
+      randomStart: true
+    })
+  }, [hotSongs])
 
   const appendHot = useCallback(() => {
     if (hotSongs.length === 0) return
@@ -169,7 +176,9 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
           {coverUrl(artist.picUrl, 512) ? (
             <img src={coverUrl(artist.picUrl, 512)} alt="" />
           ) : (
-            <span className="card__placeholder">♪</span>
+            <span className="card__placeholder">
+              <IconMusic size={26} />
+            </span>
           )}
         </div>
 
@@ -192,29 +201,38 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
           ) : null}
 
           <div className="hero__actions">
-            <button type="button" className="button button--primary" disabled={hotSongs.length === 0} onClick={playHot}>
-              ▶ 播放热门{hotSongs.length > 0 ? ` (${hotSongs.length})` : ''}
+            <button
+              type="button"
+              className="button button--primary detail-btn"
+              disabled={hotSongs.length === 0}
+              onClick={playHot}
+            >
+              <IconPlay size={16} />
+              播放热门{hotSongs.length > 0 ? ` (${hotSongs.length})` : ''}
             </button>
             {auth.loggedIn ? (
-              <button type="button" className="button" onClick={() => void toggleFollow()}>
-                {isFollowed ? '✓ 已关注' : '+ 关注'}
+              <button type="button" className="button detail-btn" onClick={() => void toggleFollow()}>
+                {isFollowed ? <IconCheck size={16} /> : <IconPlus size={16} />}
+                {isFollowed ? '已关注' : '关注'}
               </button>
             ) : null}
             <button
               type="button"
-              className="button"
+              className="button detail-btn"
+              aria-label="更多操作"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect()
                 setMenuAt({ x: rect.left, y: rect.bottom + 4 })
               }}
             >
-              ⋯ 更多
+              <IconMore size={16} />
+              更多
             </button>
           </div>
         </div>
       </section>
 
-      <section className="detail-section">
+      <section className="detail-section detail-panel">
         <div className="section__header">
           <h2 className="section__title">热门单曲</h2>
           <span className="section__more">{hotSongs.length} 首</span>
@@ -263,7 +281,7 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
       {albums.more && !albums.loading ? (
         <div className="detail-pager">
           <button type="button" className="button" disabled={albums.loadingMore} onClick={albums.loadMore}>
-            {albums.loadingMore ? '加载中…' : '加载更多专辑'}
+            {albums.loadingMore ? '加载中' : '加载更多专辑'}
           </button>
         </div>
       ) : null}

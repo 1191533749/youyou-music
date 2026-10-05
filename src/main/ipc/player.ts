@@ -7,7 +7,7 @@
  * when that call fails, rather than refusing to play.
  */
 import { defineHandler } from './registry.js'
-import { toTracksDTO } from './mappers.js'
+import { mappingContextFrom, toTracksDTO } from './mappers.js'
 import type { AppContext } from '../context.js'
 import type { QualityLevel } from '@shared/types'
 import type { Track } from '../netease/models.js'
@@ -24,10 +24,7 @@ const VALID_QUALITIES: QualityLevel[] = [
 ]
 
 function mappingContext(context: AppContext) {
-  return {
-    isLoggedIn: context.client.isLoggedIn,
-    vipType: 0
-  }
+  return mappingContextFrom(context)
 }
 
 /** Rebuilds a Track from a DTO when the detail endpoint cannot be reached. */
@@ -63,7 +60,7 @@ function trackFromDTO(dto: {
 export function registerPlayerHandlers(context: AppContext): void {
   defineHandler('player:state', () => context.player.snapshot())
 
-  defineHandler('player:playTracks', async ({ tracks, startIndex }) => {
+  defineHandler('player:playTracks', async ({ tracks, startIndex, randomStart }) => {
     if (tracks.length === 0) return context.player.snapshot()
     const ids = tracks.map((track) => track.id)
     let hydrated: Track[] = []
@@ -81,7 +78,7 @@ export function registerPlayerHandlers(context: AppContext): void {
     if (hydrated.length === 0) hydrated = tracks.map(trackFromDTO)
 
     const privilegeMap = privileges ? new Map(privileges.map((item) => [item.id, item])) : undefined
-    await context.player.setQueue(hydrated, startIndex ?? 0, privilegeMap)
+    await context.player.setQueue(hydrated, startIndex ?? 0, privilegeMap, { randomStart: randomStart === true })
     return context.player.snapshot()
   })
 
@@ -216,6 +213,7 @@ export function registerPlayerHandlers(context: AppContext): void {
 
   void mappingContext
   void toTracksDTO
+  void mappingContextFrom
 }
 
 /** `wasapi/{0.0.0.00000000}.{guid}` → a name the user can recognise. */

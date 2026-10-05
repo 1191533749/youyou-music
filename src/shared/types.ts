@@ -39,6 +39,12 @@ export const QUALITY_OPTIONS: QualityOption[] = [
 
 export type RepeatMode = 'off' | 'all' | 'one'
 
+/** 桌面歌词的显示特效。 */
+export type DesktopLyricsEffect = 'classic' | 'gradient' | 'neon' | 'karaoke'
+
+/** 特效的展示顺序，也是桌面歌词窗口里切换按钮的循环顺序。 */
+export const DESKTOP_LYRICS_EFFECTS: DesktopLyricsEffect[] = ['classic', 'gradient', 'neon', 'karaoke']
+
 export interface TrackDTO {
   id: number
   name: string
@@ -77,8 +83,12 @@ export interface PlayerStateDTO {
   quality: QualityLevel
   /** The quality actually served, which can be lower than the request. */
   servedQuality?: QualityLevel
+  /** 实际码率（kbps），音源提供了才填；用于诚实的音质提示。 */
+  servedBitrate?: number
   /** Set when a track could not be played at all. */
   error?: string
+  /** 非空表示当前音频来自第三方音源，例如「酷我音乐」。 */
+  servedFrom?: string
   /** Local file path or remote URL currently loaded, for diagnostics. */
   source?: string
 }
@@ -120,6 +130,8 @@ export interface SettingsDTO {
   showDesktopLyrics: boolean
   desktopLyricsFontSize: number
   desktopLyricsOpacity: number
+  /** 桌面歌词特效：经典 / 渐变 / 霓虹 / 逐字卡拉OK。 */
+  desktopLyricsEffect: DesktopLyricsEffect
   /** Always-on-top desktop lyric window position, in screen coordinates. */
   desktopLyricsPosition?: { x: number; y: number }
   /** Cache cap in megabytes; 0 disables eviction. */
@@ -142,6 +154,11 @@ export interface SettingsDTO {
   language: 'system' | 'zh-Hans' | 'en'
   /** Unlock grey tracks from third-party sources. */
   unblockGreyTracks: boolean
+  /**
+   * 启用的第三方音源，顺序即尝试优先级：pyncmd → kugou → kuwo。
+   * 任一为启用状态时，受限歌曲都会自动换源播放完整版本。
+   */
+  unblockSources: Array<'pyncmd' | 'kugou' | 'kuwo'>
   /** Keep a local copy of played tracks so they play offline. */
   offlineCacheEnabled: boolean
 }
@@ -153,6 +170,7 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   showDesktopLyrics: false,
   desktopLyricsFontSize: 28,
   desktopLyricsOpacity: 0.92,
+  desktopLyricsEffect: 'classic',
   cacheLimitMB: 2048,
   cacheDirectory: '',
   audioDevice: '',
@@ -163,6 +181,7 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   theme: 'system',
   language: 'system',
   unblockGreyTracks: true,
+  unblockSources: ['pyncmd', 'kugou', 'kuwo'],
   offlineCacheEnabled: true
 }
 
@@ -194,7 +213,6 @@ export interface AppInfoDTO {
   /** mpv version banner, when the backend was found. */
   mpv?: string
   mpvPath?: string
-  upstream: string
 }
 
 /** One lyric line as the renderer consumes it. */

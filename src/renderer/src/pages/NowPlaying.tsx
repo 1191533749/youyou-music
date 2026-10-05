@@ -1,12 +1,16 @@
 /**
- * 播放页：沉浸式封面、逐行歌词（含逐字高亮）、播放队列。
+ * 全屏播放页。
  *
- * 数据只有两个来源：播放状态来自 player store（主进程是权威），歌词来自
- * `lyrics:get`。封面主色由渲染进程自己从封面图采样 —— 主进程不该为了一个视觉
- * 效果去解码图片；采样失败（CDN 不带 CORS 头）时退回 CSS 里的默认强调色，
- * 页面不会因此缺一块。
+ * 用 portal 挂到 body 上，再 `position: fixed; inset: 0` 盖住侧栏与播放条 —— 不能只靠
+ * fixed：应用外壳的 `.content` 带 backdrop-filter，它会给 fixed 后代重新建立包含块，
+ * 那样全屏层只会铺满内容区而不是整个窗口。
+ *
+ * 数据来源仍然只有两个：播放状态来自 player store（主进程是权威），歌词来自
+ * `lyrics:get`。所有的视觉效果（黑胶 / 胶片 / 波形 / 星海）与歌词特效都只是渲染
+ * 方式，不参与取数；封面主色采样失败（CDN 无 CORS 头）时退回 CSS 里的强调色。
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import {
   activeIndexOf,
   artistLine,
@@ -20,6 +24,27 @@ import {
   usePlayerStore,
   wordProgress
 } from '../lib/contract'
+import {
+  IconClose,
+  IconDisc,
+  IconDiamond,
+  IconHome,
+  IconLyrics,
+  IconMic,
+  IconMusic,
+  IconNext,
+  IconPause,
+  IconPlay,
+  IconPrevious,
+  IconQueue,
+  IconRepeat,
+  IconRepeatOne,
+  IconShuffle,
+  IconSparkles,
+  IconTrash,
+  IconVolume,
+  IconVolumeMute
+} from '../components/Icons'
 import type { LyricLineDTO, LyricsDTO, SettingsDTO } from '@shared/types'
 
 interface Word {
@@ -28,19 +53,118 @@ interface Word {
   duration: number
 }
 
+/** 视觉特效，数组顺序就是切换顺序，默认第一个（黑胶）。 */
+const VISUALS = [
+  { value: 'vinyl', label: '黑胶' },
+  { value: 'film', label: '胶片' },
+  { value: 'waves', label: '波形' },
+  { value: 'stars', label: '星海' }
+] as const
+
+type Visual = (typeof VISUALS)[number]['value']
+
+/** 歌词特效，默认卡拉 OK。 */
+const LYRIC_EFFECTS = [
+  { value: 'karaoke', label: '卡拉OK' },
+  { value: 'zoom', label: '渐变放大' },
+  { value: 'fade', label: '淡入淡出' },
+  { value: 'neon', label: '霓虹' }
+] as const
+
+type LyricEffect = (typeof LYRIC_EFFECTS)[number]['value']
+
+/**
+ * 波形条与星点的参数全部由下标算出，不用 Math.random：随机会让每次重渲染
+ * 都跳一下，而这里要的是「一直跳但位置不变」。
+ */
+const WAVE_BARS = Array.from({ length: 28 }, (_, index) => 34 + ((index * 37) % 62))
+
+const STARS = Array.from({ length: 30 }, (_, index) => ({
+  x: (index * 37) % 100,
+  y: (index * 61) % 100,
+  size: 2 + (index % 3),
+  delay: (index % 9) * 460,
+  duration: 5200 + (index % 5) * 940,
+  accent: index % 4 === 0
+}))
+
+/** 胶片的划痕：三条固定位置，靠动画错开出现。 */
+const SCRATCHES = [
+  { left: 18, delay: 0, duration: 5200 },
+  { left: 52, delay: 1700, duration: 6800 },
+  { left: 79, delay: 3200, duration: 4400 }
+]
+
+/** 效果选择的本地记忆：键名带 youyou- 前缀，读不到或值非法就回默认。 */
+const VISUAL_KEY = 'youyou-now-playing-visual'
+const LYRIC_EFFECT_KEY = 'youyou-now-playing-lyric'
+
+function readStoredChoice<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const value = window.localStorage.getItem(key)
+    return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+  } catch {
+    // 隐私模式等场景下 localStorage 可能不可用 —— 回默认即可，不影响播放。
+    return fallback
+  }
+}
+
+function writeStoredChoice(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // 写不进去只是记不住选择，不该影响任何功能。
+  }
+}
+
 export default function NowPlaying(): JSX.Element {
   const navigation = useNavigation()
   const player = usePlayerStore()
   const { state, current } = player
 
+  const [visual, setVisual] = useState<Visual>(() =>
+    readStoredChoice(
+      VISUAL_KEY,
+      VISUALS.map((item) => item.value),
+      'vinyl'
+    )
+  )
+  const [lyricEffect, setLyricEffect] = useState<LyricEffect>(() =>
+    readStoredChoice(
+      LYRIC_EFFECT_KEY,
+      LYRIC_EFFECTS.map((item) => item.value),
+      'karaoke'
+    )
+  )
+  const [queueOpen, setQueueOpen] = useState(false)
   const [settings, setSettings] = useState<SettingsDTO | undefined>()
   const [lyrics, setLyrics] = useState<LyricsDTO | undefined>()
   const [lyricsLoading, setLyricsLoading] = useState(false)
   const [lyricsError, setLyricsError] = useState<string | undefined>()
   const [lyricsNonce, setLyricsNonce] = useState(0)
   const [follow, setFollow] = useState(true)
+  // 拖动中的进度/音量先存在本地，松手才发给主进程 —— 否则每一个像素都会变成一次 IPC。
+  const [dragPosition, setDragPosition] = useState<number | undefined>(undefined)
+  const [dragVolume, setDragVolume] = useState<number | undefined>(undefined)
 
   const trackID = current?.id
+
+  /** 退出全屏就是回到进入前的路由；没有上一页（直接打开播放页）时回首页。 */
+  const exit = useCallback((): void => {
+    if (navigation.canGoBack) navigation.back()
+    else navigation.push({ name: 'home' })
+  }, [navigation])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      // 抽屉开着时 Esc 先收抽屉，再按一次才退出全屏。
+      if (queueOpen) setQueueOpen(false)
+      else exit()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [exit, queueOpen])
 
   // 桌面歌词开关放在播放页，因为「看歌词」是这里的动作；设置页改同一个值时
   // settings:changed 会把按钮状态同步回来（主进程是唯一数据源）。
@@ -111,7 +235,7 @@ export default function NowPlaying(): JSX.Element {
     const container = listRef.current
     const element = activeLineRef.current
     if (!container || !element) return
-    // 自己算 scrollTop 而不是 scrollIntoView：后者会把外层 .content 一起滚走。
+    // 自己算 scrollTop 而不是 scrollIntoView：后者会把外层容器也一起滚走。
     container.scrollTo({
       top: element.offsetTop - container.clientHeight / 2 + element.clientHeight / 2,
       behavior: 'smooth'
@@ -134,37 +258,99 @@ export default function NowPlaying(): JSX.Element {
     : undefined
   const cover = coverUrl(current?.album.picUrl, 640)
 
-  return (
-    <div className="page now-playing" style={style}>
-      <div className="np-backdrop" aria-hidden="true">
-        {cover ? <img className="np-backdrop__art" src={cover} alt="" /> : null}
-        <div className="np-backdrop__scrim" />
+  const visualLabel = VISUALS.find((item) => item.value === visual)?.label ?? ''
+  const lyricLabel = LYRIC_EFFECTS.find((item) => item.value === lyricEffect)?.label ?? ''
+
+  /** 只切视觉，不碰播放：setState 不触发任何 player 命令。 */
+  const cycleVisual = (): void => {
+    setVisual((currentValue) => {
+      const index = VISUALS.findIndex((item) => item.value === currentValue)
+      return VISUALS[(index + 1) % VISUALS.length].value
+    })
+  }
+
+  const cycleLyricEffect = (): void => {
+    setLyricEffect((currentValue) => {
+      const index = LYRIC_EFFECTS.findIndex((item) => item.value === currentValue)
+      return LYRIC_EFFECTS[(index + 1) % LYRIC_EFFECTS.length].value
+    })
+  }
+
+  // 记住上次选的效果；写失败也只是记不住，不影响播放。
+  useEffect(() => writeStoredChoice(VISUAL_KEY, visual), [visual])
+  useEffect(() => writeStoredChoice(LYRIC_EFFECT_KEY, lyricEffect), [lyricEffect])
+
+  // --- 进度与音量 --------------------------------------------------------
+
+  const durationMax = Math.max(1, Math.floor(state.duration))
+  const shownPosition = Math.min(dragPosition ?? state.position, durationMax)
+  const shownVolume = dragVolume ?? (state.muted ? 0 : state.volume)
+
+  /** 拖动时只更新本地显示；松手（或键盘操作结束）才真正 seek 一次。 */
+  const commitSeek = (): void => {
+    if (dragPosition === undefined) return
+    const target = dragPosition
+    void player.seek(target).finally(() => setDragPosition(undefined))
+  }
+
+  const commitVolume = (): void => {
+    if (dragVolume === undefined) return
+    const target = dragVolume
+    void player.setVolume(target).finally(() => setDragVolume(undefined))
+  }
+
+  return createPortal(
+    <div className="np-fullscreen" style={style} role="dialog" aria-modal="true" aria-label="正在播放">
+      <div className="np-fs__bg" aria-hidden="true">
+        {cover ? <img className="np-fs__bg-art" src={cover} alt="" /> : null}
+        <div className="np-fs__bg-scrim" />
       </div>
 
-      <header className="np-header">
-        <button
-          type="button"
-          className="button np-header__back"
-          onClick={() => (navigation.canGoBack ? navigation.back() : navigation.push({ name: 'home' }))}
-        >
-          ← 返回
+      <header className="np-fs__bar">
+        {/* 全屏层的返回入口：按需求只留文字，不带箭头符号。 */}
+        <button type="button" className="np-fs__back" onClick={exit}>
+          返回
         </button>
-        <div className="np-header__title">
-          <span className="section__title">正在播放</span>
-          {current ? <span className="page__subtitle">{current.album.name}</span> : null}
+        <div className="np-fs__heading">
+          <span className="np-fs__heading-title">正在播放</span>
+          {current ? <span className="np-fs__heading-sub">{current.album.name}</span> : null}
         </div>
-        <div className="np-header__actions">
+        <div className="np-fs__bar-actions">
           <span className="np-header__hint">
-            {state.playing ? '播放中' : current ? '已暂停' : '未在播放'} · {repeatLabel(state.repeat)}
-            {state.shuffle ? ' · 随机' : ''}
+            {state.playing ? <IconPause size={14} /> : <IconPlay size={14} />}
+            {state.playing ? '播放中' : current ? '已暂停' : '未在播放'}
           </span>
+          <span className="np-header__tag" title={repeatLabel(state.repeat)}>
+            {state.repeat === 'one' ? <IconRepeatOne size={14} /> : <IconRepeat size={14} />}
+            {repeatLabel(state.repeat)}
+          </span>
+          {state.shuffle ? (
+            <span className="np-header__tag">
+              <IconShuffle size={14} />
+              随机
+            </span>
+          ) : null}
           <button
             type="button"
-            className={`chip${desktopLyricsOn ? ' is-active' : ''}`}
+            className={`np-fs__tool${desktopLyricsOn ? ' is-active' : ''}`}
             title="在桌面上显示歌词"
+            aria-label={desktopLyricsOn ? '关闭桌面歌词' : '打开桌面歌词'}
+            aria-pressed={desktopLyricsOn}
             onClick={() => void call('lyrics:desktopToggle', { visible: !desktopLyricsOn })}
           >
+            <IconLyrics size={15} />
             桌面歌词
+          </button>
+          <button
+            type="button"
+            className={`np-fs__tool${queueOpen ? ' is-active' : ''}`}
+            title="播放队列"
+            aria-label="播放队列"
+            aria-pressed={queueOpen}
+            onClick={() => setQueueOpen((value) => !value)}
+          >
+            <IconQueue size={15} />
+            队列
           </button>
         </div>
       </header>
@@ -174,136 +360,363 @@ export default function NowPlaying(): JSX.Element {
           <div className="placeholder__title">还没有正在播放的歌曲</div>
           <div>去首页挑一首，或者在搜索里找找想听的歌。</div>
           <button type="button" className="button button--primary" onClick={() => navigation.push({ name: 'home' })}>
+            <IconHome size={16} />
             回到首页
           </button>
         </div>
       ) : (
-        <div className="np-body">
-          <section className="np-cover">
-            <div className={`np-cover__art${state.playing ? ' is-playing' : ''}`}>
-              {cover ? (
-                <img src={cover} alt={`${current.album.name} 封面`} />
+        <div className="np-fs__main">
+          <section className="np-fs__stage">
+            <VisualStage visual={visual} cover={cover} playing={state.playing} title={current.name} />
+          </section>
+
+          <section className="np-fs__side">
+            <div className="np-fs__meta">
+              <h1 className="np-fs__title" title={current.name}>
+                {current.name}
+              </h1>
+              <div className="np-fs__artist">{artistLine(current)}</div>
+              <div className="np-fs__album">{current.album.name}</div>
+              <div className="np-cover__badges">
+                {current.isCloud ? <span className="badge">云盘</span> : null}
+              </div>
+              <div className="np-cover__controls">
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="上一首"
+                  aria-label="上一首"
+                  onClick={() => void player.previous()}
+                >
+                  <IconPrevious size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button icon-button--primary"
+                  title={state.playing ? '暂停' : '播放'}
+                  aria-label={state.playing ? '暂停' : '播放'}
+                  onClick={() => void player.toggle()}
+                >
+                  {state.playing ? <IconPause size={18} /> : <IconPlay size={18} />}
+                </button>
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="下一首"
+                  aria-label="下一首"
+                  onClick={() => void player.next()}
+                >
+                  <IconNext size={18} />
+                </button>
+              </div>
+
+              {/* 细进度条 + 音量：拖动时只更新本地显示，松手才发一次 IPC。 */}
+              <div className="np-fs__transport">
+                <div className="np-fs__progress">
+                  <span className="np-fs__time">{formatDuration(shownPosition)}</span>
+                  <input
+                    type="range"
+                    className="slider np-fs__range"
+                    min={0}
+                    max={durationMax}
+                    value={Math.floor(shownPosition)}
+                    aria-label="播放进度"
+                    onChange={(event) => setDragPosition(Number(event.target.value))}
+                    onPointerUp={commitSeek}
+                    onKeyUp={commitSeek}
+                    onBlur={commitSeek}
+                  />
+                  <span className="np-fs__time">{formatDuration(state.duration)}</span>
+                </div>
+                <div className="np-fs__volume">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title={state.muted ? '取消静音' : '静音'}
+                    aria-label={state.muted ? '取消静音' : '静音'}
+                    aria-pressed={state.muted}
+                    onClick={() => void player.setMuted(!state.muted)}
+                  >
+                    {state.muted ? <IconVolumeMute size={16} /> : <IconVolume size={16} />}
+                  </button>
+                  <input
+                    type="range"
+                    className="slider np-fs__range np-fs__range--volume"
+                    min={0}
+                    max={150}
+                    value={shownVolume}
+                    aria-label="音量"
+                    onChange={(event) => setDragVolume(Number(event.target.value))}
+                    onPointerUp={commitVolume}
+                    onKeyUp={commitVolume}
+                    onBlur={commitVolume}
+                  />
+                  <span className="np-fs__time">{Math.round(shownVolume)}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="np-lyrics np-fs__lyrics">
+              <div className="section__header np-lyrics__header">
+                <h2 className="section__title">
+                  <IconMusic size={16} className="section__icon" />
+                  歌词
+                </h2>
+                {lyrics?.contributor ? <span className="section__more">贡献者：{lyrics.contributor}</span> : null}
+              </div>
+
+              {lyricsLoading ? (
+                <div className="placeholder np-lyrics__state">
+                  <div className="loading-state">
+                    <IconDisc size={18} className="spin" />
+                    <span>正在加载歌词…</span>
+                  </div>
+                </div>
+              ) : lyricsError ? (
+                <div className="placeholder np-lyrics__state">
+                  <div className="placeholder__title">歌词加载失败</div>
+                  <div>{lyricsError}</div>
+                  <button type="button" className="button" onClick={() => setLyricsNonce((value) => value + 1)}>
+                    重试
+                  </button>
+                </div>
+              ) : !lyrics || isEmptyLyrics(lyrics) ? (
+                <div className="placeholder np-lyrics__state">
+                  {lyrics?.isInstrumental ? <IconMic size={26} className="np-lyrics__note" /> : null}
+                  <div className="placeholder__title">
+                    {lyrics?.isInstrumental ? '纯音乐，请欣赏' : '这首歌暂时没有歌词'}
+                  </div>
+                </div>
               ) : (
-                <span className="card__placeholder">♪</span>
+                <div
+                  className={`np-lyrics__list np-lyrics__list--${lyricEffect}`}
+                  ref={listRef}
+                  onWheel={pauseFollow}
+                  onTouchMove={pauseFollow}
+                  style={{ fontSize: lyricsFontSize }}
+                >
+                  <ol className="np-lyrics__lines">
+                    {lyrics.lines.map((line, index) => (
+                      <LyricRow
+                        key={`${line.id}-${index}`}
+                        line={line}
+                        active={index === activeIndex}
+                        position={state.position}
+                        effect={lyricEffect}
+                        onSeek={() => void player.seek(line.time)}
+                        lineRef={index === activeIndex ? activeLineRef : undefined}
+                      />
+                    ))}
+                  </ol>
+                  <div className="np-lyrics__footer">
+                    {lyrics.translationContributor ? `翻译贡献者：${lyrics.translationContributor}` : ''}
+                  </div>
+                </div>
               )}
             </div>
-            <h1 className="np-cover__title" title={current.name}>
-              {current.name}
-            </h1>
-            <div className="np-cover__artist">{artistLine(current)}</div>
-            <div className="np-cover__album">{current.album.name}</div>
-            <div className="np-cover__badges">
-              {current.playability !== 'playable' && current.playabilityReason ? (
-                <span className="badge badge--warn">{current.playabilityReason}</span>
-              ) : null}
-              {current.isCloud ? <span className="badge">云盘</span> : null}
-              <span className="badge">
-                {formatDuration(state.position)} / {formatDuration(state.duration)}
-              </span>
-            </div>
           </section>
-
-          <section className="np-lyrics">
-            <div className="section__header np-lyrics__header">
-              <h2 className="section__title">歌词</h2>
-              {lyrics?.contributor ? <span className="section__more">贡献者：{lyrics.contributor}</span> : null}
-            </div>
-
-            {lyricsLoading ? (
-              <div className="placeholder np-lyrics__state">
-                <div className="placeholder__title">正在加载歌词…</div>
-              </div>
-            ) : lyricsError ? (
-              <div className="placeholder np-lyrics__state">
-                <div className="placeholder__title">歌词加载失败</div>
-                <div>{lyricsError}</div>
-                <button type="button" className="button" onClick={() => setLyricsNonce((value) => value + 1)}>
-                  重试
-                </button>
-              </div>
-            ) : !lyrics || isEmptyLyrics(lyrics) ? (
-              <div className="placeholder np-lyrics__state">
-                <div className="placeholder__title">
-                  {lyrics?.isInstrumental ? '纯音乐，请欣赏' : '这首歌暂时没有歌词'}
-                </div>
-              </div>
-            ) : (
-              <div
-                className="np-lyrics__list"
-                ref={listRef}
-                onWheel={pauseFollow}
-                onTouchMove={pauseFollow}
-                style={{ fontSize: lyricsFontSize }}
-              >
-                <ol className="np-lyrics__lines">
-                  {lyrics.lines.map((line, index) => (
-                    <LyricRow
-                      key={`${line.id}-${index}`}
-                      line={line}
-                      active={index === activeIndex}
-                      position={state.position}
-                      onSeek={() => void player.seek(line.time)}
-                      lineRef={index === activeIndex ? activeLineRef : undefined}
-                    />
-                  ))}
-                </ol>
-                <div className="np-lyrics__footer">
-                  {lyrics.translationContributor ? `翻译贡献者：${lyrics.translationContributor}` : ''}
-                </div>
-              </div>
-            )}
-          </section>
-
-          <aside className="np-queue">
-            <div className="section__header np-queue__header">
-              <h2 className="section__title">播放队列</h2>
-              <span className="section__more">{state.queue.length} 首</span>
-              {state.queue.length > 0 ? (
-                <button type="button" className="icon-button" title="清空队列" onClick={() => void player.clearQueue()}>
-                  ⌫
-                </button>
-              ) : null}
-            </div>
-
-            {state.queue.length === 0 ? (
-              <div className="page__empty">队列是空的</div>
-            ) : (
-              <ol className="np-queue__list">
-                {state.queue.map((track, index) => (
-                  <li
-                    key={`${track.id}-${index}`}
-                    className={`np-queue__item${index === state.index ? ' is-current' : ''}`}
-                  >
-                    <button
-                      type="button"
-                      className="np-queue__play"
-                      title="播放这首"
-                      // 契约里没有「跳到第 N 首」的通道，重排同一份队列并指定起始
-                      // 下标是等价的做法，队列内容不会因此改变。
-                      onClick={() => void player.playTracks(state.queue, index)}
-                    >
-                      <span className="np-queue__index">{index === state.index ? '♪' : index + 1}</span>
-                      <span className="np-queue__meta">
-                        <span className="np-queue__name">{track.name}</span>
-                        <span className="np-queue__artist">{artistLine(track)}</span>
-                      </span>
-                      <span className="np-queue__duration">{formatDuration(track.durationMS / 1000)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button np-queue__remove"
-                      title="从队列移除"
-                      onClick={() => void player.removeAt([index])}
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </aside>
         </div>
       )}
+
+      {/* 右下角：视觉效果与歌词特效各一个循环切换按钮，只改渲染方式。 */}
+      <div className="np-fs__tools">
+        <button type="button" className="np-fs__tool" onClick={cycleVisual} title="切换视觉效果" aria-label={`切换视觉效果，当前：${visualLabel}`}>
+          <IconSparkles size={15} />
+          {visualLabel}
+        </button>
+        <button
+          type="button"
+          className="np-fs__tool"
+          onClick={cycleLyricEffect}
+          title="切换歌词特效"
+          aria-label={`切换歌词特效，当前：${lyricLabel}`}
+        >
+          <IconDiamond size={15} />
+          {lyricLabel}
+        </button>
+      </div>
+
+      <div
+        className={`np-drawer__scrim${queueOpen ? ' is-open' : ''}`}
+        onClick={() => setQueueOpen(false)}
+        aria-hidden="true"
+      />
+      <aside className={`np-drawer${queueOpen ? ' is-open' : ''}`} aria-hidden={!queueOpen} aria-label="播放队列">
+        <div className="section__header np-queue__header">
+          <h2 className="section__title">
+            <IconQueue size={16} className="section__icon" />
+            播放队列
+          </h2>
+          <span className="section__more">{state.queue.length} 首</span>
+          <button
+            type="button"
+            className="icon-button"
+            title="收起队列"
+            aria-label="收起队列"
+            onClick={() => setQueueOpen(false)}
+          >
+            <IconClose size={15} />
+          </button>
+          {state.queue.length > 0 ? (
+            <button
+              type="button"
+              className="icon-button"
+              title="清空队列"
+              aria-label="清空队列"
+              onClick={() => void player.clearQueue()}
+            >
+              <IconTrash size={16} />
+            </button>
+          ) : null}
+        </div>
+
+        {state.queue.length === 0 ? (
+          <div className="page__empty">队列是空的</div>
+        ) : (
+          <ol className="np-queue__list">
+            {state.queue.map((track, index) => (
+              <li
+                key={`${track.id}-${index}`}
+                className={`np-queue__item${index === state.index ? ' is-current' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="np-queue__play"
+                  title="播放这首"
+                  aria-label={`播放 ${track.name}`}
+                  // 契约里没有「跳到第 N 首」的通道，重排同一份队列并指定起始
+                  // 下标是等价的做法，队列内容不会因此改变。
+                  onClick={() => void player.playTracks(state.queue, index)}
+                >
+                  <span className="np-queue__index">
+                    {index === state.index ? <IconPlay size={11} /> : index + 1}
+                  </span>
+                  <span className="np-queue__meta">
+                    <span className="np-queue__name">{track.name}</span>
+                    <span className="np-queue__artist">{artistLine(track)}</span>
+                  </span>
+                  <span className="np-queue__duration">{formatDuration(track.durationMS / 1000)}</span>
+                </button>
+                <button
+                  type="button"
+                  className="icon-button np-queue__remove"
+                  title="从队列移除"
+                  aria-label={`从队列移除 ${track.name}`}
+                  onClick={() => void player.removeAt([index])}
+                >
+                  <IconClose size={14} />
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </aside>
+    </div>,
+    document.body
+  )
+}
+
+/** 封面舞台：四种视觉共用同一个封面 URL，各自换一种呈现方式。 */
+function VisualStage({
+  visual,
+  cover,
+  playing,
+  title
+}: {
+  visual: Visual
+  cover?: string
+  playing: boolean
+  title: string
+}): JSX.Element {
+  const art = cover ? (
+    <img src={cover} alt={`${title} 封面`} />
+  ) : (
+    <span className="card__placeholder">
+      <IconMusic size={34} />
+    </span>
+  )
+  // 播放中才转/才跳：暂停时同样保留静态画面，不闪不空。
+  const motion = playing ? ' is-playing' : ''
+
+  if (visual === 'film') {
+    return (
+      <div className={`np-film${motion}`}>
+        <div className="np-film__frame">
+          <span className="np-film__perfs" aria-hidden="true" />
+          <div className="np-film__window">
+            {art}
+            <span className="np-film__grain" aria-hidden="true" />
+            {SCRATCHES.map((scratch, index) => (
+              <span
+                key={index}
+                className="np-film__scratch"
+                aria-hidden="true"
+                style={{
+                  left: `${scratch.left}%`,
+                  animationDelay: `${scratch.delay}ms`,
+                  animationDuration: `${scratch.duration}ms`
+                }}
+              />
+            ))}
+          </div>
+          <span className="np-film__perfs" aria-hidden="true" />
+        </div>
+      </div>
+    )
+  }
+
+  if (visual === 'waves') {
+    return (
+      <div className={`np-waves${motion}`}>
+        <div className="np-waves__art">{art}</div>
+        <div className="np-waves__bars" aria-hidden="true">
+          {WAVE_BARS.map((height, index) => (
+            <span
+              key={index}
+              className="np-waves__bar"
+              style={{
+                height: `${height}%`,
+                animationDelay: `${index * 80}ms`,
+                animationDuration: `${900 + (index % 5) * 140}ms`
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (visual === 'stars') {
+    return (
+      <div className={`np-stars${motion}`}>
+        <div className="np-stars__field" aria-hidden="true">
+          {STARS.map((star, index) => (
+            <span
+              key={index}
+              className={`np-stars__dot${star.accent ? ' np-stars__dot--accent' : ''}`}
+              style={{
+                left: `${star.x}%`,
+                top: `${star.y}%`,
+                width: star.size,
+                height: star.size,
+                animationDelay: `${star.delay}ms`,
+                animationDuration: `${star.duration}ms`
+              }}
+            />
+          ))}
+        </div>
+        <div className="np-stars__art">{art}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`np-vinyl${motion}`}>
+      <div className="np-vinyl__disc">
+        <span className="np-vinyl__sheen" aria-hidden="true" />
+        <div className="np-vinyl__label">{art}</div>
+        <span className="np-vinyl__hole" aria-hidden="true" />
+      </div>
     </div>
   )
 }
@@ -311,29 +724,33 @@ export default function NowPlaying(): JSX.Element {
 /**
  * 一行歌词。
  *
- * 有逐字时间戳时按词切片高亮（卡拉 OK），否则整行一起变色 —— 上游客户端也是
- * 这两种表现。`wordProgress` 给的是整行进度，用来画行下方那条进度线。
+ * 四种特效只是同一份数据的不同画法：卡拉 OK 用逐字时间戳切片点亮（words 存在
+ * 时），其余三种按整行处理。`activeIndexOf` / `wordProgress` 的算法原样保留，
+ * 这里只决定怎么把结果画出来。
  */
 function LyricRow({
   line,
   active,
   position,
+  effect,
   onSeek,
   lineRef
 }: {
   line: LyricLineDTO
   active: boolean
   position: number
+  effect: LyricEffect
   onSeek: () => void
   lineRef?: RefObject<HTMLLIElement>
 }): JSX.Element {
-  const progress = active ? wordProgress(line, position) : 0
   const words: Word[] = line.words ?? []
+  const karaoke = effect === 'karaoke' && words.length > 0
+  const progress = active && karaoke ? wordProgress(line, position) : 0
 
   return (
-    <li className={`np-lyric${active ? ' is-active' : ''}`} ref={lineRef}>
+    <li className={`np-lyric np-lyric--${effect}${active ? ' is-active' : ''}`} ref={lineRef}>
       <button type="button" className="np-lyric__button" onClick={onSeek} title="跳到这一句">
-        {words.length > 0 ? (
+        {karaoke ? (
           <span className="np-lyric__text">
             {words.map((word, index) => {
               const ratio = wordRatio(word, position) * 100
@@ -357,7 +774,7 @@ function LyricRow({
         {line.romaji ? <span className="np-lyric__romaji">{line.romaji}</span> : null}
         {line.translation ? <span className="np-lyric__translation">{line.translation}</span> : null}
       </button>
-      {active ? (
+      {active && karaoke ? (
         <span className="np-lyric__bar">
           <span className="np-lyric__bar-fill" style={{ width: `${progress * 100}%` }} />
         </span>

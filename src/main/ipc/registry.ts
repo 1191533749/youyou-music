@@ -51,9 +51,12 @@ export function defineHandler<C extends IPCChannel>(channel: C, handler: Handler
 export const contextRef: { value: AppContext } = { value: undefined as unknown as AppContext }
 
 export function sendEvent(context: AppContext, event: string, payload: unknown): void {
-  const window = context.mainWindow()
-  if (!window || window.isDestroyed()) return
-  window.webContents.send(EVENT_PREFIX + event, payload)
+  // 广播给所有窗口：桌面歌词窗口是独立的 BrowserWindow，
+  // 它靠 player:state / settings:changed 才知道该显示哪一句歌词。
+  for (const window of context.windows()) {
+    if (window.isDestroyed()) continue
+    window.webContents.send(EVENT_PREFIX + event, payload)
+  }
 }
 
 /** Fails fast when a channel in the contract has no implementation. */

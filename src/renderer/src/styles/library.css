@@ -1,54 +1,387 @@
 /**
- * Feature stylesheet — 我的音乐 / 每日推荐 / 私人 FM / 音乐云盘。
+ * Feature stylesheet — 我的音乐 / 每日推荐 / 私人漫游 / 音乐云盘。
  *
- * 只消费 global.css 的设计令牌与既有类名（.card/.song-row/.page/.placeholder/
- * .button/.chip…），这里新增的都是这四个页面自己的版式。共享组件（.dialog*、
- * .context-menu*、.toast*）的样式由各自的 owner 负责，本文件不重定义。
+ * 视觉对齐手机端：白卡（半透明白 + 大圆角 + 柔和阴影）承载内容，行与行之间用
+ * 1px var(--border) 分隔；「我的音乐」是顶部用户卡 + 五个区段入口卡。
+ * 只消费 global.css 的令牌，本文件不写任何字面色值 —— 换肤只是换令牌取值。
+ * 共享组件（.dialog* / .context-menu* / .toast* / .card / .song-row / .button）
+ * 的样式由各自的 owner 负责，这里只做这几个页面的版式。
  */
 
-/* --- 我的音乐 ---------------------------------------------------------- */
+/* --- 通用：图标 + 文字的动作按钮 ---------------------------------------- */
 
-.library__tabs {
+.icon-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+}
+
+/* 进行中的图标按钮：变淡呼吸，代替过去那个「正在忙」的字符。 */
+.is-busy {
+  animation: busy-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes busy-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.42;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-busy {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* --- 我的音乐：顶部用户卡 ---------------------------------------------- */
+
+/* 强调色渐变 + 右上角一团更亮的光晕；白字在深浅两套主题下都成立。 */
+.library__hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
   margin-bottom: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--accent-gradient);
+  box-shadow: var(--glass-shadow);
+  color: var(--text-on-accent);
+  overflow: hidden;
 }
 
-.library__tab-icon {
-  margin-right: 6px;
+.library__hero::after {
+  content: '';
+  position: absolute;
+  top: -120px;
+  right: -70px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  filter: blur(70px);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
-.library__actions {
+.library__hero-avatar {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--glass-weak);
+  border: 2px solid var(--glass-border);
+}
+
+.library__hero-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library__hero-body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.library__hero-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__hero-sign {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.88;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__hero-stats {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+/* --- 我的音乐：区段入口卡 ---------------------------------------------- */
+
+/* 六列网格：两张半宽卡一行，通栏卡占满；窄窗口自动叠成单列。 */
+.library__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.library__card {
+  grid-column: span 3;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.library__card--wide {
+  grid-column: span 6;
+}
+
+@media (max-width: 1120px) {
+  .library__card,
+  .library__card--wide {
+    grid-column: span 6;
+  }
+}
+
+.library__card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.library__card-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.library__card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 640;
+}
+
+.library__card-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.library__card-tools {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
-.library__group {
-  margin-bottom: 24px;
+/* 卡头圆钮：新建歌单的「+」、播放全部等。 */
+.library__round {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  transition: color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.library__group-title {
-  margin-bottom: 10px;
-  font-size: 13px;
+.library__round:hover {
+  color: var(--accent);
+  box-shadow: var(--glass-shadow-soft);
+  transform: translateY(-2px);
+}
+
+.library__round:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+.library__round--primary {
+  width: 38px;
+  height: 38px;
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+.library__round--primary:hover {
+  color: var(--text-on-accent);
+  filter: brightness(1.05);
+}
+
+.library__link {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  color: var(--accent);
+  transition: background 0.16s ease;
+}
+
+.library__link:hover {
+  background: var(--accent-soft);
+}
+
+/* 喜欢的音乐：一行封面 + 标题 + 播放按钮。 */
+.library__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.library__row-art {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--glass-weak);
+  color: var(--text-tertiary);
+}
+
+.library__row-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library__row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.library__row-title {
+  font-size: 14px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library__row-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* 展开后的完整列表：限高滚动，卡片不会被几千行撑爆。 */
+.library__list {
+  margin-top: 12px;
+  padding: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+  border-radius: var(--radius);
+  background: var(--glass-strong);
+  border: 1px solid var(--border);
+}
+
+/* 卡内行不再各自圆角，hover/当前行是整段色带（手机端列表的做法）。 */
+.library__list .song-row {
+  border-radius: 0;
+}
+
+.library__list .song-row + .song-row {
+  border-top: 1px solid var(--border);
+}
+
+.library__hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
-/* 卡片右上角的「⋯」：默认隐形，悬停才出现，免得整页都是按钮。 */
+/* 卡内小网格：歌单 / 专辑 / 歌手共用。 */
+.library__mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 12px;
+}
+
+.library__mini-grid--round {
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+}
+
+/* 区段卡本身是浅玻璃，里面的卡片要更实一点才分得出来。 */
+.library .card {
+  background: var(--glass-strong);
+}
+
+/* hover 只做轻微抬升，整页不超过 3px。 */
+.library .card:hover {
+  transform: translateY(-2px);
+}
+
+.library__sub + .library__sub {
+  margin-top: 16px;
+}
+
+.library__sub-title {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.library__empty {
+  padding: 22px 8px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--text-tertiary);
+}
+
+.library__empty-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 卡片右上角的「更多」：白卡圆片，悬停或聚焦时才出现。 */
 .library-tile {
   position: relative;
 }
 
 .library-tile__more {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 14px;
+  right: 14px;
   width: 26px;
   height: 26px;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
+  color: var(--text);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.16s ease, color 0.16s ease;
 }
 
 .library-tile:hover .library-tile__more,
@@ -57,8 +390,7 @@
 }
 
 .library-tile__more:hover {
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
+  color: var(--accent);
 }
 
 .library__field {
@@ -69,9 +401,11 @@
   color: var(--text-secondary);
 }
 
+/* base.css 的 .text-input 还引用着已删除的旧令牌，这里补上白卡底。 */
 .library__field .text-input {
   width: 100%;
   flex: none;
+  background: var(--glass-strong);
 }
 
 .library__dialog-text {
@@ -80,10 +414,15 @@
   line-height: 1.7;
 }
 
-/* 最近播放：列数比 SongList 少一列专辑，多一列播放次数。 */
+/* 最近播放：比 SongList 少一列专辑，多一列播放次数。 */
 .library-recent {
   display: flex;
   flex-direction: column;
+}
+
+.library-recent.is-scroll {
+  max-height: 360px;
+  overflow-y: auto;
 }
 
 .library-recent__row {
@@ -91,17 +430,22 @@
   grid-template-columns: 34px minmax(0, 1fr) minmax(120px, 220px) 90px 64px;
   align-items: center;
   gap: 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
+  padding: 12px;
   font-size: 13px;
+  transition: background 0.14s ease;
 }
 
+.library-recent__row + .library-recent__row {
+  border-top: 1px solid var(--border);
+}
+
+/* 行悬停要比卡片本身更实，否则在浅玻璃上看不出变化。 */
 .library-recent__row:hover {
-  background: var(--bg-hover);
+  background: var(--glass-strong);
 }
 
 .library-recent__row.is-current {
-  background: var(--bg-active);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -114,7 +458,7 @@
 .library-recent__title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
 }
 
@@ -134,32 +478,61 @@
 
 /* --- 每日推荐 ---------------------------------------------------------- */
 
+/* 玻璃横幅 + 右上角一团强调色光晕，构成「液态」的那层透光。 */
 .daily__banner {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 22px;
-  margin-bottom: 18px;
-  border: 1px solid var(--border);
+  gap: 18px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--accent-soft), var(--bg-elevated) 58%);
-  box-shadow: var(--shadow-soft);
+  background: linear-gradient(135deg, var(--accent-soft), transparent 62%), var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+  overflow: hidden;
+}
+
+.daily__banner::after {
+  content: '';
+  position: absolute;
+  top: -96px;
+  right: -56px;
+  width: 232px;
+  height: 232px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  filter: blur(64px);
+  opacity: 0.32;
+  pointer-events: none;
 }
 
 .daily__headline {
+  position: relative;
+  z-index: 1;
   min-width: 0;
 }
 
 .daily__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
 .daily__title {
-  margin: 4px 0 2px;
-  font-size: 24px;
-  font-weight: 650;
+  margin: 6px 0 3px;
+  font-size: 26px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .daily__hint {
@@ -167,28 +540,56 @@
   color: var(--text-secondary);
 }
 
-/* --- 私人 FM ----------------------------------------------------------- */
+.daily__banner .button {
+  position: relative;
+  z-index: 1;
+}
+
+/* 列表白卡：区段头和行列表共用同一块底。 */
+.daily__panel,
+.cloud__list {
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.daily__panel .song-row {
+  border-radius: 0;
+}
+
+.daily__panel .song-row + .song-row {
+  border-top: 1px solid var(--border);
+}
+
+/* --- 私人漫游 ---------------------------------------------------------- */
 
 .fm {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 480px;
-  padding: 40px 24px;
+  min-height: 460px;
+  padding: 40px 28px;
   border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-soft);
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 
-/* 封面放大后模糊成背景；用负 inset 让模糊边缘留在裁切区外。 */
+/* 封面放大后模糊成背景；负 inset 让模糊边缘留在裁切区外。 */
 .fm__backdrop {
   position: absolute;
   inset: -80px;
   background-position: center;
   background-size: cover;
-  filter: blur(60px) saturate(1.5);
-  opacity: 0.35;
+  filter: blur(60px) saturate(1.6);
+  opacity: 0.32;
   pointer-events: none;
 }
 
@@ -204,19 +605,19 @@
 }
 
 .fm__art {
-  width: 240px;
-  height: 240px;
+  width: 232px;
+  height: 232px;
   border-radius: var(--radius-lg);
   object-fit: cover;
-  background: var(--bg-hover);
-  box-shadow: var(--shadow);
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .fm__art--empty {
   display: grid;
   place-items: center;
   color: var(--text-tertiary);
-  font-size: 56px;
 }
 
 .fm__meta {
@@ -226,7 +627,7 @@
 
 .fm__title {
   font-size: 22px;
-  font-weight: 650;
+  font-weight: 680;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -241,46 +642,56 @@
 .fm__controls {
   display: flex;
   align-items: center;
-  gap: 22px;
-  margin-top: 6px;
+  gap: 18px;
+  margin-top: 8px;
 }
 
 .fm__control {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--bg);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
   color: var(--text-secondary);
-  font-size: 18px;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+  transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
 .fm__control:hover {
   color: var(--accent);
+  box-shadow: var(--glass-shadow);
 }
 
 .fm__control:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
 
 .fm__control--primary {
-  width: 62px;
-  height: 62px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 22px;
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
 }
 
 .fm__control--primary:hover {
-  background: #d63a3a;
-  color: #fff;
+  color: var(--text-on-accent);
+  filter: brightness(1.06);
 }
 
 .fm__queue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 /* --- 音乐云盘 ---------------------------------------------------------- */
@@ -292,27 +703,36 @@
   margin-left: auto;
 }
 
+/* 容量：整条也是白卡，进度填充走强调渐变。 */
 .cloud__quota {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 14px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
 }
 
 .cloud__bar {
   flex: none;
-  width: 240px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--border-strong);
+  width: 220px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
   overflow: hidden;
 }
 
 .cloud__bar-fill {
   height: 100%;
-  border-radius: 3px;
-  background: var(--accent);
-  transition: width 0.2s ease;
+  border-radius: var(--radius-pill);
+  background: var(--accent-gradient);
+  transition: width 0.25s ease;
 }
 
 .cloud__hint {
@@ -330,17 +750,21 @@
   grid-template-columns: 34px minmax(0, 1fr) minmax(110px, 200px) 90px 60px 48px;
   align-items: center;
   gap: 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
+  padding: 12px;
   font-size: 13px;
+  transition: background 0.14s ease;
+}
+
+.cloud__row + .cloud__row {
+  border-top: 1px solid var(--border);
 }
 
 .cloud__row:hover {
-  background: var(--bg-hover);
+  background: var(--glass-weak);
 }
 
 .cloud__row.is-current {
-  background: var(--bg-active);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -357,7 +781,7 @@
 .cloud__title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
 }
 
@@ -389,11 +813,82 @@
 .cloud__foot {
   display: flex;
   justify-content: center;
-  padding: 16px 0 4px;
+  padding: 18px 0 4px;
 }
 
 .cloud__dialog-text {
   margin: 0;
   font-size: 13px;
   line-height: 1.7;
+}
+
+/* --- 液态毛玻璃按钮（放在最后，同优先级的组件规则由这里收口）---------- */
+
+/*
+ * 四个页面的动作按钮统一质感：半透明底 + 背景模糊 + 1px 亮边 + 柔和阴影，
+ * hover 抬亮。主按钮保留强调渐变作填充，外形仍是同一套玻璃。
+ */
+.glass-btn {
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.glass-btn:hover {
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow);
+}
+
+.button--primary.glass-btn,
+.button--primary.glass-btn:hover {
+  background: var(--accent-gradient);
+  border-color: var(--glass-border);
+  color: var(--text-on-accent);
+}
+
+.button--primary.glass-btn:hover {
+  filter: brightness(1.06);
+  box-shadow: var(--glass-shadow);
+}
+
+/* 圆钮（更多 / 播放 / 删除）也补上同样的描边，避免只剩一个实心块。 */
+.library__round,
+.library-tile__more,
+.fm__control {
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+.library__round--primary,
+.fm__control--primary {
+  border-color: var(--glass-border);
+}
+
+/*
+ * SongList 里的播放 / 喜欢 / 更多按钮由组件自己渲染，改不到 className，
+ * 只能按页作用域补玻璃 —— 只影响用到 SongList 的每日推荐与我的音乐。
+ */
+.daily__panel .song-row__play,
+.daily__panel .song-row .icon-button,
+.library__list .song-row__play,
+.library__list .song-row .icon-button,
+.cloud__row .song-row__play {
+  background: var(--glass-weak);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.daily__panel .song-row__play:hover,
+.daily__panel .song-row .icon-button:hover,
+.library__list .song-row__play:hover,
+.library__list .song-row .icon-button:hover,
+.cloud__row .song-row__play:hover {
+  background: var(--glass-strong);
+  color: var(--accent);
+  box-shadow: var(--glass-shadow);
 }

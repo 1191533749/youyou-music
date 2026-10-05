@@ -9,6 +9,7 @@ import { artistLine, call, formatBytes, formatDuration, usePlayerStore } from '.
 import { usePaged } from '../lib/hooks'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
+import { IconPause, IconPlay, IconRepeat, IconTrash } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import type { CloudSongDTO } from '@shared/ipc'
 import type { TrackDTO } from '@shared/types'
@@ -45,6 +46,18 @@ export default function Cloud(): JSX.Element {
     if (!item.track) return
     const index = playableTracks.findIndex((track) => track.id === item.track?.id)
     void player.playTracks(playableTracks, index < 0 ? 0 : index)
+  }
+
+  /**
+   * 整表播放：让主进程随机起播（点具体某一行仍按那一行开始）。
+   * store 的 playTracks 还没暴露 randomStart，这里直接走通道；状态变化由
+   * player:state 广播回 store。
+   */
+  const playAll = (): void => {
+    if (playableTracks.length === 0) return
+    void call('player:playTracks', { tracks: playableTracks, startIndex: 0, randomStart: true }).catch(
+      () => undefined
+    )
   }
 
   const labelOf = (item: CloudSongDTO): string =>
@@ -96,19 +109,21 @@ export default function Cloud(): JSX.Element {
         <div className="cloud__actions">
           <button
             type="button"
-            className="button"
+            className="button icon-label glass-btn"
             disabled={paged.loading || paged.loadingMore}
             onClick={paged.reset}
           >
-            ⟳ 刷新
+            <IconRepeat size={15} />
+            刷新
           </button>
           <button
             type="button"
-            className="button button--primary"
+            className="button button--primary icon-label glass-btn"
             disabled={playableTracks.length === 0}
-            onClick={() => void player.playTracks(playableTracks, 0)}
+            onClick={playAll}
           >
-            ▶ 播放全部
+            <IconPlay size={14} />
+            播放全部
           </button>
         </div>
       </div>
@@ -128,12 +143,12 @@ export default function Cloud(): JSX.Element {
       {error ? <div className="page__error">{error}</div> : null}
 
       {paged.loading ? (
-        <div className="placeholder">正在读取云盘…</div>
+        <div className="placeholder">正在读取云盘</div>
       ) : paged.error ? (
         <div className="placeholder">
           <div className="placeholder__title">云盘加载失败</div>
           <div>{paged.error}</div>
-          <button type="button" className="button" onClick={paged.reset}>
+          <button type="button" className="button glass-btn" onClick={paged.reset}>
             重试
           </button>
         </div>
@@ -162,12 +177,13 @@ export default function Cloud(): JSX.Element {
                   <div className="cloud__title">
                     <button
                       type="button"
-                      className="song-row__play"
-                      title={track ? '播放' : '不可播放'}
+                      className="song-row__play glass-btn"
+                      title={track ? (current ? '正在播放' : '播放') : '不可播放'}
+                      aria-label={track ? (current ? '正在播放' : '播放') : '不可播放'}
                       disabled={!track}
                       onClick={() => play(item)}
                     >
-                      {current ? '♪' : '▶'}
+                      {current ? <IconPause size={14} /> : <IconPlay size={14} />}
                     </button>
                     <div style={{ minWidth: 0 }}>
                       <div className="song-row__name">{name}</div>
@@ -182,12 +198,13 @@ export default function Cloud(): JSX.Element {
                   <div className="cloud__cell">
                     <button
                       type="button"
-                      className="icon-button"
+                      className={`icon-button glass-btn${deleting === item.songId ? ' is-busy' : ''}`}
                       title="从云盘删除"
+                      aria-label="从云盘删除"
                       disabled={deleting === item.songId}
                       onClick={() => setPendingDelete(item)}
                     >
-                      {deleting === item.songId ? '…' : '🗑'}
+                      <IconTrash size={16} />
                     </button>
                   </div>
                 </div>
@@ -199,11 +216,11 @@ export default function Cloud(): JSX.Element {
             {paged.more ? (
               <button
                 type="button"
-                className="button"
+                className="button glass-btn"
                 disabled={paged.loadingMore}
                 onClick={paged.loadMore}
               >
-                {paged.loadingMore ? '正在加载…' : '加载更多'}
+                {paged.loadingMore ? '加载中' : '加载更多'}
               </button>
             ) : (
               <span className="cloud__hint">已经到底了</span>
@@ -223,12 +240,12 @@ export default function Cloud(): JSX.Element {
         width={380}
         footer={
           <>
-            <button type="button" className="button" onClick={() => setPendingDelete(undefined)}>
+            <button type="button" className="button glass-btn" onClick={() => setPendingDelete(undefined)}>
               取消
             </button>
             <button
               type="button"
-              className="button button--primary"
+              className="button button--primary glass-btn"
               onClick={() => {
                 const item = pendingDelete
                 setPendingDelete(undefined)

@@ -44,14 +44,24 @@ export class CacheStore {
 
   // MARK: - Audio
 
-  private key(trackID: number, level: QualityLevel): string {
-    return `${trackID}-${level}`
+  /**
+   * 缓存键：`<trackID>-<level>`（官方音源）或 `<trackID>-<level>-<音源>`（换源）。
+   *
+   * 换源文件必须与官方文件分开存：否则用户关掉「灰色歌曲解锁」后，
+   * 播放器仍会命中那个第三方缓存文件继续播放。
+   */
+  private key(trackID: number, level: QualityLevel, variant = 'netease'): string {
+    return variant === 'netease' ? `${trackID}-${level}` : `${trackID}-${level}-${variant}`
   }
 
   /** Returns the cached file for a track, refreshing its access time. */
-  async audioPath(trackID: number, level: QualityLevel): Promise<string | undefined> {
+  async audioPath(
+    trackID: number,
+    level: QualityLevel,
+    variant = 'netease'
+  ): Promise<string | undefined> {
     await this.scanOnce()
-    const key = this.key(trackID, level)
+    const key = this.key(trackID, level, variant)
     const entry = this.audioIndex.get(key)
     if (!entry) return undefined
     try {
@@ -77,11 +87,12 @@ export class CacheStore {
     trackID: number,
     level: QualityLevel,
     url: string,
-    extensionHint?: string
+    extensionHint?: string,
+    variant = 'netease'
   ): Promise<string | undefined> {
     await this.scanOnce()
-    const key = this.key(trackID, level)
-    const existing = await this.audioPath(trackID, level)
+    const key = this.key(trackID, level, variant)
+    const existing = await this.audioPath(trackID, level, variant)
     if (existing) return existing
 
     const extension = normaliseExtension(extensionHint)

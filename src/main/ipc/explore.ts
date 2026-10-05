@@ -4,14 +4,21 @@
  * list row can navigate to.
  */
 import { defineHandler } from './registry.js'
-import { toAlbumDTO, toArtistDTO, toPlaylistDTO, toPlaylistDetailDTO, toTracksDTO } from './mappers.js'
+import {
+  mappingContextFrom,
+  toAlbumDTO,
+  toArtistDTO,
+  toPlaylistDTO,
+  toPlaylistDetailDTO,
+  toTracksDTO
+} from './mappers.js'
 import { SearchType } from '../netease/api.js'
 import type { AppContext } from '../context.js'
 import type { ToplistDTO } from '@shared/ipc'
 import type { Track } from '../netease/models.js'
 
 function ctx(context: AppContext) {
-  return { isLoggedIn: context.client.isLoggedIn, vipType: 0 }
+  return mappingContextFrom(context)
 }
 
 /** Tracks that are unplayable are kept, but flagged — the UI greys them out. */
@@ -164,7 +171,12 @@ export function registerExploreHandlers(context: AppContext): void {
     }
   })
 
-  defineHandler('search:defaultKeyword', () => context.api.searchDefaultKeyword())
+  defineHandler('search:defaultKeyword', async () => {
+    const keyword = await context.api.searchDefaultKeyword()
+    // 热搜词是运营文案，可能自带表情符号；界面禁 emoji，所以在数据源头剥离，
+    // 而不是让每个消费页面各自过滤。
+    return keyword ? stripEmoji(keyword) : keyword
+  })
 
   // --- playlists ---
 
@@ -265,4 +277,18 @@ function extractRadarIDs(playlists: Array<{ id: number; name: string }>): number
     if (playlist.id > 0 && /RADAR|Radar/.test(playlist.name)) ids.push(playlist.id)
   }
   return ids.slice(0, 8)
+}
+
+/**
+ * 剥掉 emoji 与零宽/修饰符字符。只用于界面文案（热搜词、联想提示），
+ * 歌名、歌词这类用户内容原样保留。
+ */
+export function stripEmoji(text: string): string {
+  return text
+    .replace(
+      /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{2190}-\u{21FF}]/gu,
+      ''
+    )
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 }

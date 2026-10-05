@@ -28,6 +28,14 @@ import { useAsync, useDebounced } from '../lib/hooks'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
 import { useToast, type ToastKind } from '../components/Toast'
+import {
+  IconCheck,
+  IconMore,
+  IconMusic,
+  IconPlay,
+  IconPlus,
+  IconUser
+} from '../components/Icons'
 
 /** 网易云协议里「我喜欢的音乐」用 specialType 5 标记。 */
 const LIKED_PLAYLIST_TYPE = 5
@@ -76,10 +84,18 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
 
   const playAll = useCallback(() => {
     if (tracks.length === 0) return
-    // 灰掉的歌交给播放器跳过；按下「播放全部」就该立刻有声音。
+    // 以第一首可播曲目为起点；受限歌曲已由主进程自动换源，通常整张列表都可播，
+    // 万一全都不可播就退回第 0 首，交给播放器与主进程处理。
     const firstPlayable = tracks.findIndex((track) => track.playability === 'playable')
-    void player.playTracks(tracks, firstPlayable < 0 ? 0 : firstPlayable)
-  }, [player, tracks])
+    // 整表播放入口带 randomStart：由主进程随机起播（点具体某一行时不带）。
+    // 直接调通道是因为 store 的 playTracks 只转发 startIndex；setQueue 会广播
+    // player:state，所以播放器状态照常同步。
+    void call('player:playTracks', {
+      tracks,
+      startIndex: firstPlayable < 0 ? 0 : firstPlayable,
+      randomStart: true
+    })
+  }, [tracks])
 
   const appendAll = useCallback(() => {
     if (tracks.length === 0) return
@@ -172,7 +188,7 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
       { label: '播放全部', disabled: tracks.length === 0, onSelect: playAll },
       { label: '加入播放队列', disabled: tracks.length === 0, onSelect: appendAll }
     ]
-    if (isOwn) items.push({ label: '添加歌曲…', onSelect: () => setAddOpen(true) })
+    if (isOwn) items.push({ label: '添加歌曲', onSelect: () => setAddOpen(true) })
     if (!isLikedList && auth.loggedIn && detail) {
       items.push({
         label: detail.subscribed ? '取消收藏歌单' : '收藏歌单',
@@ -225,7 +241,9 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
           {coverUrl(detail.coverURL, 512) ? (
             <img src={coverUrl(detail.coverURL, 512)} alt="" />
           ) : (
-            <span className="card__placeholder">♪</span>
+            <span className="card__placeholder">
+              <IconMusic size={26} />
+            </span>
           )}
         </div>
 
@@ -239,7 +257,9 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
                 {detail.creator.avatarUrl ? (
                   <img src={detail.creator.avatarUrl} alt="" />
                 ) : (
-                  <span className="detail-creator__fallback">👤</span>
+                  <span className="detail-creator__fallback">
+                    <IconUser size={14} />
+                  </span>
                 )}
                 <span>{detail.creator.nickname}</span>
               </div>
@@ -261,37 +281,46 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
           <div className="hero__actions">
             <button
               type="button"
-              className="button button--primary"
+              className="button button--primary detail-btn"
               disabled={tracks.length === 0}
               onClick={playAll}
             >
-              ▶ 播放全部{tracks.length > 0 ? ` (${tracks.length})` : ''}
+              <IconPlay size={16} />
+              播放全部{tracks.length > 0 ? ` (${tracks.length})` : ''}
             </button>
             {!isLikedList && auth.loggedIn ? (
-              <button type="button" className="button" onClick={() => void toggleSubscribe()}>
-                {detail.subscribed ? '✓ 已收藏' : '+ 收藏'}
+              <button
+                type="button"
+                className="button detail-btn"
+                onClick={() => void toggleSubscribe()}
+              >
+                {detail.subscribed ? <IconCheck size={16} /> : <IconPlus size={16} />}
+                {detail.subscribed ? '已收藏' : '收藏'}
               </button>
             ) : null}
             {isOwn ? (
-              <button type="button" className="button" onClick={() => setAddOpen(true)}>
-                + 添加歌曲
+              <button type="button" className="button detail-btn" onClick={() => setAddOpen(true)}>
+                <IconPlus size={16} />
+                添加歌曲
               </button>
             ) : null}
             <button
               type="button"
-              className="button"
+              className="button detail-btn"
+              aria-label="更多操作"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect()
                 setMenuAt({ x: rect.left, y: rect.bottom + 4 })
               }}
             >
-              ⋯ 更多
+              <IconMore size={16} />
+              更多
             </button>
           </div>
         </div>
       </section>
 
-      <section className="detail-section">
+      <section className="detail-section detail-panel">
         <div className="section__header">
           <h2 className="section__title">歌曲列表</h2>
           <span className="section__more">{tracks.length} 首</span>
@@ -370,7 +399,7 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
 }
 
 /**
- * 「添加歌曲」对话框：站内搜索 → 勾选 → playlist:manipulateTracks。
+ * 「添加歌曲」对话框：站内搜索、勾选，最后写入 playlist:manipulateTracks。
  * 自己新建的歌单常常是空的，没有这个入口就只能去别处找歌。
  */
 function AddTracksDialog({
@@ -457,20 +486,21 @@ function AddTracksDialog({
             disabled={selected.length === 0 || saving}
             onClick={() => void submit()}
           >
-            {saving ? '添加中…' : `添加 ${selected.length} 首`}
+            {saving ? '添加中' : `添加 ${selected.length} 首`}
           </button>
         </>
       }
     >
       <input
         className="text-input detail-pick__input"
-        placeholder="搜索歌名、歌手或专辑…"
+        placeholder="搜索歌名、歌手或专辑"
+        aria-label="搜索要添加的歌曲"
         value={keywords}
         autoFocus
         onChange={(event) => setKeywords(event.target.value)}
       />
       <div className="detail-pick">
-        {searching ? <div className="detail-pick__hint">搜索中…</div> : null}
+        {searching ? <div className="detail-pick__hint">搜索中</div> : null}
         {!searching && !keywords.trim() ? (
           <div className="detail-pick__hint">输入关键词开始搜索</div>
         ) : null}
@@ -489,7 +519,9 @@ function AddTracksDialog({
               title={already ? '已在歌单中' : track.name}
               onClick={() => toggle(track)}
             >
-              <span className="detail-pick__check">{already ? '✓' : checked ? '☑' : '☐'}</span>
+              <span className={`detail-pick__box${checked || already ? ' is-on' : ''}`} aria-hidden="true">
+                {checked || already ? <IconCheck size={13} /> : null}
+              </span>
               <span className="detail-pick__name">
                 {track.name}
                 <span className="song-row__sub"> {artistLine(track)}</span>
