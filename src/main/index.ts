@@ -22,6 +22,7 @@ import { contextRef, sendEvent, assertAllChannelsRegistered } from './ipc/regist
 import { registerAuthHandlers } from './ipc/auth.js'
 import { registerPlayerHandlers } from './ipc/player.js'
 import { registerUpdateHandlers } from './ipc/update.js'
+import { cleanUpdateCache } from './update/service.js'
 import { registerLibraryHandlers } from './ipc/library.js'
 import { registerExploreHandlers } from './ipc/explore.js'
 import { registerAppHandlers } from './ipc/app.js'
@@ -417,6 +418,8 @@ async function bootstrap(): Promise<void> {
   registerExploreHandlers(context)
   registerAppHandlers(context)
   registerUpdateHandlers()
+  // 上次更新可能留下下载缓存；启动时顺手清掉（失败也无所谓）。
+  void cleanUpdateCache()
 
   player.on('state', (snapshot: PlayerSnapshot) => {
     sendEvent(context, 'player:state', snapshot)
