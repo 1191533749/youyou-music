@@ -33,7 +33,10 @@ import {
   IconCompass,
   IconHome,
   IconLibrary,
+  IconMaximize,
+  IconMinimize,
   IconRadio,
+  IconRestore,
   IconSearch,
   IconSettings,
   IconUser,
@@ -137,37 +140,30 @@ function Shell(): JSX.Element {
     <>
       <Backdrop />
       {updatePrompt}
-      <div className="app">
-        {/* 品牌行直接坐在渐变背景上（不套玻璃面板），
-            导航与账号/设置收进下方玻璃卡片，视觉上「悠悠音乐」融进主背景。 */}
-        <aside className="sidebar">
-          <div className="sidebar__brand">
-            <LogoMark size={38} />
-            <div>
-              <div className="sidebar__brand-name">悠悠音乐</div>
-              <div className="sidebar__brand-sub">小鱼の音乐</div>
-            </div>
-          </div>
+      <div className="app-root">
+        <TitleBar />
+        <div className="app">
+          {/* 品牌移到顶部标题栏；侧栏只保留导航与账号。 */}
+          <aside className="sidebar">
+            <div className="sidebar__panel glass">
+              <nav className="sidebar__nav">
+                {NAV_ITEMS.map(({ name, label, Icon }) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`sidebar__link${navigation.route.name === name ? ' is-active' : ''}`}
+                    onClick={() => navigation.push({ name } as never)}
+                  >
+                    <Icon size={18} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </nav>
 
-          <div className="sidebar__panel glass">
-            <nav className="sidebar__nav">
-              {NAV_ITEMS.map(({ name, label, Icon }) => (
+              <div className="sidebar__footer">
                 <button
-                  key={name}
                   type="button"
-                  className={`sidebar__link${navigation.route.name === name ? ' is-active' : ''}`}
-                  onClick={() => navigation.push({ name } as never)}
-                >
-                  <Icon size={18} />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </nav>
-
-            <div className="sidebar__footer">
-              <button
-                type="button"
-                className={`sidebar__link${navigation.route.name === 'settings' ? ' is-active' : ''}`}
+                  className={`sidebar__link${navigation.route.name === 'settings' ? ' is-active' : ''}`}
                 onClick={() => navigation.push({ name: 'settings' })}
               >
                 <IconSettings size={18} />
@@ -203,13 +199,49 @@ function Shell(): JSX.Element {
               </button>
             </div>
           ) : null}
-          <TopSearch />
+          {navigation.route.name !== 'settings' ? <TopSearch /> : null}
           <PageRouter authLoggedIn={auth.loggedIn} />
         </main>
 
         <PlayerBar />
+        </div>
       </div>
     </>
+  )
+}
+
+/** 顶部标题栏：无边框窗口自绘，品牌在左、窗口控制按钮在右，背景透明与整体统一。 */
+function TitleBar(): JSX.Element {
+  const [maximized, setMaximized] = useState(false)
+
+  useEffect(() => {
+    void call('window:isMaximized').then(setMaximized).catch(() => undefined)
+    return onEvent('window:maximized', (payload) => setMaximized(payload.maximized))
+  }, [])
+
+  return (
+    <div className="titlebar">
+      <div className="titlebar__brand">
+        <LogoMark size={22} />
+        <span className="titlebar__name">悠悠音乐</span>
+      </div>
+      <div className="titlebar__controls">
+        <button type="button" className="titlebar__btn" aria-label="最小化" onClick={() => void call('window:minimize')}>
+          <IconMinimize size={15} />
+        </button>
+        <button
+          type="button"
+          className="titlebar__btn"
+          aria-label={maximized ? '还原' : '最大化'}
+          onClick={() => void call('window:toggleMaximize').then(setMaximized)}
+        >
+          {maximized ? <IconRestore size={14} /> : <IconMaximize size={14} />}
+        </button>
+        <button type="button" className="titlebar__btn titlebar__btn--close" aria-label="关闭" onClick={() => void call('window:close')}>
+          <IconClose size={15} />
+        </button>
+      </div>
+    </div>
   )
 }
 

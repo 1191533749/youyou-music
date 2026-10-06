@@ -158,6 +158,27 @@ export function registerAppHandlers(context: AppContext): void {
     window.setFullScreen(fullscreen)
     return window.isFullScreen()
   })
+
+  defineHandler('window:minimize', async () => {
+    context.mainWindow()?.minimize()
+  })
+
+  defineHandler('window:toggleMaximize', async () => {
+    const window = context.mainWindow()
+    if (!window || window.isDestroyed()) return false
+    if (window.isMaximized()) window.unmaximize()
+    else window.maximize()
+    return window.isMaximized()
+  })
+
+  defineHandler('window:isMaximized', async () => {
+    const window = context.mainWindow()
+    return !!window && !window.isDestroyed() && window.isMaximized()
+  })
+
+  defineHandler('window:close', async () => {
+    context.mainWindow()?.close()
+  })
 }
 
 function resolveMpvPath(): string | undefined {

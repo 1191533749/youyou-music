@@ -310,6 +310,24 @@
   border-top: 1px solid var(--border);
 }
 
+/*
+ * 歌名那一列要能吃掉剩余宽度：SongList 的标题格是 flex，只有让它 flex: 1
+ * 才会撑满整列、在列的末端出省略号，而不是被圆形播放键挤成一条缝。
+ */
+.library__list .song-row__title {
+  gap: 10px;
+}
+
+.library__list .song-row__title > div,
+.library-recent__title > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.library__list .song-row__name {
+  padding-right: 2px;
+}
+
 .library__hint {
   display: flex;
   align-items: center;
@@ -458,8 +476,7 @@
 .library-recent__title {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-width: 0;
+  gap: 9px;  min-width: 0;
 }
 
 .library-recent__album {

@@ -4,11 +4,15 @@
  * 布局沿用 macOS 版底部条的分工：左侧是封面与曲目信息（点封面进播放页），
  * 中间是传输控件与进度，右侧是音质、队列与音量。
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { usePlayerStore, repeatLabel } from '../store/player'
 import { useNavigation } from '../store/navigation'
+import { useAuthStore } from '../store/auth'
+import { call } from '../lib/ipc'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
 import {
+  IconHeart,
+  IconHeartFilled,
   IconMore,
   IconMusic,
   IconNext,
@@ -38,7 +42,37 @@ const QUALITY_LABELS: Record<string, string> = {
 export default function PlayerBar(): JSX.Element {
   const player = usePlayerStore()
   const navigation = useNavigation()
+  const auth = useAuthStore()
   const { state, current } = player
+
+  const [liked, setLiked] = useState(false)
+  const trackId = current?.id
+
+  useEffect(() => {
+    if (!auth.loggedIn || trackId === undefined) {
+      setLiked(false)
+      return
+    }
+    let cancelled = false
+    void call('library:overview')
+      .then((overview) => {
+        if (!cancelled) setLiked(overview.likedTrackIDs.includes(trackId))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [auth.loggedIn, trackId])
+
+  const toggleLike = (): void => {
+    if (!auth.loggedIn || !current) {
+      navigation.push({ name: 'library' })
+      return
+    }
+    const next = !liked
+    setLiked(next)
+    void call('library:likeTrack', { id: current.id, like: next }).catch(() => setLiked(!next))
+  }
 
   const progress = useMemo(() => {
     if (state.duration <= 0) return 0
@@ -72,6 +106,15 @@ export default function PlayerBar(): JSX.Element {
             {current ? artistLine(current) : '选择一首歌开始'}
           </div>
         </div>
+        <button
+          type="button"
+          className={`player-bar__like${liked ? ' is-active' : ''}`}
+          title={liked ? '取消喜欢' : '喜欢'}
+          aria-label={liked ? '取消喜欢' : '喜欢'}
+          onClick={toggleLike}
+        >
+          {liked ? <IconHeartFilled size={18} /> : <IconHeart size={18} />}
+        </button>
       </div>
 
       <div className="player-bar__center">
@@ -112,14 +155,16 @@ export default function PlayerBar(): JSX.Element {
           >
             <IconNext size={18} />
           </button>
+          {/* 顺序/随机：单个点击切换按钮，带文字明确当前状态。 */}
           <button
             type="button"
-            className={`icon-button${state.shuffle ? ' is-active' : ''}`}
-            title={state.shuffle ? '随机播放：开' : '随机播放：关'}
-            aria-label="随机播放"
+            className={`player-bar__mode-toggle${state.shuffle ? ' is-active' : ''}`}
+            title={state.shuffle ? '随机播放' : '顺序播放'}
+            aria-label={state.shuffle ? '随机播放' : '顺序播放'}
             onClick={() => void player.setShuffle(!state.shuffle)}
           >
-            <IconShuffle size={18} />
+            <IconShuffle size={15} />
+            {state.shuffle ? '随机播放' : '顺序播放'}
           </button>
         </div>
         <div className="player-bar__progress">

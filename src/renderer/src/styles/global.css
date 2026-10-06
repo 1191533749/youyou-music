@@ -76,7 +76,7 @@
 }
 
 :root[data-theme='dark'] .backdrop__blob {
-  opacity: 0.36;
+  opacity: 0.08;
 }
 
 :root[data-theme='dark'] .backdrop__grain {
@@ -288,18 +288,76 @@ img {
   color: var(--text-secondary);
 }
 
-.app {
+.app-root {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* --- 顶部标题栏 -------------------------------------------------------- */
+
+/* 无边框窗口自绘标题栏：透明底，直接透出背后的渐变光斑，与内容区浑然一体。 */
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 12px 0 16px;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.titlebar__name {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.titlebar__controls {
+  display: flex;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+.titlebar__btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.titlebar__btn--close:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.app {
+  position: relative;
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
   grid-template-rows: 1fr var(--player-height);
   grid-template-areas:
     'sidebar content'
     'player player';
-  height: 100%;
   gap: 12px;
-  padding: 12px;
+  padding: 0 12px 12px;
 }
 
 /* --- 侧栏 -------------------------------------------------------------- */
@@ -450,7 +508,7 @@ img {
   background: var(--glass-weak);
   backdrop-filter: blur(var(--blur)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
   box-shadow: var(--glass-shadow-soft);
 }
@@ -837,6 +895,47 @@ img {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.player-bar__like {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  flex: none;
+}
+
+.player-bar__like:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.player-bar__like.is-active {
+  color: var(--accent);
+}
+
+.player-bar__mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.player-bar__mode-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.player-bar__mode-toggle.is-active {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .player-bar__center {

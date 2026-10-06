@@ -348,8 +348,12 @@ export default function Library(): JSX.Element {
       </section>
 
       <div className="library__grid">
-        {/* 喜欢的音乐 —— 一行歌单封面 + 播放按钮，需要时展开完整列表。 */}
-        <section className="library__card">
+        {/*
+          喜欢的音乐 —— 一行歌单封面 + 播放按钮，需要时展开完整列表。
+          展开时这张卡拉满整行：半宽卡里 SongList 的六列会把歌名那一列挤到只剩
+          几像素，看起来就像被圆形播放键盖住。
+        */}
+        <section className={`library__card${expanded.liked ? ' library__card--wide' : ''}`}>
           <header className="library__card-head">
             <span className="library__card-icon">
               <IconHeartFilled size={18} />

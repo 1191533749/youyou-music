@@ -6,13 +6,14 @@
  * translation, and drags the window with `-webkit-app-region` so no IPC is
  * needed for movement.
  *
- * 本轮两件事：
- *   1. 窗口只罩住内容 —— ResizeObserver 量内容高度（当前行 + 翻译），防抖后上报
+ * 窗口职责：
+ *   1. 只罩住内容 —— ResizeObserver 量内容高度（当前行 + 翻译），防抖后上报
  *      lyrics:desktopResize，主进程据此收紧窗口，透明区域不再盖住桌面。
- *   2. 点击穿透 —— 鼠标不在歌词上时上报 lyrics:desktopClickThrough(through: true)，
- *      主进程用 setIgnoreMouseEvents(forward: true) 既穿透又能继续收到 mousemove。
- *
- * 特效由设置页选择（settings.desktopLyricsEffect），本窗口只负责渲染，不再提供切换按钮。
+ *   2. 点击穿透 —— 鼠标不在歌词/按钮上时上报 lyrics:desktopClickThrough(true)，
+ *      主进程用 setIgnoreMouseEvents(forward: true) 既穿透又保留 mousemove。
+ *   3. 悬停歌词时浮出两个小按钮：锁定/解锁与切换特效，两者都写进 settings 持久化。
+ *   4. 锁定态由 settings.desktopLyricsLocked 驱动，只关掉拖动（CSS 的 app-region），
+ *      命中测试与穿透逻辑不受影响。
  */
 import {
   useCallback,
@@ -25,12 +26,14 @@ import {
 } from 'react'
 import { call, onEvent } from '../lib/ipc'
 import {
+  DESKTOP_LYRICS_EFFECTS,
   type DesktopLyricsEffect,
   type LyricsDTO,
   type PlayerStateDTO,
   type SettingsDTO
 } from '@shared/types'
 import { activeIndexOf } from '../lib/lyricsUtils'
+import { IconLayers } from '../components/Icons'
 import './desktop-lyrics.css'
 
 /** 窗口里真正用到的四个设置项，避免把整份 SettingsDTO 塞进 state。 */
@@ -52,6 +55,13 @@ function toPreferences(settings: SettingsDTO): LyricPreferences {
   }
 }
 
+const EFFECT_LABELS: Record<DesktopLyricsEffect, string> = {
+  classic: '经典',
+  gradient: '渐变',
+  neon: '霓虹',
+  karaoke: '逐字'
+}
+
 /**
  * 单个词的演唱进度 0–1：未唱到为 0，唱完为 1，正在唱按时间线性插值。
  * 比整行插值更贴近逐字卡拉OK（整行进度会平均掉词与词之间的停顿）。
@@ -62,10 +72,39 @@ function wordFill(word: { start: number; duration: number }, position: number): 
   return Math.min(1, (position - word.start) / word.duration)
 }
 
+/**
+ * 锁形图标：Icons.tsx 里没有锁，按同一套描边风格在本文件里自绘
+ * （Icons.tsx 不在本任务的写权限内）。
+ */
+function LockGlyph({ open }: { open: boolean }): JSX.Element {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="5" y="11" width="14" height="9" rx="2.5" />
+      <path d={open ? 'M8.5 11V8.2a3.5 3.5 0 0 1 6.7-1.4' : 'M8.5 11V8.2a3.5 3.5 0 0 1 7 0V11'} />
+    </svg>
+  )
+}
+
 /** 内容变化到上报窗口尺寸之间的防抖；换行时高度会连跳几次，攒一下再发。 */
 const RESIZE_DEBOUNCE_MS = 80
 /** 命中测试的节流；50ms 足以跟手，又不会让 mousemove 变成 IPC 洪流。 */
 const HIT_TEST_THROTTLE_MS = 50
+
+/** 元素（或其祖先）是否匹配某个选择器；null 目标一律不匹配。 */
+function matches(target: Element | null, selector: string): boolean {
+  return target !== null && target.closest(selector) !== null
+}
 
 export default function DesktopLyrics(): JSX.Element {
   const [player, setPlayer] = useState<PlayerStateDTO | undefined>()
@@ -76,6 +115,8 @@ export default function DesktopLyrics(): JSX.Element {
     effect: 'classic',
     locked: false
   })
+  /** 鼠标是否压在歌词/按钮上，决定两个小按钮的显隐。 */
+  const [hovering, setHovering] = useState(false)
 
   useEffect(() => {
     void call('player:state').then(setPlayer).catch(() => undefined)
@@ -151,8 +192,11 @@ export default function DesktopLyrics(): JSX.Element {
 
   // --- 点击穿透 -----------------------------------------------------------
 
-  // 主进程默认不忽略鼠标事件；只有确认鼠标离开歌词后才切成穿透。
-  const throughRef = useRef(false)
+  // 初始值未知：渲染进程查不到主进程当前的 setIgnoreMouseEvents 状态，所以第一次
+  // 命中测试无论如何都上报一次，避免两端不一致导致「鼠标压在歌词上却仍然穿透」——
+  // 那样既点不到按钮、也拖动不了窗口（锁定后再解锁最容易暴露这个问题）。
+  const throughRef = useRef<boolean | undefined>(undefined)
+  const hoveringRef = useRef(false)
   const lastHitTestRef = useRef(0)
   const trailingHitTestRef = useRef<number | undefined>(undefined)
 
@@ -162,14 +206,28 @@ export default function DesktopLyrics(): JSX.Element {
     void call('lyrics:desktopClickThrough', { through: next }).catch(() => undefined)
   }, [])
 
+  const applyHitTest = useCallback(
+    (interactive: boolean) => {
+      setThrough(!interactive)
+      if (interactive !== hoveringRef.current) {
+        hoveringRef.current = interactive
+        setHovering(interactive)
+      }
+    },
+    [setThrough]
+  )
+
   const handleMouseMove = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      const target = event.target
-      const interactive = target instanceof Element && target.closest('.desktop-lyrics__drag') !== null
+      const target = event.target instanceof Element ? event.target : null
+      const overText = matches(target, '.desktop-lyrics__drag')
+      // 按钮也要算可交互：否则从歌词移向按钮的一瞬间窗口就穿透了，点不中。
+      const interactive = overText || matches(target, '.desktop-lyrics__controls')
+
       const now = Date.now()
       if (now - lastHitTestRef.current >= HIT_TEST_THROTTLE_MS) {
         lastHitTestRef.current = now
-        setThrough(!interactive)
+        applyHitTest(interactive)
         return
       }
       // 节流窗口内的最后一次移动仍要生效：否则快速划出文字区会停在「可交互」上，
@@ -178,11 +236,20 @@ export default function DesktopLyrics(): JSX.Element {
       trailingHitTestRef.current = window.setTimeout(() => {
         trailingHitTestRef.current = undefined
         lastHitTestRef.current = Date.now()
-        setThrough(!interactive)
+        applyHitTest(interactive)
       }, HIT_TEST_THROTTLE_MS)
     },
-    [setThrough]
+    [applyHitTest]
   )
+
+  // 鼠标整体离开窗口：收起按钮并恢复穿透。
+  const handleMouseLeave = useCallback(() => {
+    setThrough(true)
+    if (hoveringRef.current) {
+      hoveringRef.current = false
+      setHovering(false)
+    }
+  }, [setThrough])
 
   useEffect(
     () => () => {
@@ -191,6 +258,34 @@ export default function DesktopLyrics(): JSX.Element {
     []
   )
 
+  // 解锁后确认窗口处于可交互状态：即使没有新的 mousemove（例如在设置页解锁），
+  // 只要鼠标还在歌词上，拖动就该马上恢复。
+  useEffect(() => {
+    if (locked || !hoveringRef.current) return
+    throughRef.current = false
+    void call('lyrics:desktopClickThrough', { through: false }).catch(() => undefined)
+  }, [locked])
+
+  // --- 悬停时出现的两个按钮 -----------------------------------------------
+
+  const toggleLock = useCallback(() => {
+    const next = !locked
+    // 先切本地状态，按钮与拖动限制立刻响应；随后把选择写进 settings。
+    setPreferences((view) => ({ ...view, locked: next }))
+    void call('settings:update', { desktopLyricsLocked: next })
+      .then((saved) => setPreferences(toPreferences(saved)))
+      .catch(() => undefined)
+  }, [locked])
+
+  const cycleEffect = useCallback(() => {
+    const index = DESKTOP_LYRICS_EFFECTS.indexOf(effect)
+    const nextEffect = DESKTOP_LYRICS_EFFECTS[(index + 1) % DESKTOP_LYRICS_EFFECTS.length]
+    setPreferences((view) => ({ ...view, effect: nextEffect }))
+    void call('settings:update', { desktopLyricsEffect: nextEffect })
+      .then((saved) => setPreferences(toPreferences(saved)))
+      .catch(() => undefined)
+  }, [effect])
+
   const position = player?.position ?? 0
   // 只有逐字特效才拆词；其余特效（以及没有逐字时间轴的行）都整行显示。
   const words = effect === 'karaoke' ? current?.words : undefined
@@ -198,12 +293,15 @@ export default function DesktopLyrics(): JSX.Element {
 
   return (
     <div
-      // desktop-lyrics--locked 只关掉拖拽（见 desktop-lyrics.css），
-      // 命中测试与点击穿透照旧，锁定后鼠标划过歌词仍能正常交互。
-      className={`desktop-lyrics desktop-lyrics--${effect}${locked ? ' desktop-lyrics--locked' : ''}`}
+      // locked / unlocked 两个修饰类各自带一条 app-region 规则（见 desktop-lyrics.css）：
+      // 拖拽属性始终由样式表显式给出，解锁后不会因为「覆盖被移除」而回不到可拖动。
+      className={`desktop-lyrics desktop-lyrics--${effect} desktop-lyrics--${
+        locked ? 'locked' : 'unlocked'
+      }${hovering ? ' desktop-lyrics--hover' : ''}`}
       style={{ fontSize, opacity }}
-      title={locked ? '已锁定 · 右键任务栏图标可关闭' : '拖动可移动 · 右键任务栏图标可关闭'}
+      title={locked ? '已锁定 · 悬停歌词可解锁' : '拖动可移动 · 悬停歌词可锁定或换特效'}
       onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       <div ref={dragRef} className="desktop-lyrics__drag">
         <div className="desktop-lyrics__line">
@@ -225,6 +323,27 @@ export default function DesktopLyrics(): JSX.Element {
             {current.translation}
           </div>
         ) : null}
+      </div>
+
+      <div className="desktop-lyrics__controls">
+        <button
+          type="button"
+          className={`desktop-lyrics__control${locked ? ' is-active' : ''}`}
+          onClick={toggleLock}
+          title={locked ? '解锁（可以拖动）' : '锁定（禁止拖动）'}
+          aria-label={locked ? '解锁桌面歌词' : '锁定桌面歌词'}
+        >
+          <LockGlyph open={!locked} />
+        </button>
+        <button
+          type="button"
+          className="desktop-lyrics__control"
+          onClick={cycleEffect}
+          title={`歌词特效：${EFFECT_LABELS[effect]}（点击切换）`}
+          aria-label={`歌词特效：${EFFECT_LABELS[effect]}，点击切换下一种`}
+        >
+          <IconLayers size={14} />
+        </button>
       </div>
     </div>
   )

@@ -27,6 +27,45 @@
   border-radius: 50%;
 }
 
+/* --- 返回入口（详情页 hero 左上角）---------------------------------------
+   与播放页的返回保持一致：只留文字、不带箭头符号，材质沿用同一套玻璃按钮。
+   hero 在 base.css 里是 flex 容器，这里补 position 让按钮能贴左上角；
+   绝对定位不参与 flex 布局，封面与文字的位置不受影响。 */
+.detail-hero {
+  position: relative;
+}
+
+.detail-back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  padding: 7px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+  box-shadow: var(--glass-shadow-soft);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+    box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.detail-back:hover {
+  background-color: var(--glass-strong);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: var(--glass-shadow);
+  transform: translateY(-1px);
+}
+
+.detail-back:active {
+  transform: translateY(0) scale(0.98);
+}
+
 /* 歌单 / 专辑 / 歌手的曲目列表容器：手机上那种白玻璃面板，
    18px 内边距 + --radius-lg 圆角 + 柔和阴影，模糊与 hero 用同一档 --blur。 */
 .detail-panel {

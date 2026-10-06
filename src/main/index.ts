@@ -101,6 +101,8 @@ function createMainWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 620,
     show: false,
+    // 无边框：顶部标题栏由渲染进程自绘，背景与整体渐变统一（用户要求）。
+    frame: false,
     backgroundColor: '#eef2fb',
     title: '悠悠音乐',
     autoHideMenuBar: true,
@@ -116,6 +118,9 @@ function createMainWindow(): BrowserWindow {
   })
 
   window.once('ready-to-show', () => window.show())
+
+  window.on('maximize', () => sendEvent(contextRef.value, 'window:maximized', { maximized: true }))
+  window.on('unmaximize', () => sendEvent(contextRef.value, 'window:maximized', { maximized: false }))
 
   window.on('close', (event) => {
     const settings = contextRef.value?.settings.current
@@ -457,6 +462,8 @@ async function bootstrap(): Promise<void> {
   bootLog('bootstrap finished')
   if (settings.current.tray) createTray(context)
   media.sync()
+  // Ctrl+方向键（上一曲/下一曲/音量）始终注册，与媒体键开关无关。
+  media.registerAppKeys()
   if (settings.current.showDesktopLyrics) applyLyricsVisibility(true)
 
   // Volume from the previous session is applied once mpv is up; a missing mpv

@@ -240,6 +240,10 @@ export interface IPCContract {
   /** 切换主窗口的系统全屏（任务栏也被覆盖的真全屏）。 */
   'window:toggleFullScreen': { request: void; response: boolean }
   'window:setFullScreen': { request: { fullscreen: boolean }; response: boolean }
+  'window:minimize': { request: void; response: void }
+  'window:toggleMaximize': { request: void; response: boolean }
+  'window:isMaximized': { request: void; response: boolean }
+  'window:close': { request: void; response: void }
 
   // --- update ---
   /** 检查更新：有新版本时带 version/notes；否则 version 为空。 */
@@ -282,6 +286,7 @@ export interface IPCEvents {
   'app:error': { message: string }
   'app:navigate': { route: string }
   'settings:changed': SettingsDTO
+  'window:maximized': { maximized: boolean }
 }
 
 export type IPCEventName = keyof IPCEvents
@@ -355,6 +360,10 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'lyrics:desktopClickThrough',
   'window:toggleFullScreen',
   'window:setFullScreen',
+  'window:minimize',
+  'window:toggleMaximize',
+  'window:isMaximized',
+  'window:close',
   'update:check',
   'update:install',
   'settings:get',
@@ -376,5 +385,6 @@ export const IPC_EVENT_NAMES: IPCEventName[] = [
   'lyrics:line',
   'app:error',
   'app:navigate',
-  'settings:changed'
+  'settings:changed',
+  'window:maximized'
 ]

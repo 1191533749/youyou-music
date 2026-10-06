@@ -147,14 +147,62 @@
   gap: 12px;
 }
 
-.home-skeleton {
+/* 日期条：最近七天，只有今天可点（日推只提供当天一份）。 */
+.home-dates {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
-.home-skeleton__row {
-  height: 64px;
+.home-date {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-weak);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-date.is-today {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+
+/* 单块板块的加载 / 空态：比整页 placeholder 轻，四块各自独立。 */
+.home-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.home-empty {
+  padding: 22px 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* 横滑一排：排行榜卡片与热门歌手头像。 */
+.home-rail {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.home-rail > * {
+  flex: none;
+  width: 208px;
+}
+
+.home-rail--artists > * {
+  width: 132px;
 }
 
 .home-hint {
@@ -535,18 +583,6 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.np-header__tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--glass-weak);
-  border: 1px solid var(--glass-border);
-  font-size: 11px;
   color: var(--text-secondary);
 }
 

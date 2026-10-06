@@ -317,6 +317,34 @@ export function IconExpand(props: IconProps): JSX.Element {
   )
 }
 
+/** 最小化：底边横线。 */
+export function IconMinimize(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <path d="M5 12h14" />
+    </Base>
+  )
+}
+
+/** 最大化：单方框。 */
+export function IconMaximize(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <rect x="5" y="5" width="14" height="14" rx="1.5" />
+    </Base>
+  )
+}
+
+/** 还原：双叠方框。 */
+export function IconRestore(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <rect x="6" y="8.5" width="10.5" height="10.5" rx="1.5" />
+      <path d="M9.5 8.5V7A1.5 1.5 0 0 1 11 5.5h5A1.5 1.5 0 0 1 17.5 7v5a1.5 1.5 0 0 1-1.5 1.5H14" />
+    </Base>
+  )
+}
+
 export function IconDisc(props: IconProps): JSX.Element {
   return (
     <Base {...props}>

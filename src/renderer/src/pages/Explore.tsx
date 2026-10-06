@@ -30,7 +30,9 @@ const CATEGORIES = [
   '爵士',
   '古典',
   '影视原声',
-  'ACG'
+  'ACG',
+  '听书',
+  '儿童'
 ]
 
 const ORDERS: Array<{ value: string; label: string }> = [
@@ -166,7 +168,14 @@ export default function Explore(): JSX.Element {
       ) : (
         <PlaylistGrid
           list={list}
-          emptyMessage={tab === 'top' ? '这个分类暂时没有歌单' : '暂时没有精品歌单'}
+          // 「最新」在部分分类下接口确实返回空，文案说清楚是「没有最新的」而不是「坏了」。
+          emptyMessage={
+            tab === 'top'
+              ? order === 'new'
+                ? '该分类暂无最新歌单'
+                : '这个分类暂时没有歌单'
+              : '暂时没有精品歌单'
+          }
           onOpen={(playlist) => navigation.push({ name: 'playlist', id: playlist.id, title: playlist.name })}
         />
       )}

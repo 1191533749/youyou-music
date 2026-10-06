@@ -25,6 +25,14 @@ const MEDIA_KEYS: Array<[string, string]> = [
   ['MediaStop', 'stop']
 ]
 
+/** 应用级快捷键：始终生效，与 mediaKeys 设置无关。 */
+const APP_KEYS: Array<[string, string]> = [
+  ['Control+Left', 'previous'],
+  ['Control+Right', 'next'],
+  ['Control+Up', 'volumeUp'],
+  ['Control+Down', 'volumeDown']
+]
+
 export class MediaKeys {
   private registered = false
   private lastToolbarSignature = ''
@@ -49,6 +57,27 @@ export class MediaKeys {
       }
     }
     this.registered = true
+  }
+
+  /** 应用快捷键（Ctrl+方向键）在构造后立即注册，与 mediaKeys 开关无关。 */
+  registerAppKeys(): void {
+    for (const [accelerator, action] of APP_KEYS) {
+      try {
+        globalShortcut.register(accelerator, () => this.dispatch(action))
+      } catch (cause) {
+        this.deps.log?.(`快捷键 ${accelerator} 注册异常: ${describe(cause)}`)
+      }
+    }
+  }
+
+  unregisterAppKeys(): void {
+    for (const [accelerator] of APP_KEYS) {
+      try {
+        globalShortcut.unregister(accelerator)
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   private unregister(): void {
@@ -76,6 +105,12 @@ export class MediaKeys {
         break
       case 'stop':
         void player.pause()
+        break
+      case 'volumeUp':
+        void player.setVolume(Math.min(150, Math.round((player.snapshot().volume + 5) / 5) * 5))
+        break
+      case 'volumeDown':
+        void player.setVolume(Math.max(0, Math.round((player.snapshot().volume - 5) / 5) * 5))
         break
       default:
         break
@@ -125,6 +160,7 @@ export class MediaKeys {
 
   dispose(): void {
     this.unregister()
+    this.unregisterAppKeys()
   }
 }
 

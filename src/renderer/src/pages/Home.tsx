@@ -1,253 +1,248 @@
 /**
- * 首页。
+ * 首页（内容首页排布）。
  *
- * 五个板块由一次 `home:feed` 取齐，而不是每块各发一次请求：主进程在同一次
- * 调用里判定登录态，各板块才不会出现「有的已登录、有的还是游客」的错位。
- * 未登录时日推和推荐歌单本来就是空的（主进程直接返回空数组），这里用公共
- * 推荐兜底并给出去登录的入口，而不是留一片空白。
+ * 从上到下依次是：问候语、每日推荐（日期条 + 播放全部 + 封面网格）、
+ * 猜你喜欢或推荐歌单、排行榜（横滑卡片，带前三预览）、热门歌手（圆形头像横滑）、
+ * 精品歌单。
+ *
+ * 四个板块各用一条通道（`home:dailySongs` / `home:feed` / `explore:topArtists` /
+ * `explore:highQuality`），各自带 loading、错误重试与空态 —— 一条挂了不会让整页
+ * 跟着白掉。调用一律走 contract 里的 call()，渲染进程不碰网络。
  */
 import { useMemo, type ReactNode } from 'react'
 import {
   ArtCard,
-  SongList,
-  artistLine,
   call,
   coverUrl,
   formatDate,
   formatDuration,
   formatPlayCount,
+  useAuthStore,
   useNavigation,
   usePlayerStore
 } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
-import { IconCalendar, IconDisc, IconLayers, IconLibrary, IconMusic, IconPlay, IconRadio } from '../components/Icons'
+import {
+  IconCalendar,
+  IconDiamond,
+  IconDisc,
+  IconLayers,
+  IconMusic,
+  IconPlay,
+  IconUser
+} from '../components/Icons'
 import type { HomeFeedDTO, ToplistDTO } from '@shared/ipc'
+import type { ArtistSummaryDTO, PlaylistSummaryDTO, TrackDTO } from '@shared/types'
 
 /** 图标组件的公共形状：尺寸与类名可传，颜色跟随 currentColor。 */
 type IconComponent = (props: { size?: number; className?: string }) => JSX.Element
 
+/** 精品歌单板块一次取的数量。 */
+const QUALITY_LIMIT = 12
+/** 热门歌手一排取的数量。 */
+const ARTIST_LIMIT = 14
+
 export default function Home(): JSX.Element {
   const navigation = useNavigation()
   const player = usePlayerStore()
+  const auth = useAuthStore()
+
+  // 每块各自取数：某一块失败只影响它自己，重试也只重试那一块。
   const feed = useAsync<HomeFeedDTO>(() => call('home:feed'), [])
-  const data = feed.data
+  const daily = useAsync<TrackDTO[]>(
+    () => (auth.loggedIn ? call('home:dailySongs') : Promise.resolve([])),
+    [auth.loggedIn]
+  )
+  const artists = useAsync<ArtistSummaryDTO[]>(
+    () => call('explore:topArtists', { limit: ARTIST_LIMIT }),
+    []
+  )
+  const quality = useAsync<PlaylistSummaryDTO[]>(
+    () =>
+      call('explore:highQuality', { category: '全部', limit: QUALITY_LIMIT }).then(
+        (page) => page.items
+      ),
+    []
+  )
 
-  // 未登录时 recommendResource 返回空，personalizedPlaylists 是无需登录的
-  // 公共推荐 —— 两者合并成同一个「推荐歌单」板块，界面不会空一块。
+  const feedData = feed.data
+  // 未登录时 recommendResource 为空，personalizedPlaylists 是不需要账号的公共推荐。
   const recommend = useMemo(() => {
-    if (!data) return []
-    return data.recommendPlaylists.length > 0 ? data.recommendPlaylists : data.personalizedPlaylists
-  }, [data])
+    if (!feedData) return []
+    return feedData.recommendPlaylists.length > 0
+      ? feedData.recommendPlaylists
+      : feedData.personalizedPlaylists
+  }, [feedData])
 
-  const publicFallback = !!data && data.recommendPlaylists.length === 0
-
-  const empty =
-    !!data &&
-    data.dailySongs.length === 0 &&
-    recommend.length === 0 &&
-    data.radarPlaylists.length === 0 &&
-    data.newSongs.length === 0 &&
-    data.toplists.length === 0
-
-  const currentTrackID = player.current?.id
+  const dailySongs = daily.data ?? []
+  const nickname = auth.profile?.nickname
+  const title = auth.loggedIn && nickname ? `${greeting()}，${nickname}` : '猜你喜欢'
 
   return (
     <div className="page home">
       <header className="page__header">
         <div>
-          <h1 className="page__title">{greeting()}</h1>
-          <div className="page__subtitle">推荐每天更新，今天是 {formatDate(Date.now())}</div>
+          <h1 className="page__title">{title}</h1>
+          <div className="page__subtitle">
+            {auth.loggedIn
+              ? `推荐每天更新，今天是 ${formatDate(Date.now())}`
+              : '登录后可以拿到属于你的每日推荐'}
+          </div>
         </div>
       </header>
 
-      {feed.error ? (
-        <div className="page__error home__error">
-          <span>首页加载失败：{feed.error}</span>
-          <button type="button" className="button" onClick={feed.reload}>
-            重试
-          </button>
-        </div>
-      ) : null}
-
-      {feed.loading ? (
-        <div className="home-skeleton" aria-busy="true">
-          <div className="loading-state">
-            <IconDisc size={16} className="spin" />
-            <span>正在加载首页内容…</span>
-          </div>
-          <div className="skeleton home-skeleton__row" />
-          <div className="skeleton home-skeleton__row" />
-          <div className="skeleton home-skeleton__row" />
-        </div>
-      ) : null}
-
-      {!feed.loading && data && empty ? (
-        <>
-          <div className="placeholder">
-            <div className="placeholder__title">
-              {publicFallback ? '登录后即可查看推荐内容' : '暂时没有可展示的内容'}
-            </div>
-            <div>
-              {publicFallback
-                ? '每日推荐、雷达歌单和个性化推荐都需要账号；也可能是网络暂时不可用，可以点上方「重试」。'
-                : '可以点上方「重试」重新获取，或者稍后再来。'}
-            </div>
-          </div>
-          {publicFallback ? (
-            <div className="home-hint">
-              <div className="home-hint__title">还没有登录网易云账号</div>
-              <div className="home-hint__body">扫码登录后，这里会换成你自己的每日推荐与雷达歌单。</div>
+      <section className="page__section">
+        <SectionHeader
+          icon={IconCalendar}
+          title="每日推荐"
+          hint={`今天 ${formatDate(Date.now())}`}
+          action={
+            dailySongs.length > 0 ? (
               <button
                 type="button"
-                className="button button--primary"
-                onClick={() => navigation.push({ name: 'library' })}
+                className="button section-action"
+                onClick={() => void player.playTracks(dailySongs, 0, { randomStart: true })}
               >
-                去登录
+                <IconPlay size={14} />
+                播放全部
               </button>
+            ) : null
+          }
+        />
+        <DateStrip />
+        {!auth.loggedIn && !auth.loading ? (
+          <div className="home-hint">
+            <div className="home-hint__title">登录后就能看到每日推荐</div>
+            <div className="home-hint__body">扫码登录后，这里会按你的口味每天更新 30 首。</div>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => navigation.push({ name: 'library' })}
+            >
+              去登录
+            </button>
+          </div>
+        ) : (
+          <SectionShell
+            loading={auth.loading || daily.loading}
+            error={daily.error}
+            onRetry={daily.reload}
+            isEmpty={dailySongs.length === 0}
+            emptyMessage="今天的每日推荐还没生成，过一会儿再来看看"
+          >
+            <div className="grid grid--playlists">
+              {dailySongs.map((track, index) => (
+                <ArtCard
+                  key={`${track.id}-${index}`}
+                  title={track.name}
+                  subtitle={track.artists.map((artist) => artist.name).join(' / ')}
+                  imageUrl={coverUrl(track.album.picUrl, 320)}
+                  badge={formatDuration(track.durationMS / 1000)}
+                  onClick={() => void player.playTracks(dailySongs, index)}
+                />
+              ))}
             </div>
-          ) : null}
-        </>
-      ) : null}
+          </SectionShell>
+        )}
+      </section>
 
-      {!feed.loading && data && !empty ? (
-        <>
-          <section className="page__section">
-            <SectionHeader
-              icon={IconCalendar}
-              title="每日推荐"
-              hint="根据你的口味生成"
-              // 整表播放入口：随机起播，别总是从第一首开始。
-              action={
-                data.dailySongs.length > 0 ? (
-                  <button
-                    type="button"
-                    className="button section-action"
-                    onClick={() => void player.playTracks(data.dailySongs, 0, { randomStart: true })}
-                  >
-                    <IconPlay size={14} />
-                    播放全部
-                  </button>
-                ) : null
-              }
-            />
-            {data.dailySongs.length > 0 ? (
-              <SongList
-                tracks={data.dailySongs}
-                currentTrackID={currentTrackID}
-                onPlay={(index) => void player.playTracks(data.dailySongs, index)}
+      <section className="page__section">
+        <SectionHeader
+          icon={IconMusic}
+          title={feedData && feedData.recommendPlaylists.length > 0 ? '推荐歌单' : '猜你喜欢'}
+          hint="根据你的口味挑的"
+        />
+        <SectionShell
+          loading={feed.loading}
+          error={feed.error}
+          onRetry={feed.reload}
+          isEmpty={recommend.length === 0}
+          emptyMessage="暂时没有推荐歌单，稍后再试"
+        >
+          <div className="grid grid--playlists">
+            {recommend.map((playlist) => (
+              <PlaylistCard
+                key={playlist.id}
+                playlist={playlist}
+                onOpen={() =>
+                  navigation.push({ name: 'playlist', id: playlist.id, title: playlist.name })
+                }
               />
-            ) : (
-              <div className="home-hint">
-                <div className="home-hint__title">
-                  {publicFallback ? '登录后即可查看每日推荐' : '今天的每日推荐还没准备好'}
-                </div>
-                <div className="home-hint__body">
-                  {publicFallback
-                    ? '每日推荐和雷达歌单登录后才有；如果已经登录，点上方「重试」重新获取。'
-                    : '稍后点上方「重试」重新获取。'}
-                </div>
-                {publicFallback ? (
-                  <button
-                    type="button"
-                    className="button button--primary"
-                    onClick={() => navigation.push({ name: 'library' })}
-                  >
-                    去登录
-                  </button>
-                ) : null}
-              </div>
-            )}
-          </section>
+            ))}
+          </div>
+        </SectionShell>
+      </section>
 
-          <section className="page__section">
-            <SectionHeader
-              icon={IconLibrary}
-              title="推荐歌单"
-              hint={publicFallback ? '未登录，展示公共推荐' : '为你精选'}
-            />
-            {recommend.length > 0 ? (
-              <div className="grid grid--playlists">
-                {recommend.map((playlist) => (
-                  <ArtCard
-                    key={playlist.id}
-                    title={playlist.name}
-                    subtitle={playlist.copywriter ?? playlist.creator?.nickname}
-                    imageUrl={coverUrl(playlist.coverURL, 320)}
-                    badge={playlist.playCount > 0 ? formatPlayCount(playlist.playCount) : undefined}
-                    onClick={() =>
-                      navigation.push({ name: 'playlist', id: playlist.id, title: playlist.name })
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="page__empty">暂时拿不到推荐歌单</div>
-            )}
-          </section>
+      <section className="page__section">
+        <SectionHeader icon={IconLayers} title="排行榜" hint="实时更新的热门榜单" />
+        <SectionShell
+          loading={feed.loading}
+          error={feed.error}
+          onRetry={feed.reload}
+          isEmpty={(feedData?.toplists.length ?? 0) === 0}
+          emptyMessage="暂时拿不到排行榜"
+        >
+          <div className="home-rail">
+            {(feedData?.toplists ?? []).slice(0, 12).map((toplist) => (
+              <ToplistCard
+                key={toplist.id}
+                toplist={toplist}
+                onOpen={() =>
+                  navigation.push({ name: 'toplist', id: toplist.id, title: toplist.name })
+                }
+              />
+            ))}
+          </div>
+        </SectionShell>
+      </section>
 
-          {data.radarPlaylists.length > 0 ? (
-            <section className="page__section">
-              <SectionHeader icon={IconRadio} title="雷达歌单" hint="按你的收听口味每天更新" />
-              <div className="grid grid--playlists">
-                {data.radarPlaylists.map((playlist) => (
-                  <ArtCard
-                    key={playlist.id}
-                    title={playlist.name}
-                    subtitle="私人雷达"
-                    imageUrl={coverUrl(playlist.coverURL, 320)}
-                    onClick={() =>
-                      navigation.push({ name: 'playlist', id: playlist.id, title: playlist.name })
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
+      <section className="page__section">
+        <SectionHeader icon={IconUser} title="热门歌手" hint="大家都在听" />
+        <SectionShell
+          loading={artists.loading}
+          error={artists.error}
+          onRetry={artists.reload}
+          isEmpty={(artists.data?.length ?? 0) === 0}
+          emptyMessage="暂时没有热门歌手"
+        >
+          <div className="home-rail home-rail--artists">
+            {/* 接口对 limit 不敏感（会一次返回 100 位），按自己声明的数量截断，别白渲染 DOM。 */}
+            {(artists.data ?? []).slice(0, ARTIST_LIMIT).map((artist) => (
+              <ArtCard
+                key={artist.id}
+                title={artist.name}
+                subtitle={`${artist.musicSize} 首`}
+                imageUrl={coverUrl(artist.picUrl, 240)}
+                round
+                onClick={() => navigation.push({ name: 'artist', id: artist.id, title: artist.name })}
+              />
+            ))}
+          </div>
+        </SectionShell>
+      </section>
 
-          <section className="page__section">
-            <SectionHeader icon={IconMusic} title="新歌速递" hint="点击封面即可播放" />
-            {data.newSongs.length > 0 ? (
-              <div className="grid grid--playlists">
-                {data.newSongs.map((track, index) => (
-                  <ArtCard
-                    key={`${track.id}-${index}`}
-                    title={track.name}
-                    subtitle={artistLine(track)}
-                    imageUrl={coverUrl(track.album.picUrl, 240)}
-                    badge={formatDuration(track.durationMS / 1000)}
-                    onClick={() => void player.playTracks(data.newSongs, index)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="page__empty">暂时没有新歌</div>
-            )}
-          </section>
-
-          <section className="page__section">
-            <SectionHeader
-              icon={IconLayers}
-              title="排行榜"
-              hint={data.toplists.length > 0 ? `共 ${data.toplists.length} 个榜单` : undefined}
-            />
-            {data.toplists.length > 0 ? (
-              <div className="grid grid--albums">
-                {data.toplists.slice(0, 8).map((toplist) => (
-                  <ToplistCard
-                    key={toplist.id}
-                    toplist={toplist}
-                    onOpen={() =>
-                      navigation.push({ name: 'toplist', id: toplist.id, title: toplist.name })
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="page__empty">暂时拿不到排行榜</div>
-            )}
-          </section>
-        </>
-      ) : null}
+      <section className="page__section">
+        <SectionHeader icon={IconDiamond} title="精品歌单" hint="百万收藏精选" />
+        <SectionShell
+          loading={quality.loading}
+          error={quality.error}
+          onRetry={quality.reload}
+          isEmpty={(quality.data?.length ?? 0) === 0}
+          emptyMessage="暂时没有精品歌单"
+        >
+          <div className="grid grid--playlists">
+            {(quality.data ?? []).map((playlist) => (
+              <PlaylistCard
+                key={playlist.id}
+                playlist={playlist}
+                onOpen={() =>
+                  navigation.push({ name: 'playlist', id: playlist.id, title: playlist.name })
+                }
+              />
+            ))}
+          </div>
+        </SectionShell>
+      </section>
     </div>
   )
 }
@@ -272,6 +267,99 @@ function SectionHeader({
       </h2>
       {action ?? (hint ? <span className="section__more">{hint}</span> : null)}
     </div>
+  )
+}
+
+/**
+ * 板块的三态外壳：加载中转圈、失败给重试、空给文案，其余情况渲染内容。
+ * 四个板块共用，避免每个板块各写一遍三态。
+ */
+function SectionShell({
+  loading,
+  error,
+  onRetry,
+  isEmpty,
+  emptyMessage,
+  children
+}: {
+  loading: boolean
+  error?: string
+  onRetry: () => void
+  isEmpty: boolean
+  emptyMessage: string
+  children: ReactNode
+}): JSX.Element {
+  if (loading) {
+    return (
+      <div className="home-state">
+        <IconDisc size={16} className="spin" />
+        <span>正在加载…</span>
+      </div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="page__error home__error">
+        <span>{error}</span>
+        <button type="button" className="button" onClick={onRetry}>
+          重试
+        </button>
+      </div>
+    )
+  }
+  if (isEmpty) {
+    return <div className="home-empty">{emptyMessage}</div>
+  }
+  return <>{children}</>
+}
+
+/**
+ * 日期条：最近七天，只有今天是「当前」。
+ *
+ * 日推接口只给当天的一份，所以历史日期不做成可点按钮 —— 点了也没有数据，
+ * 做成按钮反而像坏了。
+ */
+function DateStrip(): JSX.Element {
+  const days = useMemo(() => {
+    const list: Array<{ key: string; label: string; today: boolean }> = []
+    for (let back = 6; back >= 0; back -= 1) {
+      const date = new Date()
+      date.setDate(date.getDate() - back)
+      list.push({
+        key: formatDate(date.getTime()),
+        label: back === 0 ? '今天' : back === 1 ? '昨天' : `${date.getMonth() + 1}/${date.getDate()}`,
+        today: back === 0
+      })
+    }
+    return list
+  }, [])
+
+  return (
+    <div className="home-dates" title="每日推荐只提供当天的一份">
+      {days.map((day) => (
+        <span key={day.key} className={`home-date${day.today ? ' is-today' : ''}`}>
+          {day.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function PlaylistCard({
+  playlist,
+  onOpen
+}: {
+  playlist: PlaylistSummaryDTO
+  onOpen: () => void
+}): JSX.Element {
+  return (
+    <ArtCard
+      title={playlist.name}
+      subtitle={playlist.creator?.nickname ?? `${playlist.trackCount} 首`}
+      imageUrl={coverUrl(playlist.coverURL, 320)}
+      badge={playlist.playCount > 0 ? formatPlayCount(playlist.playCount) : undefined}
+      onClick={onOpen}
+    />
   )
 }
 

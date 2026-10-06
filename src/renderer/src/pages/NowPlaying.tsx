@@ -19,7 +19,6 @@ import {
   formatDuration,
   isEmptyLyrics,
   onEvent,
-  repeatLabel,
   useNavigation,
   usePlayerStore,
   wordProgress
@@ -73,6 +72,13 @@ const LYRIC_EFFECTS = [
 ] as const
 
 type LyricEffect = (typeof LYRIC_EFFECTS)[number]['value']
+
+/** 重复模式在界面上的说法（契约里的 repeatLabel 措辞不同，这里用「循环全部」）。 */
+const REPEAT_LABELS: Record<'off' | 'all' | 'one', string> = {
+  off: '顺序播放',
+  all: '循环全部',
+  one: '单曲循环'
+}
 
 /**
  * 波形条与星点的参数全部由下标算出，不用 Math.random：随机会让每次重渲染
@@ -374,16 +380,30 @@ export default function NowPlaying(): JSX.Element {
             {state.playing ? <IconPause size={14} /> : <IconPlay size={14} />}
             {state.playing ? '播放中' : current ? '已暂停' : '未在播放'}
           </span>
-          <span className="np-header__tag" title={repeatLabel(state.repeat)}>
-            {state.repeat === 'one' ? <IconRepeatOne size={14} /> : <IconRepeat size={14} />}
-            {repeatLabel(state.repeat)}
-          </span>
-          {state.shuffle ? (
-            <span className="np-header__tag">
-              <IconShuffle size={14} />
-              随机
-            </span>
-          ) : null}
+          {/* 顺序/随机：单个点击切换按钮，带文字说明当前状态（与播放条同一个模式）。 */}
+          <button
+            type="button"
+            className={`np-fs__tool${state.shuffle ? ' is-active' : ''}`}
+            title={state.shuffle ? '随机播放' : '顺序播放'}
+            aria-label={state.shuffle ? '随机播放' : '顺序播放'}
+            aria-pressed={state.shuffle}
+            onClick={() => void player.setShuffle(!state.shuffle)}
+          >
+            <IconShuffle size={15} />
+            {state.shuffle ? '随机播放' : '顺序播放'}
+          </button>
+          {/* 重复模式是独立的小按钮：循环全部 / 单曲循环 / 顺序播放。 */}
+          <button
+            type="button"
+            className={`np-fs__tool${state.repeat !== 'off' ? ' is-active' : ''}`}
+            title={REPEAT_LABELS[state.repeat]}
+            aria-label={REPEAT_LABELS[state.repeat]}
+            aria-pressed={state.repeat !== 'off'}
+            onClick={() => void player.cycleRepeat()}
+          >
+            {state.repeat === 'one' ? <IconRepeatOne size={15} /> : <IconRepeat size={15} />}
+            {REPEAT_LABELS[state.repeat]}
+          </button>
           <button
             type="button"
             className={`np-fs__tool${desktopLyricsOn ? ' is-active' : ''}`}

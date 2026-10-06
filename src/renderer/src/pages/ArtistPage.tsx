@@ -166,12 +166,15 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
       ) : null}
 
       <section
-        className="hero"
+        className="hero detail-hero"
         onContextMenu={(event) => {
           event.preventDefault()
           setMenuAt({ x: event.clientX, y: event.clientY })
         }}
       >
+        <button type="button" className="detail-back" onClick={() => navigation.back()}>
+          返回
+        </button>
         <div className="hero__art hero__art--round">
           <RemoteImage
             src={coverUrl(artist.picUrl, 512)}

@@ -279,11 +279,25 @@ export class NeteaseAPI {
 
   /** Sends an SMS verification code for phone-number login. */
   async sendSMSCode(phone: string, countryCode = '86'): Promise<void> {
-    await this.weapi('/sms/captcha/sent', {
-      ctcode: countryCode,
-      cellphone: phone,
-      secrete: 'music_middleuser_pclogin'
-    })
+    const payload = { ctcode: countryCode, cellphone: phone, secrete: 'music_middleuser_pclogin' }
+    // eapi 优先：手机验证码登录对风控敏感，eapi 是现行客户端走的通道，
+    // weapi 更易被判定为「存在安全风险」。仍保留 weapi 兜底。
+    try {
+      const json = await this.client.eapi('/sms/captcha/sent', payload)
+      NeteaseClient.unwrap(json, '/sms/captcha/sent')
+      return
+    } catch (cause) {
+      if (!(cause instanceof NeteaseAPIError) || cause.kind !== 'decoding') {
+        // eapi 返回了明确的业务错误（含「安全风险」），直接透出，不吞。
+        const json = await this.client.weapi('/sms/captcha/sent', payload).catch(() => undefined)
+        if (json !== undefined) {
+          NeteaseClient.unwrap(json, '/sms/captcha/sent')
+          return
+        }
+      }
+      // eapi 空响应/降级时再试 weapi。
+      await this.weapi('/sms/captcha/sent', payload)
+    }
   }
 
   /**
@@ -297,30 +311,37 @@ export class NeteaseAPI {
    * rejected code.
    */
   async loginCellphone(phone: string, captcha: string, countryCode = '86'): Promise<void> {
-    const response = await this.weapi(
-      '/w/login/cellphone',
-      {
-        type: '1',
-        https: 'true',
-        phone,
-        countrycode: countryCode,
-        captcha,
-        remember: 'true',
-        secureCaptcha: ''
-      },
-      { decoded: { allowNon200: true } }
-    )
+    const payload = {
+      type: '1',
+      https: 'true',
+      phone,
+      countrycode: countryCode,
+      captcha,
+      remember: 'true',
+      secureCaptcha: ''
+    }
+    // eapi 优先（现行客户端通道，风控更宽松），weapi 兜底；两者都拿到业务码时
+    // 透出服务器真实信息（「验证码错误」「存在安全风险」等），不吞。
+    let response = await this.client.eapi('/login/cellphone', payload).catch(() => undefined)
+    if (response === undefined) {
+      response = await this.client.weapiJSON('/w/login/cellphone', payload).catch(() => undefined)
+    }
+    if (response === undefined) {
+      throw new NeteaseAPIError('business', { code: -1, message: '登录接口无响应，请稍后重试或改用扫码登录' })
+    }
     const code = Number(response?.code ?? 0)
     if (code !== 200) {
-      throw new NeteaseAPIError('business', {
-        code,
-        message:
-          typeof response?.message === 'string'
-            ? response.message
-            : typeof response?.msg === 'string'
-              ? response.msg
-              : '登录失败，请重试'
-      })
+      let message =
+        typeof response?.message === 'string'
+          ? response.message
+          : typeof response?.msg === 'string'
+            ? response.msg
+            : '登录失败，请重试'
+      // 风控文案统一给更明确的指引。
+      if (/安全风险|risk/i.test(message)) {
+        message = '手机号登录触发网易云风控，请稍后重试，或改用扫码登录'
+      }
+      throw new NeteaseAPIError('business', { code, message })
     }
     if (!this.client.isLoggedIn) {
       throw new NeteaseAPIError('business', { code: -1, message: '登录未生效，请改用扫码登录' })
