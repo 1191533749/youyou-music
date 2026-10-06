@@ -142,6 +142,22 @@ export function registerAppHandlers(context: AppContext): void {
     // 渲染进程据此判断「鼠标悬在歌词上」时再切回可交互。
     window.setIgnoreMouseEvents(through, { forward: true })
   })
+
+  // --- window ---
+
+  defineHandler('window:toggleFullScreen', async () => {
+    const window = context.mainWindow()
+    if (!window || window.isDestroyed()) return false
+    window.setFullScreen(!window.isFullScreen())
+    return window.isFullScreen()
+  })
+
+  defineHandler('window:setFullScreen', async ({ fullscreen }) => {
+    const window = context.mainWindow()
+    if (!window || window.isDestroyed()) return false
+    window.setFullScreen(fullscreen)
+    return window.isFullScreen()
+  })
 }
 
 function resolveMpvPath(): string | undefined {

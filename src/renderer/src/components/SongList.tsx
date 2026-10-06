@@ -180,15 +180,20 @@ export function ArtCard({
   round?: boolean
   onClick?: () => void
 }): JSX.Element {
+  const [broken, setBroken] = useState(false)
+  // 换卡（列表复用同一组件实例）时重置破图标记，重新尝试加载。
+  useEffect(() => setBroken(false), [imageUrl])
+  const url = imageUrl?.replace(/^http:\/\//, 'https://')
+  const showFallback = !url || broken
   return (
     <button type="button" className="card" onClick={onClick} title={title}>
       <div className={`card__art${round ? ' card__art--round' : ''}`}>
-        {imageUrl ? (
-          <img src={imageUrl} alt="" loading="lazy" />
-        ) : (
+        {showFallback ? (
           <span className="card__placeholder">
             <IconMusic size={26} />
           </span>
+        ) : (
+          <img src={url} alt="" loading="lazy" onError={() => setBroken(true)} />
         )}
         {badge ? <span className="card__badge">{badge}</span> : null}
       </div>

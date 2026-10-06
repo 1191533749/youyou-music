@@ -108,6 +108,9 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
           out.desktopLyricsEffect = value as SettingsDTO['desktopLyricsEffect']
         }
         break
+      case 'desktopLyricsLocked':
+        if (typeof value === 'boolean') out.desktopLyricsLocked = value
+        break
       case 'cacheLimitMB':
         if (typeof value === 'number' && Number.isFinite(value)) {
           out.cacheLimitMB = Math.max(0, Math.round(value))

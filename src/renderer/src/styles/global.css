@@ -435,17 +435,17 @@ img {
 
 /* --- 顶部搜索条 -------------------------------------------------------- */
 
-/* 居中的胶囊搜索条：每页顶部悬浮，不再占满整行。 */
+/* 居中的胶囊搜索条：小巧精致，不占满整行。 */
 .top-search {
   position: sticky;
   top: 8px;
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 9px;
-  width: min(560px, 100%);
+  gap: 8px;
+  width: min(340px, 100%);
   margin: 0 auto 20px;
-  padding: 10px 18px;
+  padding: 7px 14px;
   color: var(--text-tertiary);
   background: var(--glass-weak);
   backdrop-filter: blur(var(--blur)) saturate(180%);
@@ -463,10 +463,11 @@ img {
 .top-search__input {
   flex: 1;
   min-width: 0;
-  padding: 8px 12px;
+  padding: 6px 8px;
   border: none;
   background: transparent;
   color: var(--text);
+  font-size: 13px;
 }
 
 .top-search__input::placeholder {

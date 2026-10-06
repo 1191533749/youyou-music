@@ -1012,7 +1012,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 6px 4px 40px;
+  /* 底部留出近半屏空白：否则最后几句没有可滚动的余量，永远滚不到视野中央。 */
+  padding: 6px 4px 42vh;
   scroll-behavior: smooth;
 }
 

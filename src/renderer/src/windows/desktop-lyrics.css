@@ -24,6 +24,17 @@
   --lyric-shadow: 0 2px 10px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.9);
 }
 
+/* --- 锁定：整条歌词不再能拖动 -------------------------------------------
+   drag 声明在 global.css 的 .desktop-lyrics 上（单类，权重 0,1,0），而本文件在打包
+   结果里排在 global.css 之前，同权重会被后者盖掉；所以这里用
+   .desktop-lyrics.desktop-lyrics--locked 双类（0,2,0）才压得住，并且子层再显式声明
+   一次，免得父层的 drag 区域透下来。
+   锁定只关拖拽：点击穿透由组件里的 mousemove 命中测试驱动，不受影响。 */
+.desktop-lyrics.desktop-lyrics--locked,
+.desktop-lyrics--locked .desktop-lyrics__drag {
+  -webkit-app-region: no-drag;
+}
+
 /* --- 经典：白字 + 投影（默认） --- */
 
 .desktop-lyrics--classic .desktop-lyrics__line {

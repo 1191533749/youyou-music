@@ -7,7 +7,7 @@
  * 关于 key：usePaged 的分页游标是在首次渲染时捕获 loadPage 的，而路由切换
  * 会复用同一个组件实例，所以外层用 key={id} 强制重建，换歌手时游标才不会串。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AlbumSummaryDTO, ArtistSummaryDTO, TrackDTO } from '@shared/types'
 import {
   call,
@@ -173,13 +173,15 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
         }}
       >
         <div className="hero__art hero__art--round">
-          {coverUrl(artist.picUrl, 512) ? (
-            <img src={coverUrl(artist.picUrl, 512)} alt="" />
-          ) : (
-            <span className="card__placeholder">
-              <IconMusic size={26} />
-            </span>
-          )}
+          <RemoteImage
+            src={coverUrl(artist.picUrl, 512)}
+            alt=""
+            fallback={
+              <span className="card__placeholder">
+                <IconMusic size={26} />
+              </span>
+            }
+          />
         </div>
 
         <div className="hero__body">
@@ -395,6 +397,33 @@ function DetailSkeleton(): JSX.Element {
       </div>
     </>
   )
+}
+
+/**
+ * 远程图片：没有地址或加载失败时退回占位内容，避免出现浏览器默认的破图图标。
+ *
+ * 与 PlaylistPage 里的同名组件是一份轻量副本：三个页面各自独立，不跨页 import，
+ * 免得一页的改动牵连到另一页。
+ */
+function RemoteImage({
+  src,
+  alt,
+  fallback
+}: {
+  src?: string
+  alt: string
+  fallback: ReactNode
+}): JSX.Element {
+  const [failed, setFailed] = useState(false)
+  // 网易云 CDN 对 http 资源会 301 到 https，渲染进程在混合内容策略下可能直接拦掉。
+  const url = src?.replace(/^http:\/\//, 'https://')
+
+  useEffect(() => {
+    setFailed(false)
+  }, [url])
+
+  if (!url || failed) return <>{fallback}</>
+  return <img src={url} alt={alt} onError={() => setFailed(true)} />
 }
 
 /** IPC 抛出的错误已经带有面向用户的中文消息，这里只兜底非 Error 的情况。 */

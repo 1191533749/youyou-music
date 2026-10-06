@@ -265,6 +265,12 @@ export default function Settings(): JSX.Element {
           checked={settings.showDesktopLyrics}
           onChange={(value) => void patch({ showDesktopLyrics: value })}
         />
+        <SettingSwitch
+          label="锁定歌词位置"
+          hint="锁定后桌面歌词不可拖动，避免误触移位"
+          checked={settings.desktopLyricsLocked}
+          onChange={(value) => void patch({ desktopLyricsLocked: value })}
+        />
         <div className="settings__row">
           <div className="settings__row-label">
             <span>歌词特效</span>
@@ -517,6 +523,8 @@ export default function Settings(): JSX.Element {
             {info?.node ?? '—'}
           </div>
           <div>{info?.mpv ?? '未检测到 mpv'}</div>
+          <div>开发者：小鱼</div>
+          <div>bug 反馈：3100878091@qq.com</div>
         </div>
       </section>
 

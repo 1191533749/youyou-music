@@ -3,11 +3,14 @@
  *
  * 「不喜欢」不是删除：主进程会返回一首替换曲目，我们原地把那一行换掉。行号
  * 保持不变，用户能立刻看出「换了一首」，而不是列表突然短了一截。
+ *
+ * 未登录时路由也会渲染本页，所以这里自己处理未登录态：给一张轻提示卡引导去
+ * 登录，而不是把整页让给二维码，也不去发注定会被拒的请求。
  */
 import { useMemo, useState } from 'react'
-import { SongList, call, usePlayerStore } from '../lib/contract'
+import { SongList, call, useAuthStore, useNavigation, usePlayerStore } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
-import { IconCalendar, IconPlay } from '../components/Icons'
+import { IconCalendar, IconPlay, IconUser } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import type { TrackDTO } from '@shared/types'
 
@@ -15,9 +18,16 @@ const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 
 export default function DailyPage(): JSX.Element {
   const player = usePlayerStore()
+  const auth = useAuthStore()
+  const navigation = useNavigation()
   const toast = useToast()
-  const daily = useAsync<TrackDTO[]>(() => call('home:dailySongs'), [])
   const [replacing, setReplacing] = useState<number | undefined>()
+
+  // 未登录时不请求：主进程只会回 needLogin，页面直接用提示卡引导登录。
+  const daily = useAsync<TrackDTO[]>(
+    () => (auth.loggedIn ? call('home:dailySongs') : Promise.resolve([])),
+    [auth.loggedIn]
+  )
 
   const tracks = daily.data ?? []
 
@@ -56,27 +66,58 @@ export default function DailyPage(): JSX.Element {
     }
   }
 
+  const banner = (
+    <div className="daily__banner">
+      <div className="daily__headline">
+        <div className="daily__date">
+          <IconCalendar size={15} />
+          {today}
+        </div>
+        <h1 className="daily__title">每日推荐</h1>
+        <div className="daily__hint">根据你的音乐口味 · 每天 6:00 更新</div>
+      </div>
+      <button
+        type="button"
+        className="button button--primary icon-label glass-btn"
+        disabled={tracks.length === 0}
+        onClick={playAll}
+      >
+        <IconPlay size={14} />
+        播放全部
+      </button>
+    </div>
+  )
+
+  // 登录态还没确认完之前先当作正常路径：已登录用户不该看到一闪而过的登录提示。
+  if (!auth.loading && !auth.loggedIn) {
+    return (
+      <div className="page">
+        {banner}
+        <div className="daily__gate">
+          <span className="daily__gate-icon">
+            <IconUser size={26} />
+          </span>
+          <div className="daily__gate-title">登录后解锁每日推荐</div>
+          <div className="daily__gate-hint">
+            登录网易云账号后，这里每天会按你的收听口味更新一批歌曲。
+          </div>
+          <button
+            type="button"
+            className="button button--primary icon-label glass-btn"
+            onClick={() => navigation.push({ name: 'library' })}
+          >
+            <IconUser size={15} />
+            去登录
+          </button>
+        </div>
+        {toast.node}
+      </div>
+    )
+  }
+
   return (
     <div className="page">
-      <div className="daily__banner">
-        <div className="daily__headline">
-          <div className="daily__date">
-            <IconCalendar size={15} />
-            {today}
-          </div>
-          <h1 className="daily__title">每日推荐</h1>
-          <div className="daily__hint">根据你的音乐口味 · 每天 6:00 更新</div>
-        </div>
-        <button
-          type="button"
-          className="button button--primary icon-label glass-btn"
-          disabled={tracks.length === 0}
-          onClick={playAll}
-        >
-          <IconPlay size={14} />
-          播放全部
-        </button>
-      </div>
+      {banner}
 
       {daily.loading ? (
         <div className="placeholder">正在获取今天的推荐</div>

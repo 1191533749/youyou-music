@@ -244,7 +244,8 @@ function PageRouter({ authLoggedIn }: { authLoggedIn: boolean }): JSX.Element {
     case 'artist':
       return <ArtistPage id={route.id} />
     case 'daily':
-      return authLoggedIn ? <DailyPage /> : <Login />
+      // 每日推荐不再整页显示二维码：未登录时页面内给轻提示，登录后直接是歌曲。
+      return <DailyPage />
     case 'fm':
       return <FM />
     case 'toplist':

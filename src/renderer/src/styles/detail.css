@@ -111,14 +111,19 @@
   object-fit: cover;
 }
 
+/* 头像加载失败（或没有头像）时的占位圆：昵称首字。 */
 .detail-creator__fallback {
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
+  flex: none;
   border-radius: 50%;
   background: var(--accent-soft);
   color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .detail-sub {

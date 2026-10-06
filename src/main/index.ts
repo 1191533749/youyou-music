@@ -242,6 +242,13 @@ function createTray(context: AppContext): void {
           checked: context.settings.current.showDesktopLyrics,
           click: (item) => toggleLyricsWindow(item.checked)
         },
+        {
+          label: '锁定歌词位置',
+          type: 'checkbox',
+          checked: context.settings.current.desktopLyricsLocked,
+          click: (item) =>
+            void context.settings.update({ desktopLyricsLocked: item.checked }).then(() => rebuild())
+        },
         { label: '显示主窗口', click: () => showMainWindow() },
         { type: 'separator' },
         {
@@ -257,6 +264,8 @@ function createTray(context: AppContext): void {
   rebuild()
   context.player.on('state', rebuild)
   tray.on('double-click', () => showMainWindow())
+  // 单击也恢复主窗口：托盘图标是最直接的恢复入口。
+  tray.on('click', () => showMainWindow())
 }
 
 function makeTrayIcon(): Electron.NativeImage {
@@ -712,7 +721,8 @@ app.whenReady().then(() => {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) showMainWindow()
+    // 任务栏图标单击激活：窗口被收进托盘时也恢复（用户抱怨过「单击没反应要双击」）。
+    showMainWindow()
   })
 })
 

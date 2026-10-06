@@ -308,6 +308,15 @@ export function IconLyrics(props: IconProps): JSX.Element {
   )
 }
 
+/** 展开/全屏：四个角向外，用于播放页「真全屏」开关。 */
+export function IconExpand(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <path d="M4.5 9.5v-5h5M19.5 9.5v-5h-5M4.5 14.5v5h5M19.5 14.5v5h-5" />
+    </Base>
+  )
+}
+
 export function IconDisc(props: IconProps): JSX.Element {
   return (
     <Base {...props}>

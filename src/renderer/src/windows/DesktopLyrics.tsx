@@ -33,11 +33,13 @@ import {
 import { activeIndexOf } from '../lib/lyricsUtils'
 import './desktop-lyrics.css'
 
-/** 窗口里真正用到的三个设置项，避免把整份 SettingsDTO 塞进 state。 */
+/** 窗口里真正用到的四个设置项，避免把整份 SettingsDTO 塞进 state。 */
 interface LyricPreferences {
   fontSize: number
   opacity: number
   effect: DesktopLyricsEffect
+  /** 锁定后整条歌词不能再拖动（点击穿透的判定不受影响）。 */
+  locked: boolean
 }
 
 /** settings:changed 与 settings:get 走同一套映射，两处不会走样。 */
@@ -45,7 +47,8 @@ function toPreferences(settings: SettingsDTO): LyricPreferences {
   return {
     fontSize: settings.desktopLyricsFontSize,
     opacity: settings.desktopLyricsOpacity,
-    effect: settings.desktopLyricsEffect
+    effect: settings.desktopLyricsEffect,
+    locked: settings.desktopLyricsLocked
   }
 }
 
@@ -70,7 +73,8 @@ export default function DesktopLyrics(): JSX.Element {
   const [preferences, setPreferences] = useState<LyricPreferences>({
     fontSize: 28,
     opacity: 0.92,
-    effect: 'classic'
+    effect: 'classic',
+    locked: false
   })
 
   useEffect(() => {
@@ -109,7 +113,7 @@ export default function DesktopLyrics(): JSX.Element {
     return index >= 0 ? lyrics.lines[index] : lyrics.lines[0]
   }, [lyrics, player?.position])
 
-  const { fontSize, opacity, effect } = preferences
+  const { fontSize, opacity, effect, locked } = preferences
 
   // --- 窗口只罩住内容 -----------------------------------------------------
 
@@ -194,9 +198,11 @@ export default function DesktopLyrics(): JSX.Element {
 
   return (
     <div
-      className={`desktop-lyrics desktop-lyrics--${effect}`}
+      // desktop-lyrics--locked 只关掉拖拽（见 desktop-lyrics.css），
+      // 命中测试与点击穿透照旧，锁定后鼠标划过歌词仍能正常交互。
+      className={`desktop-lyrics desktop-lyrics--${effect}${locked ? ' desktop-lyrics--locked' : ''}`}
       style={{ fontSize, opacity }}
-      title="拖动可移动 · 右键任务栏图标可关闭"
+      title={locked ? '已锁定 · 右键任务栏图标可关闭' : '拖动可移动 · 右键任务栏图标可关闭'}
       onMouseMove={handleMouseMove}
     >
       <div ref={dragRef} className="desktop-lyrics__drag">

@@ -8,7 +8,7 @@
  * 「我喜欢的音乐」是 specialType === 5 的特殊歌单：它没有「增删歌曲」的概念，
  * 对应用户的喜欢列表，所以那一行操作换成 library:likeTrack。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { TrackDTO } from '@shared/types'
 import {
   call,
@@ -218,6 +218,7 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
   }
 
   const description = detail.description?.trim()
+  const creatorInitial = detail.creator?.nickname.trim().slice(0, 1) ?? ''
 
   return (
     <div className="page">
@@ -238,13 +239,15 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
         }}
       >
         <div className="hero__art">
-          {coverUrl(detail.coverURL, 512) ? (
-            <img src={coverUrl(detail.coverURL, 512)} alt="" />
-          ) : (
-            <span className="card__placeholder">
-              <IconMusic size={26} />
-            </span>
-          )}
+          <RemoteImage
+            src={coverUrl(detail.coverURL, 512)}
+            alt=""
+            fallback={
+              <span className="card__placeholder">
+                <IconMusic size={26} />
+              </span>
+            }
+          />
         </div>
 
         <div className="hero__body">
@@ -254,13 +257,16 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
           <div className="hero__meta">
             {detail.creator && !isLikedList ? (
               <div className="detail-creator">
-                {detail.creator.avatarUrl ? (
-                  <img src={detail.creator.avatarUrl} alt="" />
-                ) : (
-                  <span className="detail-creator__fallback">
-                    <IconUser size={14} />
-                  </span>
-                )}
+                <RemoteImage
+                  src={detail.creator.avatarUrl}
+                  alt=""
+                  // 头像挂了就退回占位圆 + 昵称首字，别让用户看到浏览器的破图图标。
+                  fallback={
+                    <span className="detail-creator__fallback">
+                      {creatorInitial || <IconUser size={14} />}
+                    </span>
+                  }
+                />
                 <span>{detail.creator.nickname}</span>
               </div>
             ) : null}
@@ -557,6 +563,33 @@ function DetailSkeleton(): JSX.Element {
       </div>
     </>
   )
+}
+
+/**
+ * 远程图片：没有地址或加载失败时退回占位内容，避免出现浏览器默认的破图图标。
+ *
+ * 网易云 CDN 对 http 资源会 301 到 https，而渲染进程在 http 页面/混合内容策略下
+ * 可能直接拦掉，所以这里统一把协议升级成 https 再交给 <img>。
+ */
+function RemoteImage({
+  src,
+  alt,
+  fallback
+}: {
+  src?: string
+  alt: string
+  fallback: ReactNode
+}): JSX.Element {
+  const [failed, setFailed] = useState(false)
+  const url = src?.replace(/^http:\/\//, 'https://')
+
+  // 地址变了就再给一次机会，否则从破图的歌单切到正常歌单还会一直显示占位。
+  useEffect(() => {
+    setFailed(false)
+  }, [url])
+
+  if (!url || failed) return <>{fallback}</>
+  return <img src={url} alt={alt} onError={() => setFailed(true)} />
 }
 
 /** IPC 抛出的错误已经带有面向用户的中文消息，这里只兜底非 Error 的情况。 */

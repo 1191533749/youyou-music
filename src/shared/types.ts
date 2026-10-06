@@ -132,6 +132,8 @@ export interface SettingsDTO {
   desktopLyricsOpacity: number
   /** 桌面歌词特效：经典 / 渐变 / 霓虹 / 逐字卡拉OK。 */
   desktopLyricsEffect: DesktopLyricsEffect
+  /** 锁定桌面歌词位置：锁定后不可拖动，避免误触。 */
+  desktopLyricsLocked: boolean
   /** Always-on-top desktop lyric window position, in screen coordinates. */
   desktopLyricsPosition?: { x: number; y: number }
   /** Cache cap in megabytes; 0 disables eviction. */
@@ -171,12 +173,14 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   desktopLyricsFontSize: 28,
   desktopLyricsOpacity: 0.92,
   desktopLyricsEffect: 'classic',
+  desktopLyricsLocked: false,
   cacheLimitMB: 2048,
   cacheDirectory: '',
   audioDevice: '',
   mediaKeys: true,
   tray: true,
-  closeToTray: false,
+  // 关闭窗口默认收进托盘而不是退出：托盘与任务栏都能恢复窗口（单击即可）。
+  closeToTray: true,
   scrobble: true,
   theme: 'system',
   language: 'system',

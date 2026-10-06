@@ -236,6 +236,11 @@ export interface IPCContract {
   /** 鼠标不在歌词文字上时让点击穿透到桌面（forward 模式仍能收到 mousemove）。 */
   'lyrics:desktopClickThrough': { request: { through: boolean }; response: void }
 
+  // --- window ---
+  /** 切换主窗口的系统全屏（任务栏也被覆盖的真全屏）。 */
+  'window:toggleFullScreen': { request: void; response: boolean }
+  'window:setFullScreen': { request: { fullscreen: boolean }; response: boolean }
+
   // --- update ---
   /** 检查更新：有新版本时带 version/notes；否则 version 为空。 */
   'update:check': {
@@ -348,6 +353,8 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'lyrics:desktopMove',
   'lyrics:desktopResize',
   'lyrics:desktopClickThrough',
+  'window:toggleFullScreen',
+  'window:setFullScreen',
   'update:check',
   'update:install',
   'settings:get',

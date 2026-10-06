@@ -9,7 +9,7 @@
  * `lyrics:get`。所有的视觉效果（黑胶 / 胶片 / 波形 / 星海）与歌词特效都只是渲染
  * 方式，不参与取数；封面主色采样失败（CDN 无 CORS 头）时退回 CSS 里的强调色。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import {
   activeIndexOf,
@@ -28,6 +28,7 @@ import {
   IconClose,
   IconDisc,
   IconDiamond,
+  IconExpand,
   IconHome,
   IconLyrics,
   IconMic,
@@ -143,6 +144,8 @@ export default function NowPlaying(): JSX.Element {
   const [lyricsError, setLyricsError] = useState<string | undefined>()
   const [lyricsNonce, setLyricsNonce] = useState(0)
   const [follow, setFollow] = useState(true)
+  // 系统级全屏（任务栏也盖住），由 window:* 通道切换。
+  const [systemFullScreen, setSystemFullScreen] = useState(false)
   // 拖动中的进度/音量先存在本地，松手才发给主进程 —— 否则每一个像素都会变成一次 IPC。
   const [dragPosition, setDragPosition] = useState<number | undefined>(undefined)
   const [dragVolume, setDragVolume] = useState<number | undefined>(undefined)
@@ -155,16 +158,45 @@ export default function NowPlaying(): JSX.Element {
     else navigation.push({ name: 'home' })
   }, [navigation])
 
+  // 卸载时用 ref 判断，避免没进过系统全屏也白发一次 IPC。
+  const systemFullScreenRef = useRef(false)
+  useEffect(() => {
+    systemFullScreenRef.current = systemFullScreen
+  }, [systemFullScreen])
+
+  /** 离开播放页时若还在系统全屏，顺手退出，免得回主界面还是全屏。 */
+  useEffect(
+    () => () => {
+      if (systemFullScreenRef.current) void call('window:setFullScreen', { fullscreen: false }).catch(() => undefined)
+    },
+    []
+  )
+
+  /** 真全屏开关：返回值就是切换后的状态，直接拿来做按钮态。 */
+  const toggleSystemFullScreen = useCallback((): void => {
+    void call('window:toggleFullScreen')
+      .then((value) => setSystemFullScreen(value === true))
+      .catch(() => undefined)
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      // 抽屉开着时 Esc 先收抽屉，再按一次才退出全屏。
-      if (queueOpen) setQueueOpen(false)
-      else exit()
+      // 由外到内逐层退出：先退系统全屏，再收队列抽屉，最后才退播放页全屏层。
+      if (systemFullScreen) {
+        setSystemFullScreen(false)
+        void call('window:setFullScreen', { fullscreen: false }).catch(() => undefined)
+        return
+      }
+      if (queueOpen) {
+        setQueueOpen(false)
+        return
+      }
+      exit()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [exit, queueOpen])
+  }, [exit, queueOpen, systemFullScreen])
 
   // 桌面歌词开关放在播放页，因为「看歌词」是这里的动作；设置页改同一个值时
   // settings:changed 会把按钮状态同步回来（主进程是唯一数据源）。
@@ -227,20 +259,42 @@ export default function NowPlaying(): JSX.Element {
   // --- 歌词自动滚动 ------------------------------------------------------
 
   const listRef = useRef<HTMLDivElement | null>(null)
-  const activeLineRef = useRef<HTMLLIElement | null>(null)
   const resumeTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     if (!follow || activeIndex < 0) return
     const container = listRef.current
-    const element = activeLineRef.current
-    if (!container || !element) return
-    // 自己算 scrollTop 而不是 scrollIntoView：后者会把外层容器也一起滚走。
+    if (!container) return
+    /*
+     * 当前行直接查 DOM，不用 ref 记元素：
+     * 一个 ref 在同一次提交里可能先 attach 新的再 detach 旧的（React 按树序处理
+     * ref），反向跳转时最后落地的是 detach，ref.current 会变成 null，滚动就被
+     * 静默跳过了。而 `.is-active` 是 React 刚渲染出来的事实，永远指向正确的那一行。
+     */
+    const element = container.querySelector<HTMLLIElement>('.np-lyric.is-active')
+    if (!element) return
+    /*
+     * 用两个 rect 相减求出「这一行相对滚动容器」的位置。
+     * 不能用 element.offsetTop：offsetTop 是相对最近的**定位**祖先的，全屏层是
+     * position: fixed，于是这个值里混进了顶栏与信息区的高度，算出来的 scrollTop
+     * 会偏出一大截 —— 表现就是当前行跑到视野外，用户得自己往下拽。
+     */
+    const offset =
+      element.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
+    const top = Math.max(0, offset - container.clientHeight / 2 + element.clientHeight / 2)
+    const distance = Math.abs(container.scrollTop - top)
+    // 已经在中央附近就不动，免得 4Hz 的播放位置更新把滚动条一直拽来拽去。
+    if (distance < 4) return
+    // 跨行跳转（换歌、拖动进度、切特效导致行高变化）直接定位：长距离的平滑动画
+    // 既慢，又会被随后的重渲染打断，最后停在中途 —— 那正是「看不到当前行」的来源。
+    // 只有相邻行的微调才用平滑滚动。
     container.scrollTo({
-      top: element.offsetTop - container.clientHeight / 2 + element.clientHeight / 2,
-      behavior: 'smooth'
+      top,
+      behavior: distance > container.clientHeight * 1.5 ? 'auto' : 'smooth'
     })
-  }, [activeIndex, follow, lyrics])
+    // lyricEffect 也在依赖里：切特效会改变行的排版（例如卡拉OK 多出一条进度条），
+    // 切完立刻重新居中一次。
+  }, [activeIndex, follow, lyrics, lyricEffect])
 
   useEffect(() => () => window.clearTimeout(resumeTimer.current), [])
 
@@ -340,6 +394,17 @@ export default function NowPlaying(): JSX.Element {
           >
             <IconLyrics size={15} />
             桌面歌词
+          </button>
+          <button
+            type="button"
+            className={`np-fs__tool${systemFullScreen ? ' is-active' : ''}`}
+            title={systemFullScreen ? '退出系统全屏' : '真全屏（覆盖任务栏）'}
+            aria-label={systemFullScreen ? '退出系统全屏' : '进入系统全屏'}
+            aria-pressed={systemFullScreen}
+            onClick={toggleSystemFullScreen}
+          >
+            <IconExpand size={15} />
+            真全屏
           </button>
           <button
             type="button"
@@ -504,7 +569,6 @@ export default function NowPlaying(): JSX.Element {
                         position={state.position}
                         effect={lyricEffect}
                         onSeek={() => void player.seek(line.time)}
-                        lineRef={index === activeIndex ? activeLineRef : undefined}
                       />
                     ))}
                   </ol>
@@ -733,22 +797,20 @@ function LyricRow({
   active,
   position,
   effect,
-  onSeek,
-  lineRef
+  onSeek
 }: {
   line: LyricLineDTO
   active: boolean
   position: number
   effect: LyricEffect
   onSeek: () => void
-  lineRef?: RefObject<HTMLLIElement>
 }): JSX.Element {
   const words: Word[] = line.words ?? []
   const karaoke = effect === 'karaoke' && words.length > 0
   const progress = active && karaoke ? wordProgress(line, position) : 0
 
   return (
-    <li className={`np-lyric np-lyric--${effect}${active ? ' is-active' : ''}`} ref={lineRef}>
+    <li className={`np-lyric np-lyric--${effect}${active ? ' is-active' : ''}`}>
       <button type="button" className="np-lyric__button" onClick={onSeek} title="跳到这一句">
         {karaoke ? (
           <span className="np-lyric__text">
