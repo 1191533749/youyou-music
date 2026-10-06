@@ -161,3 +161,12 @@ npm run verify:packaged
 - **桌面 cookie**：`os=pc; appver=3.1.17`；weblog 上报额外用 `os=osx`（与上游一致）。
 - **登录态**：`MUSIC_U` cookie；客户端用 SHA-256 指纹把它绑定成一个 session binding，配合 authEpoch
   丢弃跨登录的迟到响应与过期 Set-Cookie（`main/netease/client.ts`）。
+
+## 8. GitHub 发布与更新通道（v0.3.0 已上线）
+
+- 仓库：https://github.com/1191533749/youyou-music （token 由用户提供，发布用 scripts/github-release.mjs --confirm）
+- Release 资产用 ASCII 名（GitHub 上传接口会截断非 ASCII 资产名）：YouyouMusic-Portable-<v>.exe / YouyouMusic-Setup-<v>.exe / sha256sums.txt（ASCII 哈希清单）
+- 更新器匹配：/便携版|portable/i → portable，否则 installer；下载后按 sha256sums.txt 校验
+- 替换脚本经 cmd /c start 启动（本机作业对象会随父进程退出杀子进程，直接 spawn 必死）；脚本 try/catch 必须同行（}; catch 是语法错误）；生成脚本有 PowerShell 解析回归测试
+- E2E：scripts/test-update-e2e.mjs（本地假更新源，断言下载哈希/copied=True/relaunched）→ UPDATE-E2E OK
+- 本机 git 推送需走代理：git config http.proxy http://127.0.0.1:7897（已写入仓库本地配置）
