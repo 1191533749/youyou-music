@@ -1,6 +1,6 @@
 {
   "name": "youyou-music",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "悠悠音乐 — NetEase Cloud Music client for Windows (Electron + mpv)",
   "main": "out/main/index.js",
   "author": "悠悠音乐",

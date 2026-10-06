@@ -107,50 +107,6 @@
   white-space: nowrap;
 }
 
-/* 中继地址与口令默认折叠，不把内置值摆在最显眼的位置。 */
-.together__advanced {
-  padding-top: 12px;
-  border-top: 1px solid var(--glass-border);
-}
-
-.together__advanced-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-left: -10px;
-  padding: 5px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 12px;
-  transition: background 0.16s ease, color 0.16s ease;
-}
-
-.together__advanced-toggle:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.together__advanced-summary {
-  max-width: 320px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.together__advanced-body {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.together__advanced-body .together__hint {
-  grid-column: 1 / -1;
-  margin: 0;
-}
-
 /* --- 未登录提示卡 ------------------------------------------------------- */
 
 .together__gate {
@@ -200,21 +156,7 @@
   }
 }
 
-.together__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.together__field label {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-/* 下拉与输入框统一成白卡质感；select 没有全局类，这里补一套。 */
-.together__field input,
-.together__field select,
+/* select 没有全局类，这里给「性别 / 地区」两个下拉补一套白卡质感。 */
 .together__filter select {
   width: 100%;
   min-width: 0;
@@ -227,15 +169,12 @@
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.together__field input:focus,
-.together__field select:focus,
 .together__filter select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
   outline: none;
 }
 
-.together__field input::placeholder,
 .together__filter input::placeholder {
   color: var(--text-tertiary);
 }

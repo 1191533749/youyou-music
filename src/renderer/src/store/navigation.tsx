@@ -21,7 +21,7 @@ export type Route =
   | { name: 'toplist'; id: number; title?: string }
   | { name: 'cloud' }
   | { name: 'settings' }
-  | { name: 'nowPlaying' }
+  | { name: 'nowPlaying'; openQueue?: boolean }
 
 export interface NavigationStore {
   route: Route

@@ -128,6 +128,11 @@ export class PlayerController extends EventEmitter {
   private servedQuality?: QualityLevel
   private servedBitrate?: number
   private error?: string
+  /**
+   * 连续失败计数：某首歌所有音源都拿不到时自动跳下一首。
+   * 上限为队列长度，避免整张列表都放不出来时无限跳。
+   */
+  private consecutiveFailures = 0
   private source?: string
   private servedFrom?: string
   private volume = 80
@@ -308,15 +313,25 @@ export class PlayerController extends EventEmitter {
         )
       }
       this.playing = true
+      this.consecutiveFailures = 0
       this.startPositionTimer()
       this.scrobbleStart()
     } catch (cause) {
       if (generation !== this.resolveGeneration) return
       const message = describeError(cause)
-      this.error = message
-      this.playing = false
-      this.deps.onError?.(message)
       this.deps.log?.(`播放失败: ${message}`)
+      // 拿不到可播版本时**自动跳下一首**，不要把「版权/受限」这类原因摆到用户面前。
+      // 只有整条队列都放过一遍还是不行，才给一句中性提示。
+      if (this.queue.length > 1 && this.consecutiveFailures < this.queue.length - 1) {
+        this.consecutiveFailures += 1
+        this.error = undefined
+        void this.next(false)
+        return
+      }
+      this.consecutiveFailures = 0
+      this.error = '暂时无法播放，请稍后再试'
+      this.playing = false
+      this.deps.onError?.(this.error)
     } finally {
       if (generation === this.resolveGeneration) {
         this.loading = false
@@ -370,9 +385,7 @@ export class PlayerController extends EventEmitter {
     if (!this.deps.unblock.enabled) {
       throw new NeteaseAPIError('business', {
         code: -1,
-        message: this.unblockEnabledButEmpty()
-          ? '该歌曲受版权限制，且未启用任何可用音源'
-          : '该歌曲在当前账号下不可播放（可在设置中开启灰色歌曲解锁）'
+        message: '暂时无法播放这首歌'
       })
     }
 
@@ -434,10 +447,9 @@ export class PlayerController extends EventEmitter {
       }
     }
 
-    throw new NeteaseAPIError('business', {
-      code: -1,
-      message: '该歌曲受版权限制，所有已启用音源都没有找到匹配的完整版本'
-    })
+    // 不把「版权/受限/换源失败」这类原因暴露给用户：上层会自动跳下一首，
+    // 整队都失败时只给一句中性提示。
+    throw new NeteaseAPIError('business', { code: -1, message: '暂时无法播放这首歌' })
   }
 
   /** 本会话内某首歌已经失败过的音源，避免反复撞同一个死源。 */

@@ -21,9 +21,10 @@ import { useTogetherStore } from '../store/together'
 import { useAuthStore } from '../store/auth'
 import { useNavigation } from '../store/navigation'
 import { call } from '../lib/ipc'
-import { IconGift, IconHeart, IconMusic, IconSend, IconSettings, IconUser } from '../components/Icons'
+import { IconGift, IconHeart, IconMusic, IconSend, IconUser } from '../components/Icons'
 import GiftOverlay from '../components/GiftOverlay'
 import Radar, { ListenerAvatar, listenerMeta } from '../components/Radar'
+import { CHINA_REGIONS } from '../lib/regions'
 import type { RelayGift } from '../lib/relay'
 
 /** 常用表情：聊天与送礼时的快捷选择（用户要求的功能，不是装饰）。 */
@@ -98,11 +99,24 @@ export default function Together(): JSX.Element {
   const [region, setRegion] = useState('')
   const [minAge, setMinAge] = useState('')
   const [maxAge, setMaxAge] = useState('')
-  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [rechargeOpen, setRechargeOpen] = useState(false)
   const [rechargeAmount, setRechargeAmount] = useState(RECHARGE_OPTIONS[2])
   const [useCustom, setUseCustom] = useState(false)
   const [customAmount, setCustomAmount] = useState('')
+
+  // 登录后自动连中继：用户不需要点任何按钮，也没有断开入口（断线由 relay 客户端
+  // 自己重连）。退出登录会重置标记，重新登录时再次自动连接。
+  const autoConnected = useRef(false)
+  useEffect(() => {
+    if (!auth.loggedIn) {
+      autoConnected.current = false
+      return
+    }
+    if (autoConnected.current) return
+    autoConnected.current = true
+    together.connect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.loggedIn])
 
   // 登录后拉一次账号资料（性别 / 年龄 / 地区 / 签名），灌进 profile 供找听友使用。
   const detailLoaded = useRef(false)
@@ -204,6 +218,8 @@ export default function Together(): JSX.Element {
               </div>
             </div>
 
+            {/* 连接状态只读：进入页面自动连中继，用户不需要也不允许手动断开
+                （断线重连由 relay 客户端负责）。 */}
             <div className="together__actions">
               <span className={`together__status together__status--${state.status}`}>
                 {state.status === 'connected'
@@ -211,18 +227,9 @@ export default function Together(): JSX.Element {
                   : state.status === 'connecting'
                     ? '连接中…'
                     : state.status === 'idle'
-                      ? '未连接'
+                      ? '正在连接…'
                       : '连接断开（自动重连中）'}
               </span>
-              {state.status === 'connected' ? (
-                <button type="button" className="button" onClick={() => together.disconnect()}>
-                  断开
-                </button>
-              ) : (
-                <button type="button" className="button button--primary" onClick={() => together.connect()}>
-                  连接中继
-                </button>
-              )}
               {state.detail && state.status !== 'connected' ? <span className="together__detail">{state.detail}</span> : null}
             </div>
 
@@ -232,32 +239,6 @@ export default function Together(): JSX.Element {
                 充值余额
               </button>
             </p>
-
-            {/* 中继地址与口令默认折叠：内置值开箱可用，不用摆在最显眼的位置。 */}
-            <div className="together__advanced">
-              <button
-                type="button"
-                className="together__advanced-toggle"
-                aria-expanded={advancedOpen}
-                onClick={() => setAdvancedOpen((open) => !open)}
-              >
-                <IconSettings size={14} />
-                高级设置
-                <span className="together__advanced-summary">{advancedOpen ? '收起' : state.url}</span>
-              </button>
-              {advancedOpen ? (
-                <div className="together__advanced-body">
-                  <div className="together__field">
-                    <label>中继地址</label>
-                    <input className="text-input" value={state.url} onChange={(event) => together.setUrl(event.target.value)} />
-                  </div>
-                  <div className="together__field">
-                    <label>连接口令</label>
-                    <input className="text-input" value={state.token} onChange={(event) => together.setToken(event.target.value)} />
-                  </div>
-                </div>
-              ) : null}
-            </div>
 
             {state.error ? <p className="together__error">{state.error}</p> : null}
             {state.notice ? <p className="together__notice">{state.notice}</p> : null}
@@ -321,12 +302,15 @@ export default function Together(): JSX.Element {
                   <option value="female">女生</option>
                   <option value="male">男生</option>
                 </select>
-                <input
-                  className="text-input"
-                  placeholder="地区，例如 上海"
-                  value={region}
-                  onChange={(event) => setRegion(event.target.value)}
-                />
+                {/* 地区用内置的省级行政区列表：手输容易和听友填的写法对不上，搜不到人。 */}
+                <select value={region} onChange={(event) => setRegion(event.target.value)}>
+                  <option value="">不限地区</option>
+                  {CHINA_REGIONS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
                 <input
                   className="text-input"
                   type="number"

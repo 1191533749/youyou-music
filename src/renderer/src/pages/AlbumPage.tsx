@@ -23,6 +23,7 @@ import {
   usePlayerStore
 } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
+import { applyLikeOverrides, clearLikeOverride, markLike } from '../lib/likes'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
 import { useToast, type ToastKind } from '../components/Toast'
@@ -62,7 +63,8 @@ function AlbumDetail({ id }: { id: number }): JSX.Element {
   }, [id])
 
   const songs = detail?.songs ?? []
-  const likedIDs = useMemo(() => new Set(liked), [liked])
+  // 渲染用的集合要套一层本地覆盖：overview 刷新可能还是旧数据，不能盖掉刚点的喜欢。
+  const likedIDs = useMemo(() => applyLikeOverrides(liked), [liked])
   const artistID = songs[0]?.artists[0]?.id
   const isSubscribed = subscribed ?? false
   const totalSeconds = useMemo(
@@ -102,6 +104,8 @@ function AlbumDetail({ id }: { id: number }): JSX.Element {
   const toggleLike = useCallback(
     async (track: TrackDTO) => {
       const next = !likedIDs.has(track.id)
+      // 先记下乐观结果：随后的任何刷新在 TTL 内都不会改变这一颗心。
+      markLike(track.id, next)
       try {
         await call('library:likeTrack', { id: track.id, like: next })
         setLiked((current) =>
@@ -109,6 +113,8 @@ function AlbumDetail({ id }: { id: number }): JSX.Element {
         )
         notify(next ? '已加入我喜欢的音乐' : '已取消喜欢', 'success')
       } catch (cause) {
+        // 失败就撤销覆盖，立刻回到服务器状态。
+        clearLikeOverride(track.id)
         notify(errorText(cause), 'error')
       }
     },

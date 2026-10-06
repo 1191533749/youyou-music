@@ -193,13 +193,24 @@ async function main() {
     record('测试实例处于登录态', loggedInApp, plantCookiesSource)
     const gate = await cdp(`Boolean(document.querySelector('.together__gate'))`)
     record('登录后不显示登录门禁', gate === false)
-    const rendered = await cdp(`document.querySelectorAll('.together__gift').length >= 0 && document.body.innerText.includes('连接中继')`)
+    const rendered = await cdp(
+      `Boolean(document.querySelector('.together__connect')) && Boolean(document.querySelector('.together__grid'))`
+    )
     record('页面控件渲染', rendered === true)
 
-    // 2. 连接中继（默认 wss://yy.ytw.asia/relay + 口令）
-    await clickByText('连接中继')
+    // 2. 登录后应自动连接中继（页面上已无「连接中继」「断开」按钮）
+    const noConnectButton = await cdp(`(() => {
+      const texts = [...document.querySelectorAll('.together__connect button')].map((b) => b.textContent.trim())
+      return { buttons: texts, hasConnect: texts.some((t) => t.includes('连接中继')), hasDisconnect: texts.some((t) => t.includes('断开')) }
+    })()`)
+    record(
+      '已移除连接/断开入口（自动连接）',
+      noConnectButton?.hasConnect === false && noConnectButton?.hasDisconnect === false,
+      `连接卡按钮=${JSON.stringify(noConnectButton?.buttons ?? [])}`
+    )
+
     let connected = false
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < 25; attempt += 1) {
       await wait(800)
       const status = await cdp(`document.querySelector('.together__status')?.textContent ?? ''`)
       if (String(status).includes('已连接')) {
@@ -207,11 +218,19 @@ async function main() {
         break
       }
     }
-    record('连接公网中继（wss + 口令）', connected)
+    record('自动连接公网中继（wss + 口令）', connected)
     if (!connected) {
       const err = await cdp(`document.querySelector('.together__error')?.textContent ?? '(无错误信息)'`)
       log(`状态异常，页面错误提示: ${err}`)
     }
+
+    // 地区应是内置下拉（34 个省级行政区 + 不限地区）
+    const regionOptions = await cdp(`(() => {
+      const selects = [...document.querySelectorAll('.together__filter select')]
+      const region = selects[selects.length - 1]
+      return region ? region.options.length : 0
+    })()`)
+    record('地区为内置下拉', Number(regionOptions) >= 30, `地区选项 ${regionOptions} 个`)
 
     await wait(1000)
     const balanceShown = await cdp(`/账户余额|充值余额|礼物余额/.test(document.body.innerText)`)

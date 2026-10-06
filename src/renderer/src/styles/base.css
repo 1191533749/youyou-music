@@ -394,6 +394,19 @@
   font-size: 11px;
 }
 
+/* 「项目发布地址」这类可点击链接：看起来像链接，点击交给系统浏览器打开。 */
+.settings__link {
+  padding: 0;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.settings__link:hover {
+  filter: brightness(1.1);
+}
+
 /* 加入群聊：左侧群信息 + 右侧二维码。 */
 .settings__group-chat {
   display: flex;

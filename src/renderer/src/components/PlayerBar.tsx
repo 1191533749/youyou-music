@@ -14,6 +14,7 @@ import {
 import { useNavigation } from '../store/navigation'
 import { useAuthStore } from '../store/auth'
 import { call } from '../lib/ipc'
+import { clearLikeOverride, isLiked, markLike } from '../lib/likes'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
 import {
   IconHeart,
@@ -74,7 +75,8 @@ export default function PlayerBar(): JSX.Element {
     let cancelled = false
     void call('library:overview')
       .then((overview) => {
-        if (!cancelled) setLiked(overview.likedTrackIDs.includes(trackId))
+        // 本地覆盖优先：刚点的喜欢/取消不会被还没更新的服务器列表盖回去。
+        if (!cancelled) setLiked(isLiked(trackId, overview.likedTrackIDs))
       })
       .catch(() => undefined)
     return () => {
@@ -93,9 +95,11 @@ export default function PlayerBar(): JSX.Element {
     likePending.current = true
     const next = !liked
     setLiked(next)
+    markLike(current.id, next)
     try {
       await call('library:likeTrack', { id: current.id, like: next })
     } catch {
+      clearLikeOverride(current.id)
       setLiked(!next)
     } finally {
       likePending.current = false
@@ -212,7 +216,8 @@ export default function PlayerBar(): JSX.Element {
           className="icon-button"
           title="播放队列"
           aria-label="播放队列"
-          onClick={() => navigation.push({ name: 'nowPlaying' })}
+          // 打开播放页并直接展开队列抽屉：以前只跳页面，用户看不到队列。
+          onClick={() => navigation.push({ name: 'nowPlaying', openQueue: true })}
         >
           <IconQueue size={18} />
         </button>

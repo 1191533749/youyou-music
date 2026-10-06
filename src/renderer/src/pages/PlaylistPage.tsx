@@ -25,6 +25,7 @@ import {
   usePlayerStore
 } from '../lib/contract'
 import { useAsync, useDebounced } from '../lib/hooks'
+import { applyLikeOverrides, clearLikeOverride, markLike } from '../lib/likes'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
 import { useToast, type ToastKind } from '../components/Toast'
@@ -75,7 +76,9 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
   }, [])
 
   const tracks = detail?.tracks ?? []
-  const likedIDs = useMemo(() => new Set(liked), [liked])
+  // 渲染用的集合要套一层本地覆盖：overview 刷新时拿到的可能还是旧数据，
+  // 不能让它把刚点的喜欢盖回去（TTL 内以本地为准）。
+  const likedIDs = useMemo(() => applyLikeOverrides(liked), [liked])
   const existingIDs = useMemo(() => new Set(tracks.map((track) => track.id)), [tracks])
   const isLikedList = detail?.specialType === LIKED_PLAYLIST_TYPE
   const isOwn = detail?.creator !== undefined && detail.creator.userId === auth.profile?.userId
@@ -126,12 +129,16 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
   const toggleLike = useCallback(
     async (track: TrackDTO) => {
       const next = !likedIDs.has(track.id)
+      // 先记下乐观结果：随后的任何刷新在 TTL 内都不会改变这一颗心。
+      markLike(track.id, next)
       try {
         await call('library:likeTrack', { id: track.id, like: next })
         setLiked((current) =>
           next ? [...current, track.id] : current.filter((value) => value !== track.id)
         )
       } catch (cause) {
+        // 失败就撤销覆盖，立刻回到服务器状态。
+        clearLikeOverride(track.id)
         notify(errorText(cause), 'error')
       }
     },

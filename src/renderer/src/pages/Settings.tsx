@@ -216,7 +216,7 @@ export default function Settings(): JSX.Element {
       <section className="settings__group">
         <h2>音源</h2>
         <SettingSwitch
-          label="受限歌曲自动换源"
+          label="自动匹配完整音源"
           checked={settings.unblockGreyTracks}
           onChange={(value) => void patch({ unblockGreyTracks: value })}
         />
@@ -559,7 +559,16 @@ export default function Settings(): JSX.Element {
           </div>
           <div>{info?.mpv ?? '未检测到 mpv'}</div>
           <div>开发者：小鱼</div>
-          <div>bug 反馈：3100878091@qq.com</div>
+          <div>
+            项目发布地址：
+            <button
+              type="button"
+              className="settings__link"
+              onClick={() => void call('app:openExternal', { url: 'https://github.com/1191533749/youyou-music' })}
+            >
+              https://github.com/1191533749/youyou-music
+            </button>
+          </div>
         </div>
       </section>
 

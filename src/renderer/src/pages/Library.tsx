@@ -26,6 +26,7 @@ import {
   usePlayerStore
 } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
+import { applyLikeOverrides, clearLikeOverride, markLike } from '../lib/likes'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
 import {
@@ -80,7 +81,8 @@ export default function Library(): JSX.Element {
   const [albums, setAlbums] = useState<AlbumSummaryDTO[]>([])
   const [artists, setArtists] = useState<ArtistSummaryDTO[]>([])
   const [recent, setRecent] = useState<PlayRecordDTO[]>([])
-  const [likedIDs, setLikedIDs] = useState<Set<number>>(new Set())
+  // serverLikedIDs 是「服务器那份」，渲染统一走下面的 likedIDs（套了本地乐观覆盖）。
+  const [serverLikedIDs, setServerLikedIDs] = useState<Set<number>>(new Set())
 
   const [likedTracks, setLikedTracks] = useState<TrackDTO[]>([])
   const [likedLoading, setLikedLoading] = useState(false)
@@ -108,8 +110,15 @@ export default function Library(): JSX.Element {
     setAlbums(data.albums)
     setArtists(data.artists)
     setRecent(data.recent)
-    setLikedIDs(new Set(data.likedTrackIDs))
+    setServerLikedIDs(new Set(data.likedTrackIDs))
   }, [overview.data])
+
+  /**
+   * 渲染用的喜欢集合 = 服务器数据 + 本地乐观覆盖。
+   * 重新拉 overview 时服务器那份可能还是旧的，套上覆盖后 TTL 内不会被盖回去
+   * —— 这正是「点完喜欢、鼠标一悬停又变回未喜欢」的根因。
+   */
+  const likedIDs = useMemo(() => applyLikeOverrides(serverLikedIDs), [serverLikedIDs])
 
   const loadLiked = useCallback(async (ids: number[]): Promise<void> => {
     if (ids.length === 0) {
@@ -146,15 +155,18 @@ export default function Library(): JSX.Element {
 
   const toggleLike = async (track: TrackDTO): Promise<void> => {
     const liked = likedIDs.has(track.id)
-    const next = new Set(likedIDs)
+    const next = new Set(serverLikedIDs)
     if (liked) next.delete(track.id)
     else next.add(track.id)
-    const previous = likedIDs
-    setLikedIDs(next)
+    const previous = serverLikedIDs
+    // 乐观覆盖 + 乐观状态：刷新回来的旧数据在 TTL 内都盖不掉这一下。
+    markLike(track.id, !liked)
+    setServerLikedIDs(next)
     try {
       await call('library:likeTrack', { id: track.id, like: !liked })
     } catch (cause) {
-      setLikedIDs(previous)
+      clearLikeOverride(track.id)
+      setServerLikedIDs(previous)
       toast.show(`操作失败：${messageOf(cause)}`, 'error')
     }
   }

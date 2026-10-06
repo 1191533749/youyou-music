@@ -21,7 +21,8 @@ import {
   onEvent,
   useNavigation,
   usePlayerStore,
-  wordProgress
+  wordProgress,
+  type Route
 } from '../lib/contract'
 // 播放模式的三个纯展示 helper 只在 store 里导出（用户只面对一个模式按钮）。
 import { currentPlayMode, cyclePlayMode, playModeLabel } from '../store/player'
@@ -167,6 +168,24 @@ export default function NowPlaying(): JSX.Element {
   const [dragVolume, setDragVolume] = useState<number | undefined>(undefined)
 
   const trackID = current?.id
+
+  /**
+   * 播放条上的「播放队列」按钮会带 `openQueue` 进来，这次进入要直接把队列抽屉展开。
+   *
+   * 展开后立刻把标记消费掉：用 `replace` 换成不带 openQueue 的同名路由，否则用户
+   * 关掉抽屉、再切回播放页时又会被强制展开一次。这里记的是**路由对象本身**而不是
+   * 一个「做过没」的布尔值 —— 播放页再次进播放页时组件不会卸载，用布尔值会挡住
+   * 下一次点队列按钮。
+   */
+  const queueFlagRoute = useRef<Route>()
+  useEffect(() => {
+    const route = navigation.route
+    if (route.name !== 'nowPlaying' || route.openQueue !== true) return
+    if (queueFlagRoute.current === route) return
+    queueFlagRoute.current = route
+    setQueueOpen(true)
+    navigation.replace({ name: 'nowPlaying' })
+  }, [navigation])
 
   /** 退出全屏就是回到进入前的路由；没有上一页（直接打开播放页）时回首页。 */
   const exit = useCallback((): void => {
