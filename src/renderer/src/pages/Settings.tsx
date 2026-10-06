@@ -18,6 +18,8 @@ import {
 } from '@shared/types'
 import { formatBytes } from '../lib/format'
 import { useAuthStore } from '../store/auth'
+import { checkForUpdateInteractive } from '../lib/updatePrompt'
+import { useToast } from '../components/Toast'
 
 /** 音源开关的展示信息；与主进程 `AUDIO_SOURCE_NAMES` 保持一致。 */
 const SOURCES: Array<{ id: 'pyncmd' | 'kugou' | 'kuwo'; name: string; hint: string }> = [
@@ -111,6 +113,8 @@ export default function Settings(): JSX.Element {
   const [error, setError] = useState<string | undefined>()
   const [message, setMessage] = useState<string | undefined>()
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const toast = useToast()
   // 连续快速修改（比如主题切换、开关连点）时，多个 settings:update 的响应可能乱序
   // 到达——旧响应后到会把界面值盖回旧值，表现为「点了没生效」。序号守卫只采纳
   // 最后一次请求的响应。
@@ -462,6 +466,42 @@ export default function Settings(): JSX.Element {
             ) : (
               <span className="settings__row-hint">在左侧「我的音乐」页面登录</span>
             )}
+          </div>
+        </div>
+      </section>
+
+      <section className="settings__group">
+        <h2>更新</h2>
+        <p>软件启动时会自动检查；也可以随时在这里手动检查，发现新版本会有 30 秒倒计时自动更新。</p>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>当前版本</span>
+            <span className="settings__row-hint">v{info?.version ?? '—'}</span>
+          </div>
+        </div>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>检查更新</span>
+            <span className="settings__row-hint">{checking ? '正在检查…' : ''}</span>
+          </div>
+          <div className="settings__row-control">
+            <button
+              type="button"
+              className="button glass-btn"
+              disabled={checking}
+              onClick={() => {
+                setChecking(true)
+                void checkForUpdateInteractive()
+                  .then((outcome) => {
+                    if (outcome === 'latest') toast.show(`已是最新版本 v${info?.version ?? ''}`, 'success')
+                    else if (outcome === 'error') toast.show('检查更新失败，请稍后再试', 'error')
+                    // 'update' 时全局弹窗出现，这里不需要再提示
+                  })
+                  .finally(() => setChecking(false))
+              }}
+            >
+              {checking ? '正在检查…' : '检测更新'}
+            </button>
           </div>
         </div>
       </section>

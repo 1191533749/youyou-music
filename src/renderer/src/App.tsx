@@ -5,7 +5,7 @@
  * 所有面板都是半透明玻璃片，靠 `backdrop-filter` 做真实模糊，而不是画一个灰色方块。
  * 亮色是主色，深色只是同一套令牌的另一种取值。
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { NavigationProvider, useNavigation } from './store/navigation'
 import { useAuthStore } from './store/auth'
@@ -40,6 +40,14 @@ import {
   LogoMark
 } from './components/Icons'
 import { call, onEvent } from './lib/ipc'
+import {
+  checkForUpdateInteractive,
+  dismissUpdatePrompt,
+  installUpdateNow,
+  snapshotUpdatePrompt,
+  subscribeUpdatePrompt,
+  type UpdatePromptState
+} from './lib/updatePrompt'
 import type { AppInfoDTO } from '@shared/types'
 
 const NAV_ITEMS = [
@@ -263,39 +271,29 @@ export default function App(): JSX.Element {
 }
 
 /**
- * 更新提示：启动时检测。有新版本弹玻璃对话框，30 秒倒计时后自动更新；
- * 「稍后更新」本次会话不再打扰。返回要渲染的节点（无更新时为 null）。
+ * 更新弹窗（唯一实例）：状态来自共享模块 lib/updatePrompt，
+ * 启动自动检测与设置页手动检测都会触发它；30 秒倒计时后自动更新。
  */
-function useUpdatePrompt(): JSX.Element | null {
-  const [update, setUpdate] = useState<{ version: string; notes?: string } | undefined>()
+function UpdatePromptDialog({ update }: { update: UpdatePromptState }): JSX.Element {
   const [remaining, setRemaining] = useState(30)
+  const installed = useRef(false)
 
   useEffect(() => {
-    void call('update:check')
-      .then((result) => {
-        if (result.version) setUpdate({ version: result.version, notes: result.notes })
-      })
-      .catch(() => undefined)
-  }, [])
+    setRemaining(30)
+    installed.current = false
+  }, [update])
 
   useEffect(() => {
-    if (!update || remaining <= 0) return
+    if (remaining <= 0) return
     const timer = window.setTimeout(() => setRemaining((n) => n - 1), 1000)
     return () => window.clearTimeout(timer)
   }, [update, remaining])
 
   useEffect(() => {
-    if (update && remaining <= 0) {
-      void call('update:install').catch(() => setUpdate(undefined))
-    }
-  }, [update, remaining])
-
-  if (!update) return null
-
-  const install = (): void => {
-    setUpdate(undefined)
-    void call('update:install').catch(() => undefined)
-  }
+    if (remaining > 0 || installed.current) return
+    installed.current = true
+    void installUpdateNow()
+  }, [remaining])
 
   return createPortal(
     <div className="update-prompt" role="dialog" aria-modal="true" aria-label="发现新版本">
@@ -304,10 +302,10 @@ function useUpdatePrompt(): JSX.Element | null {
         {update.notes ? <div className="update-prompt__notes">{update.notes.slice(0, 320)}</div> : null}
         <div className="update-prompt__countdown">{remaining} 秒后自动更新</div>
         <div className="update-prompt__actions">
-          <button type="button" className="button glass-btn" onClick={() => setUpdate(undefined)}>
+          <button type="button" className="button glass-btn" onClick={dismissUpdatePrompt}>
             稍后更新
           </button>
-          <button type="button" className="button button--primary glass-btn" onClick={install}>
+          <button type="button" className="button button--primary glass-btn" onClick={() => void installUpdateNow()}>
             立即更新
           </button>
         </div>
@@ -315,6 +313,18 @@ function useUpdatePrompt(): JSX.Element | null {
     </div>,
     document.body
   )
+}
+
+function useUpdatePrompt(): JSX.Element | null {
+  const update = useSyncExternalStore(subscribeUpdatePrompt, snapshotUpdatePrompt)
+
+  // 启动时静默检测一次：有新版本才弹窗，没有就不打扰。
+  useEffect(() => {
+    void checkForUpdateInteractive()
+  }, [])
+
+  if (!update) return null
+  return <UpdatePromptDialog update={update} />
 }
 
 /**
