@@ -279,12 +279,15 @@ async function handleMessage(client, message) {
     /** 充值：创建支付宝当面付订单，返回二维码内容。 */
     case 'recharge': {
       client.profile ??= { uid: String(client.id), nickname: `听友${client.id}` }
-      // 单次充值区间：1.00 ~ 100.00 元（档位里有 100 元；自定义金额前端限制 99.99）。
-      const requested = Math.round(Number(message.amountFen ?? 0))
-      const amountFen = Math.max(100, Math.min(10000, requested))
-      if (requested !== amountFen) {
-        send(client, 'error', { message: '单次充值金额需在 1.00 ~ 100.00 元之间' })
+      // 单次充值区间：1.00 ~ 100.00 元。
+      // 越界/非法金额**直接拒绝，不静默改成别的金额**：以前是 clamp，结果客户端把
+      // 元当成分（或传了空值）时会悄悄下成 1 元订单，用户看到「输入 95、应付 1.00」。
+      const requested = Number(message.amountFen)
+      if (!Number.isFinite(requested) || requested < 100 || requested > 10000) {
+        send(client, 'rechargeResult', { ok: false, message: '单次充值金额需在 1.00 ~ 100.00 元之间' })
+        break
       }
+      const amountFen = Math.round(requested)
       if (!alipay.configured) {
         send(client, 'rechargeResult', { ok: false, message: '服务器未配置支付宝私钥，无法下单' })
         break

@@ -495,49 +495,67 @@ export default function Together(): JSX.Element {
         <div className="together__modal">
           <div className="together__dialog glass">
             <h3 className="together__h3">充值余额</h3>
-            <div className="together__amounts">
-              {RECHARGE_OPTIONS.map((amount) => (
-                <button
-                  key={amount}
-                  type="button"
-                  className={`together__amount${!useCustom && rechargeAmount === amount ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setUseCustom(false)
-                    setRechargeAmount(amount)
-                  }}
-                >
-                  {amount / 100} 元
-                </button>
-              ))}
-              <button
-                type="button"
-                className={`together__amount${useCustom ? ' is-active' : ''}`}
-                onClick={() => setUseCustom(true)}
-              >
-                自定义金额
-              </button>
-            </div>
 
-            {useCustom ? (
-              <div className="together__custom">
-                <input
-                  className="text-input"
-                  type="number"
-                  min={CUSTOM_MIN_YUAN}
-                  max={CUSTOM_MAX_YUAN}
-                  step="0.01"
-                  placeholder={`${CUSTOM_MIN_YUAN} ~ ${CUSTOM_MAX_YUAN}`}
-                  value={customAmount}
-                  onChange={(event) => {
-                    setCustomAmount(event.target.value)
-                    setUseCustom(true)
-                  }}
-                />
-                <span className={`together__hint${customValid ? '' : ' is-warn'}`}>
-                  {customValid ? `将充值 ${(customFen / 100).toFixed(2)} 元` : `请输入 ${CUSTOM_MIN_YUAN} ~ ${CUSTOM_MAX_YUAN} 之间的金额`}
-                </span>
-              </div>
-            ) : null}
+            {/*
+              金额选择与收款码互斥显示：以前两者同时渲染，改完金额后下面还是上一笔
+              订单（例如选了 1 元生成二维码、再改成 95 元，页面仍显示「应付 1.00 元」），
+              看起来就像「输入 95 却下成 1 元」。
+            */}
+            {state.order ? null : (
+              <>
+                <div className="together__amounts">
+                  {RECHARGE_OPTIONS.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      className={`together__amount${!useCustom && rechargeAmount === amount ? ' is-active' : ''}`}
+                      onClick={() => {
+                        setUseCustom(false)
+                        setRechargeAmount(amount)
+                        together.clearOrder()
+                      }}
+                    >
+                      {amount / 100} 元
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`together__amount${useCustom ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setUseCustom(true)
+                      together.clearOrder()
+                    }}
+                  >
+                    自定义金额
+                  </button>
+                </div>
+
+                {useCustom ? (
+                  <div className="together__custom">
+                    <input
+                      className="text-input"
+                      type="number"
+                      min={CUSTOM_MIN_YUAN}
+                      max={CUSTOM_MAX_YUAN}
+                      step="0.01"
+                      placeholder={`${CUSTOM_MIN_YUAN} ~ ${CUSTOM_MAX_YUAN}`}
+                      value={customAmount}
+                      onChange={(event) => {
+                        setCustomAmount(event.target.value)
+                        setUseCustom(true)
+                        // 改金额就作废旧订单，避免「金额已改、二维码还是上一笔」
+                        together.clearOrder()
+                      }}
+                    />
+                    <span className={`together__hint${customValid ? '' : ' is-warn'}`}>
+                      {customValid
+                        ? `将充值 ${(customFen / 100).toFixed(2)} 元`
+                        : `请输入 ${CUSTOM_MIN_YUAN} ~ ${CUSTOM_MAX_YUAN} 之间的金额`}
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            )}
 
             {!state.order ? (
               <>

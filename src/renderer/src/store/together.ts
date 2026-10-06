@@ -368,8 +368,13 @@ export function useTogetherStore(): TogetherStore {
       sendChat: (text, emoji) => client.chat(text, emoji),
       sendGift: (giftId) => client.sendGift(giftId),
       recharge: (amountFen) => {
+        // 兜底校验：金额非法时不下单，避免出现「输入 95 却下成 1 元」这类静默偏差。
+        if (!Number.isFinite(amountFen) || amountFen < 100 || amountFen > 10000) {
+          setOrder({ ok: false, message: '充值金额需在 1.00 ~ 100.00 元之间' })
+          return
+        }
         setOrderStatus(undefined)
-        client.recharge(amountFen)
+        client.recharge(Math.round(amountFen))
       },
       pollOrder: (outTradeNo) => client.pollOrder(outTradeNo),
       clearOrder: () => {

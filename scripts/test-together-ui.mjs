@@ -312,7 +312,7 @@ async function main() {
       `可买 ${giftState?.enabled} / 共 ${giftState?.total}`
     )
 
-    // 6. 充值弹窗能打开并选择面额
+    // 6. 充值：自定义 95 元必须下成 95.00 元的订单（回归「输入 95 显示 1 元」）
     const openedRecharge = await cdp(`(() => {
       const button = [...document.querySelectorAll('button')].find((item) => item.textContent.includes('充值'))
       if (!button) return false
@@ -323,6 +323,39 @@ async function main() {
     await wait(800)
     const modalOpen = await cdp(`Boolean(document.querySelector('.together__modal'))`)
     record('充值弹窗打开', modalOpen === true)
+
+    if (modalOpen) {
+      // 选「自定义金额」并输入 95
+      await cdp(`(() => {
+        const button = [...document.querySelectorAll('.together__amount')].find((item) => item.textContent.includes('自定义'))
+        if (button) button.click()
+        return Boolean(button)
+      })()`)
+      await wait(400)
+      await cdp(`(() => {
+        const input = document.querySelector('.together__custom .text-input')
+        if (!input) return false
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, '95')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`)
+      await wait(500)
+      const hint = await cdp(`document.querySelector('.together__custom .together__hint')?.textContent ?? ''`)
+      record('自定义金额提示正确', String(hint).includes('95.00'), `${hint}`)
+
+      await clickByText('生成收款码')
+      let orderText = ''
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        await wait(900)
+        orderText = (await cdp(`document.querySelector('.together__pay-amount')?.textContent ?? ''`)) || ''
+        if (orderText.includes('95.00')) break
+      }
+      record('下单金额与输入一致（95.00 元）', orderText.includes('95.00'), orderText || '(未出码)')
+      if (!orderText.includes('95.00')) log(`支付区文本: ${orderText || '(空)'}`)
+      await clickByText('关闭')
+      await wait(500)
+    }
     if (modalOpen) {
       await clickByText('生成收款码')
       let qrShown = false
