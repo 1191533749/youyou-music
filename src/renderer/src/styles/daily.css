@@ -1,0 +1,83 @@
+/**
+ * 每日推荐的日期条（pages/DailyPage.tsx）。
+ *
+ * 只放本页新增的 `.daily-dates*` 类：`.daily__banner` / `.daily__panel` / `.daily__gate`
+ * 那套仍由 library.css 提供，这里不重复定义，避免两边打架。
+ * 颜色全部走 tokens；玻璃材质与别的页面的次要按钮一致。
+ */
+
+.daily-dates {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  /* 7 天在窄窗口里放不下时允许横向滚动，滚动条不占视觉。 */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.daily-dates::-webkit-scrollbar {
+  display: none;
+}
+
+.daily-dates__day {
+  /* 一行文字就够：今天 / 昨天 / 10/1，不再显示周几。 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 62px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+  box-shadow: var(--glass-shadow-soft);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.25;
+  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+    box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.daily-dates__day:hover {
+  background-color: var(--glass-strong);
+  border-color: var(--accent);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.daily-dates__day:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.daily-dates__label {
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 选中态：强调色渐变底 + 亮边。
+   background-origin 必须是 border-box —— 默认的 padding-box 会让渐变从边框内侧起画，
+   1px 边框那圈就会露出没被覆盖的底色，出现一道缝。 */
+.daily-dates__day.is-active {
+  background-image: var(--accent-gradient);
+  background-origin: border-box;
+  background-clip: border-box;
+  border-color: transparent;
+  color: var(--text-on-accent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.daily-dates__day.is-active:hover {
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-dates__day,
+  .daily-dates__day:hover,
+  .daily-dates__day:active {
+    transition: none;
+    transform: none;
+  }
+}

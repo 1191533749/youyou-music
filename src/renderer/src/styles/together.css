@@ -56,11 +56,148 @@
 /* --- 连接卡（多列表单） -------------------------------------------------- */
 
 .together__connect {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding: 18px 20px;
   border-radius: var(--radius-lg);
+}
+
+/* 账号资料：只读展示，名字下面跟一行「26 岁 · 上海」这类小字。 */
+.together__me {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.together__me-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.together__me-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.together__me-name {
+  font-size: 15px;
+  font-weight: 640;
+}
+
+.together__me-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.together__me-sign {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 中继地址与口令默认折叠，不把内置值摆在最显眼的位置。 */
+.together__advanced {
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.together__advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: -10px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.together__advanced-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.together__advanced-summary {
+  max-width: 320px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.together__advanced-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.together__advanced-body .together__hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+/* --- 未登录提示卡 ------------------------------------------------------- */
+
+.together__gate {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 24px;
+  border-radius: var(--radius-lg);
+}
+
+.together__gate-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.together__gate-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.together__gate-title {
+  font-size: 15px;
+  font-weight: 640;
+}
+
+.together__gate-text {
+  margin: 0;
+  max-width: 560px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+  .together__gate {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .together__field {
@@ -104,11 +241,16 @@
 }
 
 .together__actions {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+/* 连接失败时主进程给的原因，跟在状态胶囊后面。 */
+.together__detail {
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 /* 状态胶囊：小圆点 + 文案，颜色随连接状态变化。 */
@@ -154,7 +296,6 @@
 }
 
 .together__balance {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -182,7 +323,18 @@
 }
 
 .together__connect .together__error {
-  grid-column: 1 / -1;
+  margin: 0;
+}
+
+/* 一次性提示：首次使用赠送的 1 元礼物额度。 */
+.together__notice {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--ok);
+  background: var(--glass-weak);
+  color: var(--ok);
+  font-size: 12px;
 }
 
 /* --- 双栏 --------------------------------------------------------------- */
@@ -395,6 +547,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 跟随同步提示：紧跟在「正在播放」下面的一行小字。 */
+.together__sync {
+  margin: -4px 0 12px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .together__members {
@@ -660,11 +820,52 @@
   margin-bottom: 14px;
 }
 
+/*
+ * 充值档位按钮：用自己的类而不是全局 .chip（用户反馈过 chip 左边缘有渲染问题）。
+ * 激活态是渐变 + 1px 边框，所以必须写 background-origin: border-box，否则渐变会在
+ * 边框区域平铺出另一头的深红色细边。
+ */
+.together__amount {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.together__amount:hover {
+  background: var(--glass-strong);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.together__amount.is-active {
+  background: var(--accent-gradient);
+  background-origin: border-box;
+  border-color: transparent;
+  color: var(--text-on-accent);
+  font-weight: 600;
+  box-shadow: 0 8px 20px var(--accent-soft);
+}
+
+.together__custom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
 .together__hint {
   margin: 0 0 12px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.7;
+}
+
+.together__hint.is-warn {
+  color: var(--warn);
 }
 
 .together__dialog-actions {
@@ -726,4 +927,360 @@
   color: var(--ok);
   font-size: 12px;
   text-align: center;
+}
+
+/* --- 雷达（components/Radar.tsx） --------------------------------------- */
+
+.radar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(200px, 250px);
+  gap: 16px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.radar__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 圆盘：同心圆 + 十字轴 + 旋转扫描线，头像光点浮在上面。 */
+.radar__dish {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid var(--glass-border);
+  background:
+    radial-gradient(circle at 50% 50%, var(--accent-soft), transparent 72%),
+    var(--glass-weak);
+  box-shadow: inset 0 0 44px var(--accent-soft);
+}
+
+.radar__ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  pointer-events: none;
+}
+
+.radar__ring--outer {
+  width: 96%;
+  height: 96%;
+}
+
+.radar__ring--mid {
+  width: 62%;
+  height: 62%;
+}
+
+.radar__ring--inner {
+  width: 28%;
+  height: 28%;
+}
+
+.radar__axis {
+  position: absolute;
+  background: var(--glass-border);
+  pointer-events: none;
+}
+
+.radar__axis--h {
+  left: 2%;
+  right: 2%;
+  top: 50%;
+  height: 1px;
+}
+
+.radar__axis--v {
+  top: 2%;
+  bottom: 2%;
+  left: 50%;
+  width: 1px;
+}
+
+/* 扫描线：conic-gradient 的一段扇形，绕盘心匀速旋转。 */
+.radar__sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--accent-soft) 46deg, transparent 68deg);
+  animation: radar-spin 4.2s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 盘心呼吸点。 */
+.radar__core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: radar-ping 2.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes radar-ping {
+  0% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  70% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+/*
+ * 头像光点：位置由 --radar-x/--radar-y 定住，漂移交给四个关键帧，
+ * 每个点用自己的时长与负延迟错开，所以不会整齐排列。
+ */
+.radar__blip {
+  position: absolute;
+  left: calc(50% + var(--radar-x, 0%));
+  top: calc(50% + var(--radar-y, 0%));
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: none;
+  transform: translate(-50%, -50%);
+  animation-name: radar-drift-a;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  z-index: 2;
+}
+
+.radar__blip--drift-b {
+  animation-name: radar-drift-b;
+}
+
+.radar__blip--drift-c {
+  animation-name: radar-drift-c;
+}
+
+.radar__blip--drift-d {
+  animation-name: radar-drift-d;
+}
+
+/* 悬停 / 选中时停在原地，方便点中。 */
+.radar__blip:hover,
+.radar__blip.is-active,
+.radar__blip.is-picked {
+  animation-play-state: paused;
+  z-index: 3;
+}
+
+.radar__halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+
+.radar__blip:hover .radar__halo,
+.radar__blip.is-active .radar__halo,
+.radar__blip.is-picked .radar__halo {
+  opacity: 1;
+}
+
+.radar__dot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-strong);
+  color: var(--text-secondary);
+  box-shadow: var(--glass-shadow-soft);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.radar__avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.radar__blip:hover .radar__dot,
+.radar__blip.is-active .radar__dot {
+  transform: scale(1.16);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.radar__blip.is-picked .radar__dot {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.radar__caption {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 资料卡：默认提示，悬停/选中后显示昵称、年龄、地区与签名。 */
+.radar__info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 142px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+}
+
+.radar__info-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.radar__info-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.radar__info-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.radar__info-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radar__info-meta {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.radar__info-sign {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.radar__info-sign.is-muted {
+  color: var(--text-tertiary);
+}
+
+.radar__info-tag {
+  align-self: flex-start;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.radar__info-idle {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+@media (max-width: 900px) {
+  .radar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 四个漂移路径：幅度与方向都不同，避免所有光点朝一个方向走。 */
+@keyframes radar-drift-a {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  30% {
+    transform: translate(calc(-50% + 7px), calc(-50% - 9px));
+  }
+  65% {
+    transform: translate(calc(-50% - 6px), calc(-50% + 5px));
+  }
+}
+
+@keyframes radar-drift-b {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  25% {
+    transform: translate(calc(-50% - 9px), calc(-50% + 4px));
+  }
+  60% {
+    transform: translate(calc(-50% + 5px), calc(-50% + 9px));
+  }
+}
+
+@keyframes radar-drift-c {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  35% {
+    transform: translate(calc(-50% + 4px), calc(-50% + 8px));
+  }
+  70% {
+    transform: translate(calc(-50% + 9px), calc(-50% - 6px));
+  }
+}
+
+@keyframes radar-drift-d {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  40% {
+    transform: translate(calc(-50% - 5px), calc(-50% - 8px));
+  }
+  75% {
+    transform: translate(calc(-50% - 9px), calc(-50% + 7px));
+  }
 }

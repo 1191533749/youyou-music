@@ -333,9 +333,7 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
         </div>
 
         {tracks.length === 0 ? (
-          <div className="page__empty">
-            {isOwn ? '这个歌单还没有歌曲，点上面的「添加歌曲」挑几首吧' : '这个歌单还没有歌曲'}
-          </div>
+          <div className="page__empty">这个歌单还没有歌曲</div>
         ) : (
           <SongList
             tracks={tracks}
@@ -507,9 +505,6 @@ function AddTracksDialog({
       />
       <div className="detail-pick">
         {searching ? <div className="detail-pick__hint">搜索中</div> : null}
-        {!searching && !keywords.trim() ? (
-          <div className="detail-pick__hint">输入关键词开始搜索</div>
-        ) : null}
         {!searching && keywords.trim() && results.length === 0 ? (
           <div className="detail-pick__hint">没有找到匹配的歌曲</div>
         ) : null}

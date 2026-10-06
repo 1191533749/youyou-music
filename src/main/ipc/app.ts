@@ -4,6 +4,8 @@
  */
 import { app, dialog, shell } from 'electron'
 import { execFile } from 'node:child_process'
+import { promises as fsp } from 'node:fs'
+import * as path from 'node:path'
 import { defineHandler } from './registry.js'
 import { toLyricsDTO } from '../lyrics/service.js'
 import { resolveMpvBinary } from '../audio/mpv.js'
@@ -112,6 +114,27 @@ export function registerAppHandlers(context: AppContext): void {
       throw new Error('只允许为网易云登录地址或支付宝收款码生成二维码')
     }
     return encodeQR(url)
+  })
+
+  /**
+   * QQ 群二维码：随包分发的图片，读成 data URL 给渲染进程展示
+   * （渲染进程的 CSP 只允许 img-src 'self' data: https:）。
+   */
+  defineHandler('app:qqGroupImage', async () => {
+    const candidates = [
+      path.join(process.resourcesPath ?? '', 'qq-group.png'),
+      path.join(app.getAppPath(), 'resources', 'qq-group.png'),
+      path.join(app.getAppPath(), '..', 'resources', 'qq-group.png')
+    ]
+    for (const candidate of candidates) {
+      try {
+        const data = await fsp.readFile(candidate)
+        return `data:image/png;base64,${data.toString('base64')}`
+      } catch {
+        // 试下一个候选路径
+      }
+    }
+    return undefined
   })
 
   // --- lyrics ---

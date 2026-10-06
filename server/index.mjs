@@ -136,11 +136,20 @@ async function handleMessage(client, message) {
         signature: message.profile?.signature
       }
       state.users[client.profile.uid] = client.profile
+      // 首次使用一起听：赠送 1 元礼物额度（每个账号只送一次）。
+      state.gifted ??= {}
+      let firstGift = false
+      if (!state.gifted[client.profile.uid]) {
+        state.gifted[client.profile.uid] = Date.now()
+        state.balances[client.profile.uid] = (state.balances[client.profile.uid] ?? 0) + 100
+        firstGift = true
+      }
       saveState()
       send(client, 'welcome', {
         clientId: client.id,
         gifts: GIFTS,
         balance: balanceOf(client.profile.uid),
+        firstGift,
         rooms: [...rooms.values()].map(roomSummary),
         listeners: listenerList()
       })
@@ -195,6 +204,14 @@ async function handleMessage(client, message) {
       leaveRoom(client)
       break
 
+    /** 新成员加入后主动请求一次同步：房主收到后立即广播当前播放状态。 */
+    case 'syncRequest': {
+      const room = rooms.get(client.roomId)
+      if (!room) break
+      broadcast(room.id, 'syncRequest', { from: client.id }, client.id)
+      break
+    }
+
     /** 房主（或任意成员）广播播放状态；服务器只做转发与「最新状态」缓存。 */
     case 'roomState': {
       const room = rooms.get(client.roomId)
@@ -215,7 +232,9 @@ async function handleMessage(client, message) {
         emoji: message.emoji,
         at: Date.now()
       }
-      broadcast(room.id, 'chat', payload)
+      // 广播时排除发送者，再单独回显给发送者：否则发送者会收到两份
+      // （对方点表情时就会「发出两条」，用户已反馈过）。
+      broadcast(room.id, 'chat', payload, client.id)
       send(client, 'chat', payload)
       break
     }
@@ -247,7 +266,7 @@ async function handleMessage(client, message) {
         gift,
         at: Date.now()
       }
-      if (room) broadcast(room.id, 'gift', payload)
+      if (room) broadcast(room.id, 'gift', payload, client.id)
       send(client, 'gift', payload)
       send(client, 'balance', { balance: balanceOf(uid) })
       break
@@ -260,7 +279,12 @@ async function handleMessage(client, message) {
     /** 充值：创建支付宝当面付订单，返回二维码内容。 */
     case 'recharge': {
       client.profile ??= { uid: String(client.id), nickname: `听友${client.id}` }
-      const amountFen = Math.max(100, Math.min(1000000, Math.round(Number(message.amountFen ?? 0))))
+      // 单次充值区间：1.00 ~ 100.00 元（档位里有 100 元；自定义金额前端限制 99.99）。
+      const requested = Math.round(Number(message.amountFen ?? 0))
+      const amountFen = Math.max(100, Math.min(10000, requested))
+      if (requested !== amountFen) {
+        send(client, 'error', { message: '单次充值金额需在 1.00 ~ 100.00 元之间' })
+      }
       if (!alipay.configured) {
         send(client, 'rechargeResult', { ok: false, message: '服务器未配置支付宝私钥，无法下单' })
         break

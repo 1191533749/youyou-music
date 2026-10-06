@@ -129,6 +129,24 @@ function Shell(): JSX.Element {
   const [error, setError] = useState<string | undefined>()
   const [info, setInfo] = useState<AppInfoDTO | undefined>()
 
+  /**
+   * 滚动位置记忆：进入歌单/专辑后返回，要回到刚才浏览的位置，
+   * 而不是从顶部重新滑动找歌单。键用路由本身（名称+id）拼出来。
+   */
+  const contentRef = useRef<HTMLElement>(null)
+  const scrollPositions = useRef(new Map<string, number>())
+  const routeKey = `${navigation.route.name}:${'id' in navigation.route ? navigation.route.id : ''}`
+  const previousKey = useRef(routeKey)
+
+  useEffect(() => {
+    const element = contentRef.current
+    if (!element) return
+    // 路由变化：先存下旧页面的位置，再恢复新页面的位置。
+    scrollPositions.current.set(previousKey.current, element.scrollTop)
+    previousKey.current = routeKey
+    element.scrollTop = scrollPositions.current.get(routeKey) ?? 0
+  }, [routeKey])
+
   useEffect(() => {
     void call('app:info').then(setInfo).catch(() => undefined)
   }, [])
@@ -207,7 +225,7 @@ function Shell(): JSX.Element {
           </div>
         </aside>
 
-        <main className="content">
+        <main className="content" ref={contentRef}>
           {error ? (
             <div className="banner banner--error glass">
               <span>{error}</span>

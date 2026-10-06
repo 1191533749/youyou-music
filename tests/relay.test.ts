@@ -280,16 +280,20 @@ describe('RelayClient 与中继服务器', () => {
   )
 
   it(
-    "A.sendGift('rose') 余额为 0 → 收到 error，且包含「余额不足」",
+    "余额不足以买礼物 → 收到 error，且包含「余额不足」",
     async () => {
       const giver = connect({ uid: freshUid('giver'), nickname: '穷听友', gender: 'male' })
-      await waitFor(giver, 'welcome')
+      const welcome = await waitFor(giver, 'welcome')
+      // 新账号会拿到「首次使用赠送 1 元礼物额度」，所以起步余额是 100 分。
+      expect(welcome.balance).toBe(100)
+      expect(welcome.firstGift).toBe(true)
 
-      // 先确认起步余额确实是 0，避免线上残留状态让用例误判
+      // 再确认一次余额（同时也是对 balance 通道的验证）
       giver.client.requestBalance()
       const balance = await waitFor(giver, 'balance')
-      expect(balance.balance).toBe(0)
+      expect(balance.balance).toBe(100)
 
+      // 玫瑰 2 元 > 1 元额度 → 必须被拒绝
       giver.client.sendGift('rose')
       const error = await waitFor(giver, 'error')
       expect(String(error.message)).toContain('余额不足')

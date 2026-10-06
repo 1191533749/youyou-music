@@ -113,7 +113,6 @@ export default function Home(): JSX.Element {
         {!auth.loggedIn && !auth.loading ? (
           <div className="home-hint">
             <div className="home-hint__title">登录后就能看到每日推荐</div>
-            <div className="home-hint__body">扫码登录后，这里会按你的口味每天更新 30 首。</div>
             <button
               type="button"
               className="button button--primary"
@@ -150,7 +149,6 @@ export default function Home(): JSX.Element {
         <SectionHeader
           icon={IconMusic}
           title={feedData && feedData.recommendPlaylists.length > 0 ? '推荐歌单' : '猜你喜欢'}
-          hint="根据你的口味挑的"
         />
         <SectionShell
           loading={feed.loading}
@@ -174,7 +172,7 @@ export default function Home(): JSX.Element {
       </section>
 
       <section className="page__section">
-        <SectionHeader icon={IconLayers} title="排行榜" hint="实时更新的热门榜单" />
+        <SectionHeader icon={IconLayers} title="排行榜" />
         <SectionShell
           loading={feed.loading}
           error={feed.error}
@@ -197,7 +195,7 @@ export default function Home(): JSX.Element {
       </section>
 
       <section className="page__section">
-        <SectionHeader icon={IconUser} title="热门歌手" hint="大家都在听" />
+        <SectionHeader icon={IconUser} title="热门歌手" />
         <SectionShell
           loading={artists.loading}
           error={artists.error}
@@ -222,7 +220,7 @@ export default function Home(): JSX.Element {
       </section>
 
       <section className="page__section">
-        <SectionHeader icon={IconDiamond} title="精品歌单" hint="百万收藏精选" />
+        <SectionHeader icon={IconDiamond} title="精品歌单" />
         <SectionShell
           loading={quality.loading}
           error={quality.error}

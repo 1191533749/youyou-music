@@ -393,3 +393,46 @@
   background: var(--bg-hover);
   font-size: 11px;
 }
+
+/* 加入群聊：左侧群信息 + 右侧二维码。 */
+.settings__group-chat {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings__group-chat-info {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  flex: 1;
+  min-width: 220px;
+}
+
+.settings__group-chat-name {
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.settings__group-chat-number {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings__group-chat-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.settings__group-chat-qr {
+  width: 148px;
+  height: 148px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+}

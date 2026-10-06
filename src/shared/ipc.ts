@@ -139,10 +139,17 @@ export interface IPCContract {
     request: { phone: string; captcha: string; countryCode?: string }
     response: void
   }
+  /** 账号资料补充：性别/年龄/地区/签名（一起听找听友用）。 */
+  'auth:userDetail': {
+    request: void
+    response: { gender?: 'female' | 'male'; age?: number; region?: string; signature?: string }
+  }
 
   // --- home / discovery ---
   'home:feed': { request: void; response: HomeFeedDTO }
   'home:dailySongs': { request: void; response: TrackDTO[] }
+  /** 历史每日推荐：{ date?: 'YYYY-MM-DD' }，不传日期取最近一周。 */
+  'home:dailyHistory': { request: { date?: string }; response: TrackDTO[] }
   'home:dislikeDaily': { request: { trackID: number }; response: TrackDTO }
   'home:personalized': { request: { limit?: number }; response: PlaylistSummaryDTO[] }
   'home:newAlbums': { request: { area?: string; limit?: number; offset?: number }; response: AlbumSummaryDTO[] }
@@ -264,6 +271,8 @@ export interface IPCContract {
   'app:chooseCacheDirectory': { request: void; response: string | undefined }
   'app:entitlements': { request: void; response: EntitlementDTO }
   'app:qrMatrix': { request: { url: string }; response: { size: number; modules: boolean[][] } }
+  /** QQ 群二维码（data URL），设置页「加入群聊」用。 */
+  'app:qqGroupImage': { request: void; response: string | undefined }
   'app:log': { request: { level: 'info' | 'warn' | 'error'; message: string }; response: void }
 }
 
@@ -300,8 +309,10 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'auth:profile',
   'auth:sendSMSCode',
   'auth:loginCellphone',
+  'auth:userDetail',
   'home:feed',
   'home:dailySongs',
+  'home:dailyHistory',
   'home:dislikeDaily',
   'home:personalized',
   'home:newAlbums',
@@ -375,6 +386,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'app:chooseCacheDirectory',
   'app:entitlements',
   'app:qrMatrix',
+  'app:qqGroupImage',
   'app:log'
 ]
 

@@ -320,6 +320,8 @@ async function bootstrap(): Promise<void> {
 
   const client = new NeteaseClient({
     cookieDirectory: userData,
+    // 网络层自动重试的日志（重试次数、底层错误链）走统一日志，便于排查「fetch failed」。
+    log,
     onCookieChange: () => {
       // Any cookie change can flip the login state, so let the UI re-read it.
       sendEvent(contextRef.value, 'auth:changed', { loggedIn: client.isLoggedIn })

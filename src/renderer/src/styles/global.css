@@ -525,11 +525,8 @@ img {
 
 /* --- 顶部搜索条 -------------------------------------------------------- */
 
-/* 顶部一行：返回在左，搜索居中。 */
+/* 顶部一行：返回在左，搜索居中。搜索条固定在这里，不随内容滚动（用户要求）。 */
 .top-row {
-  position: sticky;
-  top: 8px;
-  z-index: 30;
   display: grid;
   grid-template-columns: 72px 1fr 72px;
   align-items: center;

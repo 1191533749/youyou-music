@@ -509,6 +509,59 @@ export class NeteaseAPI {
     })
   }
 
+  /**
+   * 历史每日推荐。
+   *  - 不传日期：`/history/recommend/songs` 返回最近一周里抓取到的日推；
+   *  - 传日期（YYYY-MM-DD）：`/history/recommend/songs/detail` 返回那一天的日推。
+   * 两个接口的返回结构在不同版本里略有差异，这里都做了兜底解析。
+   */
+  async dailyRecommendHistory(date?: string): Promise<Track[]> {
+    const path = date ? '/history/recommend/songs/detail' : '/history/recommend/songs'
+    const payload = date ? { date } : {}
+    return this.weapi(path, payload, {
+      decoded: { allowNon200: true },
+      decode: (j) => {
+        const songs = j?.data?.songs ?? j?.songs ?? (Array.isArray(j?.data) ? j.data : [])
+        return toTracks(Array.isArray(songs) ? songs : [])
+      }
+    })
+  }
+
+  /**
+   * 账号资料补充：性别、生日（换算年龄）、省市区、个性签名。
+   * 登录接口返回的 profile 不含这些字段，一起听的「找听友」需要真实资料。
+   */
+  async userDetail(uid: number): Promise<{
+    gender?: 'female' | 'male'
+    age?: number
+    region?: string
+    signature?: string
+  }> {
+    const json = await this.weapi(`/v1/user/detail/${uid}`, {}, { decoded: { allowNon200: true } })
+    const profile = json?.profile ?? {}
+    const gender = profile.gender === 2 ? 'female' : profile.gender === 1 ? 'male' : undefined
+    let age: number | undefined
+    if (typeof profile.birthday === 'number' && profile.birthday > 0) {
+      const born = new Date(profile.birthday)
+      const now = new Date()
+      let years = now.getFullYear() - born.getFullYear()
+      const beforeBirthday =
+        now.getMonth() < born.getMonth() ||
+        (now.getMonth() === born.getMonth() && now.getDate() < born.getDate())
+      if (beforeBirthday) years -= 1
+      if (years > 0 && years < 120) age = years
+    }
+    const region = [profile.province, profile.city]
+      .filter((part: unknown) => typeof part === 'string' && part.length > 0 && part !== 'None')
+      .join(' ')
+    return {
+      gender,
+      age,
+      region: region || undefined,
+      signature: typeof profile.signature === 'string' ? profile.signature : undefined
+    }
+  }
+
   /** Throws when the replacement payload is incomplete, like the Swift decoder. */
   async dislikeRecommendedSong(id: number): Promise<Track> {
     return this.weapi(

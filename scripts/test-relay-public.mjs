@@ -96,6 +96,26 @@ async function main() {
   const chat = await a.waitFor('chat')
   record('公网聊天', chat.text === '公网聊天测试', `来自 ${chat.nickname}`)
 
+  // 去重检查：表情消息在双方各应只出现一次（曾经发一条到对方会显示两条）
+  b.send({ type: 'chat', text: '', emoji: '🎵' })
+  await wait(1800)
+  const bEmoji = b.received.filter((m) => m.type === 'chat' && m.emoji === '🎵').length
+  const aEmoji = a.received.filter((m) => m.type === 'chat' && m.emoji === '🎵').length
+  record('表情消息不重复（发送方与接收方各一条）', bEmoji === 1 && aEmoji === 1, `发送方=${bEmoji} 接收方=${aEmoji}`)
+
+  // 礼物价格区间：最低 1 元、最高 99.99 元
+  const prices = welcome.gifts.map((gift) => gift.price)
+  record(
+    '礼物价格在 1.00 ~ 99.99 元之间',
+    prices.every((price) => price >= 100 && price <= 9999),
+    `最低 ${Math.min(...prices) / 100} 元 / 最高 ${Math.max(...prices) / 100} 元`
+  )
+
+  // 进房即同步：新成员请求同步后，房主应收到 syncRequest
+  b.send({ type: 'syncRequest' })
+  const syncRequest = await a.waitFor('syncRequest', 6000)
+  record('新成员进房可要求房主立即同步', typeof syncRequest.from === 'number', `from=${syncRequest.from}`)
+
   a.send({ type: 'listListeners', filter: { gender: 'male', region: '广东' } })
   const listeners = await a.waitFor('listeners')
   record('公网听友筛选', listeners.listeners.length >= 1, `命中 ${listeners.listeners.length} 人`)
@@ -121,6 +141,16 @@ async function main() {
 
   a.close()
   b.close()
+
+  // 首次使用赠送 1 元礼物额度（用全新 uid，保证是"首次"）
+  const fresh = makeClient('C')
+  const freshWelcome = await fresh.hello({ uid: `first-${Date.now()}`, nickname: '首赠测试', gender: 'female', age: 22, region: '北京' })
+  record(
+    '首次使用赠送 1 元礼物额度',
+    freshWelcome.balance === 100 && freshWelcome.firstGift === true,
+    `balance=${freshWelcome.balance} firstGift=${freshWelcome.firstGift}`
+  )
+  fresh.close()
 
   const failed = results.filter((r) => !r.ok)
   console.log(failed.length === 0 ? '[public] PUBLIC-RELAY OK' : `[public] PUBLIC-RELAY FAILED (${failed.length})`)

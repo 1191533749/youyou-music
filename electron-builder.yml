@@ -28,6 +28,9 @@ extraResources:
     to: icon.png
   - from: THIRD-PARTY-NOTICES.txt
     to: THIRD-PARTY-NOTICES.txt
+  # 设置页「加入群聊」里的 QQ 群二维码（随包分发，运行时读 data URL 展示）。
+  - from: resources/qq-group.png
+    to: qq-group.png
 
 asar: true
 asarUnpack:

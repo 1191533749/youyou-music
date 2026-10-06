@@ -103,6 +103,7 @@ export interface TogetherStore {
     orderStatus?: RelayOrderStatus
     error?: string
     syncInfo?: string
+    notice?: string
   }
   setUrl: (url: string) => void
   setToken: (token: string) => void
@@ -115,6 +116,8 @@ export interface TogetherStore {
   joinRoom: (roomId: string) => void
   leaveRoom: () => void
   publishState: (state: RelayRoomState) => void
+  /** 请求房主同步一次（进房/重连后调用）。 */
+  requestSync: () => void
   sendChat: (text: string, emoji?: string) => void
   sendGift: (giftId: string) => void
   recharge: (amountFen: number) => void
@@ -141,6 +144,8 @@ export function useTogetherStore(): TogetherStore {
   const [order, setOrder] = useState<RelayOrderResult | undefined>()
   const [orderStatus, setOrderStatus] = useState<RelayOrderStatus | undefined>()
   const [error, setError] = useState<string | undefined>()
+  /** 一次性提示（例如首次使用赠送的 1 元礼物额度）。 */
+  const [notice, setNotice] = useState<string | undefined>()
   /** 最近一次跟随同步的结果，显示给用户（也便于排查"跟随不上"）。 */
   const [syncInfo, setSyncInfo] = useState<string | undefined>()
 
@@ -148,6 +153,14 @@ export function useTogetherStore(): TogetherStore {
   const roomRef = useRef<TogetherRoomView | undefined>()
   const applyingRef = useRef(false)
   const lastPublishRef = useRef(0)
+  /** 本地最新播放状态：房主被要求同步时（有新人进房）立即用它广播一次。 */
+  const lastLocalStateRef = useRef<RelayRoomState | undefined>()
+
+  /** 立刻广播本地状态（绕过节流），用于「新人进房必须马上同步听歌」。 */
+  const publishNow = useCallback(() => {
+    const state = lastLocalStateRef.current
+    if (state) clientRef.current?.broadcastState(state)
+  }, [])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ url, token, profile }))
@@ -202,6 +215,8 @@ export function useTogetherStore(): TogetherStore {
           setRooms(message.rooms ?? [])
           setListeners(message.listeners ?? [])
           setError(undefined)
+          // 首次使用一起听：服务器赠送 1 元礼物额度。
+          setNotice(message.firstGift ? '首次使用赠送 1 元礼物额度' : undefined)
           break
         case 'rooms':
           setRooms(message.rooms ?? [])
@@ -225,7 +240,11 @@ export function useTogetherStore(): TogetherStore {
           roomRef.current = view
           setRoom(view)
           setMessages([])
+          // 一进房就同步：房主立刻广播自己的进度；成员主动请求一次（若服务器
+          // 有缓存状态则先跟随缓存，随后仍会收到房主的实时状态）。
           if (message.state && !view.isHost) void applyRemoteState(message.state)
+          if (view.isHost) window.setTimeout(publishNow, 300)
+          else window.setTimeout(() => clientRef.current?.requestSync(), 300)
           break
         }
         case 'peerJoined':
@@ -236,6 +255,8 @@ export function useTogetherStore(): TogetherStore {
             roomRef.current = next
             return next
           })
+          // 有人进来：房主立刻广播一次，保证对方一进房就听到同一首、同一进度。
+          if (roomRef.current?.isHost) window.setTimeout(publishNow, 200)
           break
         case 'peerLeft':
           setRoom((previous) => {
@@ -252,6 +273,10 @@ export function useTogetherStore(): TogetherStore {
           break
         case 'roomState':
           if (message.from !== roomRef.current?.you && !roomRef.current?.isHost) void applyRemoteState(message.state)
+          break
+        case 'syncRequest':
+          // 有人（或自己重连后）请求同步：房主立刻广播当前状态。
+          if (roomRef.current?.isHost) publishNow()
           break
         case 'chat':
           setMessages((previous) => [...previous.slice(-199), message])
@@ -308,9 +333,20 @@ export function useTogetherStore(): TogetherStore {
     return () => client.close()
   }, [client])
 
+  /**
+   * 支付后自动查询到账：每 3 秒查一次，查到已支付或弹窗关闭就停。
+   * 用户不需要再点「我已支付」（他明确说过不要这个按钮）。
+   */
+  useEffect(() => {
+    if (!order?.ok || !order.outTradeNo || orderStatus?.paid) return
+    const outTradeNo = order.outTradeNo
+    const timer = window.setInterval(() => clientRef.current?.pollOrder(outTradeNo), 3000)
+    return () => window.clearInterval(timer)
+  }, [order?.ok, order?.outTradeNo, orderStatus?.paid])
+
   return useMemo<TogetherStore>(
     () => ({
-      state: { status, detail, url, token, profile, gifts, balance, rooms, listeners, room, messages, giftEvents, order, orderStatus, error, syncInfo },
+      state: { status, detail, url, token, profile, gifts, balance, rooms, listeners, room, messages, giftEvents, order, orderStatus, error, syncInfo, notice },
       setUrl: setUrlState,
       setToken: setTokenState,
       setProfile: (patch) => setProfileState((previous) => ({ ...previous, ...patch })),
@@ -322,11 +358,13 @@ export function useTogetherStore(): TogetherStore {
       joinRoom: (roomId) => client.joinRoom(roomId),
       leaveRoom: () => client.leaveRoom(),
       publishState: (state) => {
+        lastLocalStateRef.current = state
         const now = Date.now()
         if (now - lastPublishRef.current < 900) return
         lastPublishRef.current = now
         client.broadcastState(state)
       },
+      requestSync: () => client.requestSync(),
       sendChat: (text, emoji) => client.chat(text, emoji),
       sendGift: (giftId) => client.sendGift(giftId),
       recharge: (amountFen) => {
@@ -340,6 +378,6 @@ export function useTogetherStore(): TogetherStore {
       },
       requestBalance: () => client.requestBalance()
     }),
-    [status, detail, url, token, profile, gifts, balance, rooms, listeners, room, messages, giftEvents, order, orderStatus, error, syncInfo, client]
+    [status, detail, url, token, profile, gifts, balance, rooms, listeners, room, messages, giftEvents, order, orderStatus, error, syncInfo, notice, client]
   )
 }

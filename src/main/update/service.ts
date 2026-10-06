@@ -109,6 +109,47 @@ async function httpsJSON<T>(url: string, timeoutMS: number): Promise<T> {
   }
 }
 
+/** GitHub 请求的退避：500ms → 1500ms，首次之外最多再试 2 次。 */
+const UPDATE_RETRY_DELAYS_MS = [500, 1500]
+
+function describeCause(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause)
+}
+
+/**
+ * 4xx 是确定性错误（比如仓库还没有 Release 时的 404），重试只是白等；
+ * 其余（超时、连接被重置、5xx、响应被截断）都按可恢复处理。
+ */
+function isRetryableUpdateError(message: string): boolean {
+  const status = /更新源返回 (\d{3})/.exec(message)
+  if (status) {
+    const code = Number(status[1])
+    return code === 429 || code >= 500
+  }
+  return true
+}
+
+/**
+ * 带重试的更新清单请求：网络抖动（DNS/TLS、代理切换）不该让「检查更新」直接失败，
+ * 退避 500ms → 1500ms 重试两次；仍失败就抛给调用方，由它决定怎么呈现。
+ */
+async function httpsJSONWithRetry<T>(url: string, timeoutMS: number): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= UPDATE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await httpsJSON<T>(url, timeoutMS)
+    } catch (cause) {
+      lastError = cause
+      const reason = describeCause(cause)
+      const delay = UPDATE_RETRY_DELAYS_MS[attempt]
+      if (delay === undefined || !isRetryableUpdateError(reason)) break
+      console.warn(`[update] 获取更新清单失败（${reason}），${delay}ms 后重试（第 ${attempt + 1}/${UPDATE_RETRY_DELAYS_MS.length} 次）`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw lastError ?? new Error('更新源不可达')
+}
+
 interface GitHubRelease {
   tag_name?: string
   name?: string
@@ -141,7 +182,7 @@ export async function checkForUpdates(currentOverride?: string): Promise<UpdateC
   const current = currentOverride ?? safeAppVersion()
   const empty: UpdateCheckResult = { current, assets: [], updateType: null }
   try {
-    const raw = await httpsJSON<GitHubRelease | UpdateManifest>(updateFeedURL(), 8000)
+    const raw = await httpsJSONWithRetry<GitHubRelease | UpdateManifest>(updateFeedURL(), 8000)
     // 两种来源：GitHub Release 原始 JSON，或直接给我们的清单格式（KUMONE_UPDATE_URL 用）。
     const manifest =
       'assets' in raw && Array.isArray(raw.assets) && !('tag_name' in raw)
@@ -158,7 +199,9 @@ export async function checkForUpdates(currentOverride?: string): Promise<UpdateC
           ? 'portable'
           : null
     }
-  } catch {
+  } catch (cause) {
+    // 更新失败不影响听歌：界面照常显示「检查失败」，但日志里要留下真实原因。
+    console.warn(`[update] 检查更新失败：${describeCause(cause)}`)
     return empty
   }
 }

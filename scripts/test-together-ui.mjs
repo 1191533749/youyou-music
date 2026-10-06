@@ -26,6 +26,8 @@ const RELAY_TOKEN = 'yy-7f3a9c2e51d84b06'
 const FIXTURE = path.join(root, '..', 'kumone-upstream', 'Tests', 'KumoneCoreTests', 'Fixtures', 'offline.m4a')
 const CACHED_TRACK_ID = 999000001
 const CACHED_TRACK_NAME = '同步测试曲'
+/** 记录实际使用的登录凭证来源，便于排查「实例没登录」。 */
+let plantCookiesSource = '(未复制)'
 
 function plantCachedAudio() {
   const fixture = process.env.KUMONE_FIXTURE ?? FIXTURE
@@ -36,6 +38,32 @@ function plantCachedAudio() {
   const directory = path.join(userData, 'cache', 'audio')
   mkdirSync(directory, { recursive: true })
   copyFileSync(fixture, path.join(directory, `${CACHED_TRACK_ID}-exhigh.m4a`))
+  return true
+}
+
+/**
+ * 一起听需要登录：把真实 profile 的 cookies.json 复制一份到隔离目录
+ * （只读复制，绝不修改真实 profile）。
+ *
+ * 注意：不同时期的构建用过不同的 userData 目录名，其中只有仍是有效登录态的
+ * 那份 cookie 能让实例处于登录状态，所以按「已知可用的目录」顺序尝试。
+ */
+function plantCookies() {
+  const candidates = [
+    process.env.KUMONE_COOKIE_PROFILE,
+    path.join(process.env.APPDATA ?? '', 'kumone-windows', 'cookies.json'),
+    path.join(process.env.APPDATA ?? '', 'youyou-music', 'cookies.json'),
+    path.join(process.env.APPDATA ?? '', 'YouyouMusic', 'cookies.json')
+  ].filter(Boolean)
+  const source = candidates.find((candidate) => existsSync(candidate))
+  if (!source) {
+    log('未找到任何登录凭证：未登录状态下页面只会显示登录提示卡')
+    return false
+  }
+  mkdirSync(userData, { recursive: true })
+  copyFileSync(source, path.join(userData, 'cookies.json'))
+  plantCookiesSource = source
+  log(`已复制登录凭证：${source}`)
   return true
 }
 
@@ -114,6 +142,7 @@ const record = (name, ok, detail = '') => {
 
 async function main() {
   const planted = plantCachedAudio()
+  const loggedIn = plantCookies()
   const env = { ...process.env, KUMONE_USER_DATA: userData }
   delete env.ELECTRON_RUN_AS_NODE
   const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
@@ -149,6 +178,21 @@ async function main() {
     if (!entered) throw new Error('没能进入一起听页')
 
     await wait(1200)
+    // 登录态与资料是异步加载的，等它落定再判断（最多 20 秒）。
+    let loggedInApp = false
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const state = await cdp(
+        `({ account: Boolean(document.querySelector('.sidebar__account')), gate: Boolean(document.querySelector('.together__gate')) })`
+      )
+      if (state?.account === true && state?.gate === false) {
+        loggedInApp = true
+        break
+      }
+      await wait(1000)
+    }
+    record('测试实例处于登录态', loggedInApp, plantCookiesSource)
+    const gate = await cdp(`Boolean(document.querySelector('.together__gate'))`)
+    record('登录后不显示登录门禁', gate === false)
     const rendered = await cdp(`document.querySelectorAll('.together__gift').length >= 0 && document.body.innerText.includes('连接中继')`)
     record('页面控件渲染', rendered === true)
 
@@ -170,7 +214,7 @@ async function main() {
     }
 
     await wait(1000)
-    const balanceShown = await cdp(`document.body.innerText.includes('我的礼物余额')`)
+    const balanceShown = await cdp(`/账户余额|充值余额|礼物余额/.test(document.body.innerText)`)
     record('余额区域渲染', balanceShown === true)
 
     // 3. 建房 → 成为房主
@@ -231,18 +275,32 @@ async function main() {
     }
     record('聊天消息发送成功', chatShown === true)
 
-    // 5. 礼物：进入房间后礼物目录应可见；余额为 0 时全部禁用
+    // 5. 礼物：进入房间后礼物目录应可见；余额（含首次赠送 1 元）只买得起便宜的礼物
     await wait(800)
     const giftCount = await cdp(`document.querySelectorAll('.together__gift').length`)
     record('礼物目录已下发（房间内展示）', Number(giftCount) > 0, `礼物按钮 ${giftCount} 个`)
-    const giftDisabled = await cdp(`(() => {
+    const giftState = await cdp(`(() => {
       const gifts = [...document.querySelectorAll('.together__gift')]
-      return gifts.length > 0 && gifts.every((gift) => gift.disabled)
+      return {
+        total: gifts.length,
+        enabled: gifts.filter((gift) => !gift.disabled).length,
+        maxDisabled: gifts.length > 0 ? gifts[gifts.length - 1].disabled : null
+      }
     })()`)
-    record('余额为 0 时礼物按钮禁用', giftDisabled === true)
+    record(
+      '余额决定可购范围（1 元礼物可买、最贵礼物禁用）',
+      Number(giftState?.enabled) >= 1 && giftState?.maxDisabled === true,
+      `可买 ${giftState?.enabled} / 共 ${giftState?.total}`
+    )
 
     // 6. 充值弹窗能打开并选择面额
-    await clickByText('充值')
+    const openedRecharge = await cdp(`(() => {
+      const button = [...document.querySelectorAll('button')].find((item) => item.textContent.includes('充值'))
+      if (!button) return false
+      button.click()
+      return true
+    })()`)
+    record('点击充值入口', openedRecharge === true)
     await wait(800)
     const modalOpen = await cdp(`Boolean(document.querySelector('.together__modal'))`)
     record('充值弹窗打开', modalOpen === true)

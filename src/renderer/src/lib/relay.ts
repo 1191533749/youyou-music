@@ -85,7 +85,16 @@ export interface RelayOrderStatus {
 }
 
 export type RelayMessage =
-  | { type: 'welcome'; clientId: number; gifts: RelayGift[]; balance: number; rooms: RelayRoom[]; listeners: RelayListener[] }
+  | {
+      type: 'welcome'
+      clientId: number
+      gifts: RelayGift[]
+      balance: number
+      /** 首次使用一起听时赠送 1 元礼物额度。 */
+      firstGift?: boolean
+      rooms: RelayRoom[]
+      listeners: RelayListener[]
+    }
   | { type: 'rooms'; rooms: RelayRoom[] }
   | { type: 'listeners'; listeners: RelayListener[] }
   | { type: 'roomJoined'; room: RelayRoom; you: number; members: Array<{ id: number; nickname?: string }>; state?: RelayRoomState }
@@ -93,6 +102,8 @@ export type RelayMessage =
   | { type: 'peerLeft'; member: { id: number; nickname?: string } }
   | { type: 'roomLeft' }
   | { type: 'roomState'; from: number; state: RelayRoomState }
+  /** 有人请求同步：房主收到后应立即广播一次当前播放状态。 */
+  | { type: 'syncRequest'; from: number }
   | ({ type: 'chat' } & RelayChatMessage)
   | ({ type: 'gift' } & RelayGiftEvent)
   | { type: 'balance'; balance: number }
@@ -222,6 +233,11 @@ export class RelayClient {
 
   broadcastState(state: RelayRoomState): void {
     this.send({ type: 'roomState', state })
+  }
+
+  /** 请求房主同步一次（新加入房间时调用，保证「一进房就同步听歌」）。 */
+  requestSync(): void {
+    this.send({ type: 'syncRequest' })
   }
 
   chat(text: string, emoji?: string): void {

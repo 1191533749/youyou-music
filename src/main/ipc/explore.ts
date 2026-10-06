@@ -87,6 +87,18 @@ export function registerExploreHandlers(context: AppContext): void {
     return tracks(context, await context.api.dailyRecommendSongs())
   })
 
+  /** 历史每日推荐：可选日期（YYYY-MM-DD），不传则返回最近一周抓到的日推。 */
+  defineHandler('home:dailyHistory', async ({ date } = {}) => {
+    return tracks(context, await context.api.dailyRecommendHistory(date))
+  })
+
+  /** 账号资料补充（性别/年龄/地区/签名），一起听的找听友需要。 */
+  defineHandler('auth:userDetail', async () => {
+    const profile = await context.api.userAccount()
+    if (!profile) throw new Error('需要登录')
+    return context.api.userDetail(profile.userId)
+  })
+
   defineHandler('home:dislikeDaily', async ({ trackID }) => {
     const replacement = await context.api.dislikeRecommendedSong(trackID)
     return tracks(context, [replacement])[0]

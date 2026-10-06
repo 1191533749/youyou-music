@@ -126,6 +126,8 @@ export default function Settings(): JSX.Element {
   const [message, setMessage] = useState<string | undefined>()
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [checking, setChecking] = useState(false)
+  /** QQ 群二维码（随包分发的 data URL）。 */
+  const [groupImage, setGroupImage] = useState<string | undefined>()
   const toast = useToast()
   // 连续快速修改（比如主题切换、开关连点）时，多个 settings:update 的响应可能乱序
   // 到达——旧响应后到会把界面值盖回旧值，表现为「点了没生效」。序号守卫只采纳
@@ -137,6 +139,7 @@ export default function Settings(): JSX.Element {
     void call('app:info').then(setInfo).catch(() => undefined)
     void call('app:cacheUsage').then(setUsage).catch(() => undefined)
     void call('player:audioDevices').then(setDevices).catch(() => undefined)
+    void call('app:qqGroupImage').then(setGroupImage).catch(() => undefined)
   }, [])
 
   const patch = async (change: Partial<SettingsDTO>): Promise<void> => {
@@ -181,11 +184,9 @@ export default function Settings(): JSX.Element {
 
       <section className="settings__group">
         <h2>播放</h2>
-        <p>优先使用更高音质；该档位拿不到时自动降档，绝不播放残缺片段。</p>
         <div className="settings__row">
           <div className="settings__row-label">
             <span>默认音质</span>
-            <span className="settings__row-hint">所有档位都可选择，实际以音源能提供的最高档为准</span>
           </div>
           <div className="settings__row-control">
             <select
@@ -202,13 +203,11 @@ export default function Settings(): JSX.Element {
         </div>
         <SettingSwitch
           label="自动降档"
-          hint="请求的档位拿不到时，依次尝试较低档位，而不是直接报错"
           checked={settings.autoDowngradeQuality}
           onChange={(value) => void patch({ autoDowngradeQuality: value })}
         />
         <SettingSwitch
           label="记录播放"
-          hint="向账号上报播放记录，影响最近播放与听歌排行"
           checked={settings.scrobble}
           onChange={(value) => void patch({ scrobble: value })}
         />
@@ -216,13 +215,8 @@ export default function Settings(): JSX.Element {
 
       <section className="settings__group">
         <h2>音源</h2>
-        <p>
-          受版权限制、无法从网易云取得完整音频的歌曲，会自动到已启用的音源里找同一首歌
-          （时长、歌名、歌手、版本全部匹配），找到后直接播放完整版。
-        </p>
         <SettingSwitch
           label="受限歌曲自动换源"
-          hint="关闭后，受限歌曲将无法播放"
           checked={settings.unblockGreyTracks}
           onChange={(value) => void patch({ unblockGreyTracks: value })}
         />
@@ -230,26 +224,21 @@ export default function Settings(): JSX.Element {
           <SettingSwitch
             key={source.id}
             label={source.name}
-            hint={source.hint}
             disabled={!settings.unblockGreyTracks}
             checked={enabledSources.includes(source.id)}
             onChange={(value) => void toggleSource(source.id, value)}
           />
         ))}
         {enabledSources.length === 0 ? (
-          <p className="settings__row-hint">至少勾选一个音源，否则换源不会生效。</p>
+          <p className="settings__row-hint">至少勾选一个音源</p>
         ) : null}
       </section>
 
       <section className="settings__group">
         <h2>输出设备</h2>
-        <p>音频由 mpv 输出，切换设备会立刻生效。</p>
         <div className="settings__row">
           <div className="settings__row-label">
             <span>播放设备</span>
-            <span className="settings__row-hint">
-              {info?.mpv ? info.mpv : '未检测到 mpv，播放功能不可用'}
-            </span>
           </div>
           <div className="settings__row-control">
             <select
@@ -271,7 +260,6 @@ export default function Settings(): JSX.Element {
 
       <section className="settings__group">
         <h2>桌面歌词</h2>
-        <p>置顶悬浮的逐行歌词条，可拖动到任意位置，位置会被记住。</p>
         <SettingSwitch
           label="显示桌面歌词"
           checked={settings.showDesktopLyrics}
@@ -279,7 +267,6 @@ export default function Settings(): JSX.Element {
         />
         <SettingSwitch
           label="锁定歌词位置"
-          hint="锁定后桌面歌词不可拖动，避免误触移位"
           checked={settings.desktopLyricsLocked}
           onChange={(value) => void patch({ desktopLyricsLocked: value })}
         />
@@ -353,7 +340,6 @@ export default function Settings(): JSX.Element {
 
       <section className="settings__group">
         <h2>缓存</h2>
-        <p>播放过的音频会缓存到本地，再次播放时直接读盘。</p>
         <div className="settings__row">
           <div className="settings__row-label">
             <span>缓存目录</span>
@@ -426,16 +412,13 @@ export default function Settings(): JSX.Element {
 
       <section className="settings__group">
         <h2>系统集成</h2>
-        <p>与 Windows 的交互方式。</p>
         <SettingSwitch
           label="媒体键"
-          hint="键盘上的播放/暂停、上一首、下一首按键"
           checked={settings.mediaKeys}
           onChange={(value) => void patch({ mediaKeys: value })}
         />
         <SettingSwitch
           label="托盘图标"
-          hint="关闭主窗口后仍在托盘中运行"
           checked={settings.tray}
           onChange={(value) => void patch({ tray: value })}
         />
@@ -499,7 +482,7 @@ export default function Settings(): JSX.Element {
                 </button>
               )
             ) : (
-              <span className="settings__row-hint">在左侧「我的音乐」页面登录</span>
+              <span className="settings__row-hint">未登录</span>
             )}
           </div>
         </div>
@@ -507,7 +490,6 @@ export default function Settings(): JSX.Element {
 
       <section className="settings__group">
         <h2>更新</h2>
-        <p>软件启动时会自动检查；也可以随时在这里手动检查，发现新版本会有 30 秒倒计时自动更新。</p>
         <div className="settings__row">
           <div className="settings__row-label">
             <span>当前版本</span>
@@ -538,6 +520,30 @@ export default function Settings(): JSX.Element {
               {checking ? '正在检查…' : '检测更新'}
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="settings__group">
+        <h2>加入群聊</h2>
+        <div className="settings__group-chat">
+          <div className="settings__group-chat-info">
+            <div className="settings__group-chat-name">悠悠音乐 bug测试反馈群</div>
+            <div className="settings__group-chat-number">群号：169492698</div>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() =>
+                void call('app:openExternal', { url: 'https://qm.qq.com/q/L2I1RApP0o' }).catch((cause) =>
+                  setMessage(cause instanceof Error ? cause.message : String(cause))
+                )
+              }
+            >
+              加入群聊
+            </button>
+          </div>
+          {groupImage ? (
+            <img className="settings__group-chat-qr" src={groupImage} alt="QQ 群二维码" />
+          ) : null}
         </div>
       </section>
 
