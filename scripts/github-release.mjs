@@ -108,7 +108,8 @@ async function main() {
     }
     execFileSync('git', ['remote', 'add', 'origin', remote])
     execFileSync('git', ['push', '-u', 'origin', 'HEAD'], { stdio: 'inherit' })
-    execFileSync('git', ['push', 'origin', releaseTag], { stdio: 'inherit' })
+    // --force：tag 要始终指向最新提交（远端已有同名 tag 时覆盖）。
+    execFileSync('git', ['push', 'origin', releaseTag, '--force'], { stdio: 'inherit' })
   }
   log(`推送源码与 tag ${releaseTag}${dryRun ? '（dry-run）' : ' 完成'}`)
 
