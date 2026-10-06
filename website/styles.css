@@ -1,25 +1,31 @@
 /* ============================================================================
-   悠悠音乐官方网站样式
-   设计基调与客户端一致：暖橙红渐变 + 液态玻璃 + 深色底 + 背景光斑。
+   悠悠音乐官方网站样式 · 纯白毛玻璃
+   基调：纯白/近白底 + 半透明白色玻璃卡片 + 柔和彩色光晕 + 暖橙红点缀。
    纯 CSS，无外部依赖、无字体下载，交给任何静态服务器都能直接跑。
    ========================================================================== */
 
 :root {
   --accent: #ff4a1c;
-  --accent-2: #ff9500;
+  --accent-2: #ff8a00;
   --accent-3: #ff2d55;
   --accent-gradient: linear-gradient(135deg, #ffb03a 0%, #ff5a1f 52%, #ff2d55 100%);
-  --bg: #0f0b14;
-  --bg-soft: #171122;
-  --text: #f6f1ee;
-  --text-2: #c8bcc4;
-  --text-3: #9a8f99;
-  --glass: rgba(255, 255, 255, 0.07);
-  --glass-strong: rgba(255, 255, 255, 0.12);
-  --border: rgba(255, 255, 255, 0.14);
+
+  /* 纯白底 + 墨色文字 */
+  --bg: #fbfbfd;
+  --text: #1d1720;
+  --text-2: #57505f;
+  --text-3: #8b8494;
+
+  /* 毛玻璃：白色半透明 + 高饱和模糊，边框用更亮的白描出“玻璃边” */
+  --glass: rgba(255, 255, 255, 0.68);
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(255, 255, 255, 0.9);
+  --hairline: rgba(29, 23, 32, 0.08);
+  --shadow: 0 18px 48px rgba(64, 45, 90, 0.1);
+  --shadow-soft: 0 8px 24px rgba(64, 45, 90, 0.07);
+
   --radius: 18px;
   --radius-lg: 26px;
-  --shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
   --max: 1180px;
 }
 
@@ -50,11 +56,11 @@ a {
 code {
   padding: 1px 6px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(29, 23, 32, 0.06);
   font-size: 0.92em;
 }
 
-/* --- 背景光斑 ------------------------------------------------------------- */
+/* --- 背景：纯白底 + 淡彩光晕（玻璃卡片就靠它透出颜色） --------------------- */
 
 .backdrop {
   position: fixed;
@@ -62,16 +68,17 @@ code {
   z-index: -1;
   overflow: hidden;
   background:
-    radial-gradient(1100px 620px at 12% -8%, rgba(255, 122, 47, 0.24), transparent 60%),
-    radial-gradient(900px 620px at 96% 6%, rgba(255, 45, 85, 0.2), transparent 62%),
-    linear-gradient(180deg, #140f1b 0%, #0d0a12 55%, #0b0810 100%);
+    radial-gradient(900px 560px at 8% -10%, rgba(255, 176, 58, 0.16), transparent 62%),
+    radial-gradient(820px 540px at 96% 2%, rgba(255, 45, 85, 0.12), transparent 64%),
+    radial-gradient(760px 520px at 62% 104%, rgba(122, 92, 255, 0.1), transparent 66%),
+    linear-gradient(180deg, #ffffff 0%, #fafafc 45%, #f6f6fa 100%);
 }
 
 .blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.5;
+  filter: blur(80px);
+  opacity: 0.55;
   animation: drift 26s ease-in-out infinite alternate;
 }
 
@@ -80,33 +87,33 @@ code {
   height: 460px;
   left: -120px;
   top: -80px;
-  background: rgba(255, 150, 40, 0.5);
+  background: rgba(255, 196, 120, 0.6);
 }
 
 .blob--b {
   width: 520px;
   height: 520px;
   right: -140px;
-  top: 60px;
-  background: rgba(255, 45, 85, 0.42);
+  top: 40px;
+  background: rgba(255, 160, 185, 0.55);
   animation-delay: -6s;
 }
 
 .blob--c {
   width: 420px;
   height: 420px;
-  left: 32%;
-  bottom: -160px;
-  background: rgba(140, 80, 255, 0.32);
+  left: 34%;
+  bottom: -170px;
+  background: rgba(186, 170, 255, 0.5);
   animation-delay: -12s;
 }
 
 .blob--d {
   width: 360px;
   height: 360px;
-  right: 18%;
-  bottom: 8%;
-  background: rgba(255, 180, 60, 0.28);
+  right: 16%;
+  bottom: 6%;
+  background: rgba(160, 220, 255, 0.45);
   animation-delay: -18s;
 }
 
@@ -115,8 +122,19 @@ code {
     transform: translate3d(0, 0, 0) scale(1);
   }
   to {
-    transform: translate3d(40px, -30px, 0) scale(1.12);
+    transform: translate3d(42px, -32px, 0) scale(1.12);
   }
+}
+
+/* --- 通用毛玻璃 ----------------------------------------------------------- */
+
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  box-shadow: var(--shadow);
 }
 
 /* --- 导航 ----------------------------------------------------------------- */
@@ -134,15 +152,16 @@ code {
   max-width: var(--max);
   margin: 0 auto;
   padding: 16px 24px;
-  transition: background 0.25s ease, backdrop-filter 0.25s ease, border-color 0.25s ease;
+  transition: background 0.25s ease, backdrop-filter 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   border-bottom: 1px solid transparent;
 }
 
 .nav.is-scrolled {
-  background: rgba(15, 11, 20, 0.72);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  border-bottom-color: var(--border);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border-bottom-color: var(--hairline);
+  box-shadow: 0 6px 24px rgba(64, 45, 90, 0.06);
 }
 
 .nav__brand {
@@ -169,9 +188,10 @@ code {
   padding: 8px 18px;
   border-radius: 999px;
   background: var(--accent-gradient);
+  background-origin: border-box;
   color: #fff !important;
   font-weight: 600;
-  box-shadow: 0 10px 24px rgba(255, 74, 28, 0.34);
+  box-shadow: 0 10px 22px rgba(255, 74, 28, 0.28);
 }
 
 .logo {
@@ -179,21 +199,12 @@ code {
   place-items: center;
 }
 
-/* --- 通用容器 ------------------------------------------------------------- */
+/* --- 布局 ----------------------------------------------------------------- */
 
 main {
   max-width: var(--max);
   margin: 0 auto;
   padding: 120px 24px 40px;
-}
-
-.glass {
-  background: var(--glass);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  backdrop-filter: blur(22px) saturate(160%);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  box-shadow: var(--shadow);
 }
 
 .gradient-text {
@@ -210,11 +221,14 @@ main {
   gap: 2px;
   padding: 14px 24px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   background: var(--glass-strong);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
   color: var(--text);
   font-size: 15px;
   font-weight: 640;
+  box-shadow: var(--shadow-soft);
   transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, filter 0.16s ease;
 }
 
@@ -226,7 +240,7 @@ main {
 
 .btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 16px 34px rgba(64, 45, 90, 0.14);
 }
 
 .btn--primary {
@@ -234,11 +248,11 @@ main {
   background-origin: border-box;
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 16px 38px rgba(255, 74, 28, 0.36);
+  box-shadow: 0 16px 34px rgba(255, 74, 28, 0.3);
 }
 
 .btn--primary small {
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .btn--wide {
@@ -260,10 +274,13 @@ main {
   display: inline-block;
   padding: 5px 14px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   background: var(--glass);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
   font-size: 13px;
   color: var(--text-2);
+  box-shadow: var(--shadow-soft);
 }
 
 .hero h1 {
@@ -318,17 +335,18 @@ main {
   height: 118px;
   border-radius: 16px;
   background: var(--accent-gradient);
+  background-origin: border-box;
   display: grid;
   place-items: center;
   flex: none;
+  box-shadow: 0 12px 26px rgba(255, 74, 28, 0.28);
 }
 
 .player__disc {
   width: 78px;
   height: 78px;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%, #1a1220 0 26%, rgba(255, 255, 255, 0.16) 27%, #171018 30% 100%);
+  background: radial-gradient(circle at 50% 50%, #fff 0 24%, rgba(255, 255, 255, 0.55) 25%, #fff 29% 100%);
   animation: spin 9s linear infinite;
 }
 
@@ -357,7 +375,7 @@ main {
 .player__bar {
   height: 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(29, 23, 32, 0.1);
   overflow: hidden;
 }
 
@@ -389,7 +407,7 @@ main {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(29, 23, 32, 0.16);
 }
 
 .player__controls span.is-main {
@@ -397,7 +415,7 @@ main {
   height: 34px;
   background: var(--accent-gradient);
   background-origin: border-box;
-  box-shadow: 0 8px 20px rgba(255, 74, 28, 0.4);
+  box-shadow: 0 8px 18px rgba(255, 74, 28, 0.3);
 }
 
 .hero__cards {
@@ -420,7 +438,8 @@ main {
   display: grid;
   place-items: center;
   background: var(--glass-strong);
-  color: var(--accent-2);
+  border: 1px solid var(--glass-border);
+  color: var(--accent);
   font-size: 16px;
   flex: none;
 }
@@ -511,7 +530,7 @@ main {
 
 .card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.46);
+  box-shadow: 0 24px 52px rgba(64, 45, 90, 0.16);
 }
 
 .card h3 {
@@ -570,7 +589,7 @@ main {
   max-width: 380px;
   margin-left: auto;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, rgba(255, 122, 47, 0.16), rgba(20, 14, 26, 0.9) 70%);
+  background: radial-gradient(circle at 50% 50%, rgba(255, 176, 58, 0.18), rgba(255, 255, 255, 0.72) 72%);
   overflow: hidden;
   opacity: 0;
   transform: scale(0.96);
@@ -586,7 +605,7 @@ main {
   position: absolute;
   inset: 12%;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(29, 23, 32, 0.1);
 }
 
 .radar__ring--2 {
@@ -601,7 +620,7 @@ main {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: conic-gradient(from 0deg, rgba(255, 122, 47, 0.42), transparent 32%);
+  background: conic-gradient(from 0deg, rgba(255, 122, 47, 0.34), transparent 32%);
   animation: sweep 4.4s linear infinite;
 }
 
@@ -621,7 +640,7 @@ main {
   border-radius: 50%;
   background: var(--accent-gradient);
   background-origin: border-box;
-  box-shadow: 0 0 0 4px rgba(255, 74, 28, 0.16);
+  box-shadow: 0 0 0 4px rgba(255, 74, 28, 0.14);
   animation: blink 3.2s ease-in-out infinite;
 }
 
@@ -649,7 +668,7 @@ main {
   margin: -6px 0 0 -6px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 18px rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(255, 74, 28, 0.18), 0 0 18px rgba(255, 122, 47, 0.4);
 }
 
 /* --- 截图 ----------------------------------------------------------------- */
@@ -680,11 +699,12 @@ main {
   aspect-ratio: 16 / 10;
   object-fit: cover;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(255, 176, 58, 0.22), rgba(255, 45, 85, 0.2));
+  background: linear-gradient(135deg, rgba(255, 176, 58, 0.18), rgba(255, 45, 85, 0.14));
+  border: 1px solid var(--glass-border);
 }
 
 .shot img.is-missing {
-  opacity: 0.35;
+  opacity: 0.4;
 }
 
 .shot figcaption {
@@ -733,7 +753,7 @@ main {
 }
 
 .download__note a {
-  color: var(--accent-2);
+  color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -771,7 +791,7 @@ main {
 .faq summary::after {
   content: '+';
   float: right;
-  color: var(--accent-2);
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -791,7 +811,7 @@ main {
   max-width: var(--max);
   margin: 0 auto;
   padding: 40px 24px 56px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--hairline);
   display: grid;
   gap: 14px;
   justify-items: center;
@@ -815,7 +835,7 @@ main {
 }
 
 .footer__links a:hover {
-  color: var(--accent-2);
+  color: var(--accent);
 }
 
 .footer__note {

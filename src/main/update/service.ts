@@ -266,8 +266,18 @@ export async function withGitHubHashes(release: GitHubRelease): Promise<UpdateMa
   const manifest = releaseToManifest(release)
   const sums = (release.assets ?? []).find((asset) => /sha256sums/i.test(asset.name))
   if (!sums) return manifest
+  // 校验清单同样要重试：它的地址会 302 跳到对象存储，网络抖动时一次失败就白丢校验。
+  let text: string | undefined
+  for (let attempt = 0; attempt < 3 && text === undefined; attempt += 1) {
+    try {
+      text = await fetchText(sums.browser_download_url, 10000)
+    } catch (cause) {
+      if (attempt === 2) console.warn(`[update] 获取校验清单失败：${describeCause(cause)}`)
+      else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)))
+    }
+  }
+  if (text === undefined) return manifest
   try {
-    const text = await fetchText(sums.browser_download_url, 8000)
     const table = new Map<string, string>()
     for (const line of text.split(/\r?\n/)) {
       const match = /^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$/.exec(line.trim())
