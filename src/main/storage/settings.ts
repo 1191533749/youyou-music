@@ -7,7 +7,7 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import { EventEmitter } from 'node:events'
-import { DEFAULT_SETTINGS, DESKTOP_LYRICS_EFFECTS, type SettingsDTO } from '@shared/types'
+import { DEFAULT_SETTINGS, DESKTOP_LYRICS_EFFECTS, LYRIC_FONTS, type SettingsDTO } from '@shared/types'
 
 type Listener = (settings: SettingsDTO) => void
 
@@ -64,6 +64,7 @@ export class SettingsStore extends EventEmitter {
 
 /** 取值来自 @shared/types，避免主进程与渲染进程各维护一份枚举。 */
 const VALID_DESKTOP_LYRICS_EFFECTS = new Set<string>(DESKTOP_LYRICS_EFFECTS)
+const VALID_LYRIC_FONTS = new Set<string>(LYRIC_FONTS)
 
 const VALID_QUALITIES = new Set([
   'standard',
@@ -110,6 +111,11 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
         break
       case 'desktopLyricsLocked':
         if (typeof value === 'boolean') out.desktopLyricsLocked = value
+        break
+      case 'lyricFont':
+        if (typeof value === 'string' && VALID_LYRIC_FONTS.has(value)) {
+          out.lyricFont = value as SettingsDTO['lyricFont']
+        }
         break
       case 'cacheLimitMB':
         if (typeof value === 'number' && Number.isFinite(value)) {

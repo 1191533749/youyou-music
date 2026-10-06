@@ -19,11 +19,12 @@ import {
   formatDuration,
   isEmptyLyrics,
   onEvent,
-  repeatLabel,
   useNavigation,
   usePlayerStore,
   wordProgress
 } from '../lib/contract'
+// 播放模式的三个纯展示 helper 只在 store 里导出（用户只面对一个模式按钮）。
+import { currentPlayMode, cyclePlayMode, playModeLabel } from '../store/player'
 import {
   IconClose,
   IconDisc,
@@ -73,6 +74,21 @@ const LYRIC_EFFECTS = [
 ] as const
 
 type LyricEffect = (typeof LYRIC_EFFECTS)[number]['value']
+
+/**
+ * 播放模式按钮的图标：四种模式共用一个按钮，图标随模式变化。
+ * 与播放条（PlayerBar 的 modeIcon）保持同一套映射。
+ */
+function modeIcon(mode: ReturnType<typeof currentPlayMode>): JSX.Element {
+  switch (mode) {
+    case 'shuffle':
+      return <IconShuffle size={15} />
+    case 'repeatOne':
+      return <IconRepeatOne size={15} />
+    default:
+      return <IconRepeat size={15} />
+  }
+}
 
 /**
  * 波形条与星点的参数全部由下标算出，不用 Math.random：随机会让每次重渲染
@@ -374,30 +390,18 @@ export default function NowPlaying(): JSX.Element {
             {state.playing ? <IconPause size={14} /> : <IconPlay size={14} />}
             {state.playing ? '播放中' : current ? '已暂停' : '未在播放'}
           </span>
-          {/* 顺序/随机：单个点击切换按钮，图标是随机箭头，文案在「顺序播放 / 随机播放」之间切。 */}
+          {/* 播放模式只有一个按钮：点一下切下一种（顺序 / 随机 / 循环全部 / 单曲循环），
+              逻辑全在 store 的 cyclePlayMode/playModeLabel/currentPlayMode 里，
+              页面只负责显示 —— 不再拆成「随机」+「循环」两个按钮。 */}
           <button
             type="button"
-            className={`np-fs__tool${state.shuffle ? ' is-active' : ''}`}
-            title={state.shuffle ? '随机播放' : '顺序播放'}
-            aria-label={state.shuffle ? '随机播放' : '顺序播放'}
-            aria-pressed={state.shuffle}
-            onClick={() => void player.setShuffle(!state.shuffle)}
+            className={`np-fs__tool${currentPlayMode(state.shuffle, state.repeat) !== 'sequential' ? ' is-active' : ''}`}
+            title={`播放模式：${playModeLabel(state.shuffle, state.repeat)}`}
+            aria-label={`播放模式：${playModeLabel(state.shuffle, state.repeat)}`}
+            onClick={() => void cyclePlayMode(player, state.shuffle, state.repeat)}
           >
-            <IconShuffle size={15} />
-            {state.shuffle ? '随机播放' : '顺序播放'}
-          </button>
-          {/* 循环模式是另一个按钮，文案用 store 的 repeatLabel（不循环 / 循环全部 / 单曲循环），
-              与随机按钮靠图标和文字双重区分，避免出现两个都写「顺序播放」的按钮。 */}
-          <button
-            type="button"
-            className={`np-fs__tool${state.repeat !== 'off' ? ' is-active' : ''}`}
-            title={repeatLabel(state.repeat)}
-            aria-label={repeatLabel(state.repeat)}
-            aria-pressed={state.repeat !== 'off'}
-            onClick={() => void player.cycleRepeat()}
-          >
-            {state.repeat === 'one' ? <IconRepeatOne size={15} /> : <IconRepeat size={15} />}
-            {repeatLabel(state.repeat)}
+            {modeIcon(currentPlayMode(state.shuffle, state.repeat))}
+            {playModeLabel(state.shuffle, state.repeat)}
           </button>
           <button
             type="button"

@@ -5,7 +5,12 @@
  * 中间是传输控件与进度，右侧是音质、队列与音量。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { usePlayerStore, repeatLabel } from '../store/player'
+import {
+  usePlayerStore,
+  cyclePlayMode,
+  currentPlayMode,
+  playModeLabel
+} from '../store/player'
 import { useNavigation } from '../store/navigation'
 import { useAuthStore } from '../store/auth'
 import { call } from '../lib/ipc'
@@ -37,6 +42,18 @@ const QUALITY_LABELS: Record<string, string> = {
   jyeffect: '沉浸环绕',
   sky: '全景声',
   jymaster: '母带'
+}
+
+/** 四种播放模式各自的图标（用户只看到一个按钮，图标随模式变化）。 */
+function modeIcon(mode: ReturnType<typeof currentPlayMode>): JSX.Element {
+  switch (mode) {
+    case 'shuffle':
+      return <IconShuffle size={15} />
+    case 'repeatOne':
+      return <IconRepeatOne size={15} />
+    default:
+      return <IconRepeat size={15} />
+  }
 }
 
 export default function PlayerBar(): JSX.Element {
@@ -132,15 +149,6 @@ export default function PlayerBar(): JSX.Element {
         <div className="player-bar__controls">
           <button
             type="button"
-            className={`icon-button${state.repeat !== 'off' ? ' is-active' : ''}`}
-            title={repeatLabel(state.repeat)}
-            aria-label={repeatLabel(state.repeat)}
-            onClick={() => void player.cycleRepeat()}
-          >
-            {state.repeat === 'one' ? <IconRepeatOne size={18} /> : <IconRepeat size={18} />}
-          </button>
-          <button
-            type="button"
             className="icon-button"
             title="上一首"
             aria-label="上一首"
@@ -166,16 +174,16 @@ export default function PlayerBar(): JSX.Element {
           >
             <IconNext size={18} />
           </button>
-          {/* 顺序/随机：单个点击切换按钮，带文字明确当前状态。 */}
+          {/* 播放模式：只有一个按钮，点击在 4 种模式间循环。 */}
           <button
             type="button"
-            className={`player-bar__mode-toggle${state.shuffle ? ' is-active' : ''}`}
-            title={state.shuffle ? '随机播放' : '顺序播放'}
-            aria-label={state.shuffle ? '随机播放' : '顺序播放'}
-            onClick={() => void player.setShuffle(!state.shuffle)}
+            className="player-bar__mode-toggle"
+            title={`播放模式：${playModeLabel(state.shuffle, state.repeat)}（点击切换）`}
+            aria-label={`播放模式：${playModeLabel(state.shuffle, state.repeat)}，点击切换`}
+            onClick={() => void cyclePlayMode(player, state.shuffle, state.repeat)}
           >
-            <IconShuffle size={15} />
-            {state.shuffle ? '随机播放' : '顺序播放'}
+            {modeIcon(currentPlayMode(state.shuffle, state.repeat))}
+            {playModeLabel(state.shuffle, state.repeat)}
           </button>
         </div>
         <div className="player-bar__progress">

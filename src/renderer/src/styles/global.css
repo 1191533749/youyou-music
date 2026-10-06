@@ -427,6 +427,9 @@ img {
 
 .sidebar__link.is-active {
   background: var(--accent-gradient);
+  /* 渐变 + 1px 边框：origin 默认 padding-box 会让渐变平铺到边框区域，
+     左侧弧边就会露出渐变另一端的深红细边。统一用 border-box。 */
+  background-origin: border-box;
   color: var(--text-on-accent);
   box-shadow: 0 8px 20px rgba(255, 90, 31, 0.32);
 }
@@ -489,6 +492,35 @@ img {
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
+}
+
+/* --- 歌词字体（播放页 + 桌面歌词窗口共用同一个变量） -------------------- */
+
+:root {
+  --lyric-font: 'Noto Sans SC', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif;
+}
+
+.np-lyric__text,
+.np-lyric__translation,
+.np-lyric__romaji,
+.desktop-lyrics__line,
+.desktop-lyrics__translation {
+  font-family: var(--lyric-font);
+}
+
+/* 细体/楷体/宋体本身笔画偏细，压到正常字重更耐看（默认档保持粗字重）。 */
+:root[data-lyric-font='light'] .np-lyric__text,
+:root[data-lyric-font='light'] .desktop-lyrics__line,
+:root[data-lyric-font='kai'] .np-lyric__text,
+:root[data-lyric-font='kai'] .desktop-lyrics__line,
+:root[data-lyric-font='serif'] .np-lyric__text,
+:root[data-lyric-font='serif'] .desktop-lyrics__line {
+  font-weight: 600;
+}
+
+:root[data-lyric-font='light'] .np-lyric__text,
+:root[data-lyric-font='light'] .desktop-lyrics__line {
+  letter-spacing: 0.02em;
 }
 
 /* --- 顶部搜索条 -------------------------------------------------------- */
@@ -804,6 +836,7 @@ img {
 
 .song-row__play:hover {
   background: var(--accent-gradient);
+  background-origin: border-box;
   color: #fff;
 }
 
@@ -1043,6 +1076,7 @@ img {
   width: 40px;
   height: 40px;
   background: var(--accent-gradient);
+  background-origin: border-box;
   color: #fff;
   box-shadow: 0 8px 22px rgba(255, 90, 31, 0.36);
 }
@@ -1127,6 +1161,8 @@ img {
 
 .button--primary {
   background: var(--accent-gradient);
+  /* 见 .sidebar__link.is-active 的注释：避免 1px 边框区域的渐变平铺细边。 */
+  background-origin: border-box;
   border-color: transparent;
   color: #fff;
   box-shadow: 0 10px 26px rgba(255, 90, 31, 0.34);
@@ -1134,6 +1170,7 @@ img {
 
 .button--primary:hover {
   background: var(--accent-gradient);
+  background-origin: border-box;
   filter: brightness(1.06);
 }
 

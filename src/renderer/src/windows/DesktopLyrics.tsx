@@ -33,6 +33,7 @@ import {
   type SettingsDTO
 } from '@shared/types'
 import { activeIndexOf } from '../lib/lyricsUtils'
+import { applyLyricFont } from '../lib/fonts'
 import { IconLayers } from '../components/Icons'
 import './desktop-lyrics.css'
 
@@ -124,9 +125,16 @@ export default function DesktopLyrics(): JSX.Element {
   useEffect(() => {
     void call('player:state').then(setPlayer).catch(() => undefined)
     const offPlayer = onEvent('player:state', setPlayer)
-    const offSettings = onEvent('settings:changed', (next) => setPreferences(toPreferences(next)))
+    const offSettings = onEvent('settings:changed', (next) => {
+      // 字体走 CSS 变量 + 根元素标记，两条 settings 路径都要应用一次。
+      applyLyricFont(next.lyricFont)
+      setPreferences(toPreferences(next))
+    })
     void call('settings:get')
-      .then((current) => setPreferences(toPreferences(current)))
+      .then((current) => {
+        applyLyricFont(current.lyricFont)
+        setPreferences(toPreferences(current))
+      })
       .catch(() => undefined)
     return () => {
       offPlayer()
@@ -303,11 +311,12 @@ export default function DesktopLyrics(): JSX.Element {
    */
   const sweep = useMemo(() => {
     if (effect !== 'karaoke' || !current) return undefined
-    if (current.words && current.words.length > 0) return undefined
+    // 判断依据与渲染用的是同一个 words，两条路径互斥：有逐字时间轴就只走逐词。
+    if (words && words.length > 0) return undefined
     const start = current.time
     const end = next?.time !== undefined && next.time > start ? next.time : start + 4
     return Math.min(100, Math.max(0, ((position - start) / (end - start)) * 100))
-  }, [current, effect, next, position])
+  }, [current, effect, next, position, words])
 
   return (
     <div

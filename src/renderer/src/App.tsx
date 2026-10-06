@@ -43,6 +43,7 @@ import {
   LogoMark
 } from './components/Icons'
 import { call, onEvent } from './lib/ipc'
+import { applyLyricFont } from './lib/fonts'
 import {
   checkForUpdateInteractive,
   dismissUpdatePrompt,
@@ -391,12 +392,14 @@ function useThemeSync(): void {
       .then((settings) => {
         mode = settings.theme
         apply()
+        applyLyricFont(settings.lyricFont)
       })
       .catch(() => apply())
 
     const off = onEvent('settings:changed', (settings) => {
       mode = settings.theme
       apply()
+      applyLyricFont(settings.lyricFont)
     })
     media.addEventListener('change', apply)
     return () => {

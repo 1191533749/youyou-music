@@ -9,11 +9,13 @@ import { useEffect, useRef, useState } from 'react'
 import { call } from '../lib/contract'
 import {
   DESKTOP_LYRICS_EFFECTS,
+  LYRIC_FONTS,
   QUALITY_OPTIONS,
   type AppInfoDTO,
   type AudioDeviceDTO,
   type CacheUsageDTO,
   type DesktopLyricsEffect,
+  type LyricFont,
   type SettingsDTO
 } from '@shared/types'
 import { formatBytes } from '../lib/format'
@@ -34,6 +36,16 @@ const EFFECT_LABELS: Record<DesktopLyricsEffect, string> = {
   gradient: '渐变',
   neon: '霓虹',
   karaoke: '逐字卡拉OK'
+}
+
+/** 歌词字体的显示名（都是 Windows 常见已安装字体，切换后肉眼可见）。 */
+const LYRIC_FONT_LABELS: Record<LyricFont, string> = {
+  default: '现代黑体（默认）',
+  rounded: '圆体（幼圆）',
+  light: '细黑体（雅黑 Light）',
+  kai: '楷体',
+  serif: '宋体',
+  system: '系统默认'
 }
 
 /**
@@ -285,6 +297,23 @@ export default function Settings(): JSX.Element {
               {DESKTOP_LYRICS_EFFECTS.map((effect) => (
                 <option key={effect} value={effect}>
                   {EFFECT_LABELS[effect]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>歌词字体</span>
+          </div>
+          <div className="settings__row-control">
+            <select
+              value={settings.lyricFont}
+              onChange={(event) => void patch({ lyricFont: event.target.value as SettingsDTO['lyricFont'] })}
+            >
+              {LYRIC_FONTS.map((font) => (
+                <option key={font} value={font}>
+                  {LYRIC_FONT_LABELS[font]}
                 </option>
               ))}
             </select>

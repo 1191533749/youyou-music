@@ -45,6 +45,24 @@ export type DesktopLyricsEffect = 'classic' | 'gradient' | 'neon' | 'karaoke'
 /** 特效的展示顺序，也是桌面歌词窗口里切换按钮的循环顺序。 */
 export const DESKTOP_LYRICS_EFFECTS: DesktopLyricsEffect[] = ['classic', 'gradient', 'neon', 'karaoke']
 
+/**
+ * 歌词字体。用系统自带字体族（Windows 常见安装），保证切换后肉眼可见：
+ * default=现代无衬线 / rounded=幼圆 / light=细黑 / kai=楷体 / serif=宋体。
+ */
+export type LyricFont = 'default' | 'rounded' | 'light' | 'kai' | 'serif' | 'system'
+
+export const LYRIC_FONTS: LyricFont[] = ['default', 'rounded', 'light', 'kai', 'serif', 'system']
+
+/** 字体族映射：同时被播放页与桌面歌词窗口使用。 */
+export const LYRIC_FONT_STACKS: Record<LyricFont, string> = {
+  default: "'Noto Sans SC', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif",
+  rounded: "'YouYuan', 'MiSans', 'PingFang SC', 'Microsoft YaHei UI', sans-serif",
+  light: "'Microsoft YaHei Light', 'STXihei', 'Noto Sans SC', sans-serif",
+  kai: "'KaiTi', 'STKaiti', 'Noto Serif SC', serif",
+  serif: "'SimSun', 'Songti SC', 'Noto Serif SC', serif",
+  system: "system-ui, 'Microsoft YaHei UI', sans-serif"
+}
+
 export interface TrackDTO {
   id: number
   name: string
@@ -132,6 +150,8 @@ export interface SettingsDTO {
   desktopLyricsOpacity: number
   /** 桌面歌词特效：经典 / 渐变 / 霓虹 / 逐字卡拉OK。 */
   desktopLyricsEffect: DesktopLyricsEffect
+  /** 歌词字体（播放页与桌面歌词共用）。 */
+  lyricFont: LyricFont
   /** 锁定桌面歌词位置：锁定后不可拖动，避免误触。 */
   desktopLyricsLocked: boolean
   /** Always-on-top desktop lyric window position, in screen coordinates. */
@@ -173,6 +193,7 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   desktopLyricsFontSize: 28,
   desktopLyricsOpacity: 0.92,
   desktopLyricsEffect: 'classic',
+  lyricFont: 'default',
   desktopLyricsLocked: false,
   cacheLimitMB: 2048,
   cacheDirectory: '',

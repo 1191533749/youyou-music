@@ -9,19 +9,41 @@
  * 用法：$env:ALIPAY_PRIVATE_KEY="..."; $env:ALIPAY_APP_ID="..."; node scripts/alipay-probe.mjs
  */
 import { createSign } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 
-const appId = process.env.ALIPAY_APP_ID
-const privateKeyRaw = process.env.ALIPAY_PRIVATE_KEY
+const appId = process.env.ALIPAY_APP_ID ?? '2019101168266558'
+let privateKeyRaw = process.env.ALIPAY_PRIVATE_KEY
+
+// 也支持直接读密钥文件（文件里的字节比聊天里粘贴的更可靠）
+if (!privateKeyRaw && process.env.ALIPAY_PRIVATE_KEY_FILE) {
+  const text = readFileSync(process.env.ALIPAY_PRIVATE_KEY_FILE, 'utf8')
+  const match = text.match(/私钥[:：]?\s*\r?\n?\s*([A-Za-z0-9+/=\s]{500,})/)
+  privateKeyRaw = match ? match[1] : text
+}
 
 if (!appId || !privateKeyRaw) {
-  console.error('缺少 ALIPAY_APP_ID / ALIPAY_PRIVATE_KEY 环境变量')
+  console.error('缺少 ALIPAY_APP_ID / ALIPAY_PRIVATE_KEY（或 ALIPAY_PRIVATE_KEY_FILE）')
   process.exit(1)
 }
 
 function toPEM(key) {
-  const body = key.replace(/\s+/g, '').replace(/-----[^-]+-----/g, '')
-  const lines = body.match(/.{1,64}/g).join('\n')
-  return `-----BEGIN PRIVATE KEY-----\n${lines}\n-----END PRIVATE KEY-----\n`
+  const cleaned = key.replace(/\s+/g, '').replace(/-----[^-]+-----/g, '')
+  // 按 ASN.1 声明长度裁剪，容忍粘贴/文件里多余的尾部空行或字符
+  let der = Buffer.from(cleaned, 'base64')
+  if (der.length > 4 && der[0] === 0x30) {
+    let length = der[1]
+    let header = 2
+    if (length & 0x80) {
+      const count = length & 0x7f
+      length = 0
+      for (let i = 0; i < count; i += 1) length = (length << 8) | der[2 + i]
+      header = 2 + count
+    }
+    const declared = header + length
+    if (declared > 0 && declared <= der.length) der = der.subarray(0, declared)
+  }
+  const body = der.toString('base64').match(/.{1,64}/g).join('\n')
+  return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----\n`
 }
 
 function sign(params, privateKey) {

@@ -25,10 +25,11 @@
   /* 字形墨色与投影：描影只留 3px 的近距离扩散，避免字底下出现深色块。 */
   --lyric-ink: rgba(255, 255, 255, 0.96);
   --lyric-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
-  /* 优先系统里的「显示字面」，再回退到常见中文屏显字体。 */
-  font-family: 'Segoe UI Variable Display', 'Segoe UI Variable Text', 'HarmonyOS Sans SC',
-    'HarmonyOS Sans', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC',
-    system-ui, sans-serif;
+  /* 字体由 settings.lyricFont 决定：lib/fonts 的 applyLyricFont 把字体栈写进根元素的
+     --lyric-font，并打上 data-lyric-font 标记（细体/楷体/宋体由 global.css 下调字重）。
+     这里只用 var() 兜底，绝不写死一个更高优先级的族，否则会盖掉设置页里的选择。 */
+  font-family: var(--lyric-font, 'Segoe UI Variable Display', 'HarmonyOS Sans SC', 'PingFang SC',
+      'Microsoft YaHei UI', 'Noto Sans SC', system-ui, sans-serif);
   letter-spacing: 0.01em;
 }
 

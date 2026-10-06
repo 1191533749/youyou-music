@@ -102,10 +102,20 @@
   transform: translateY(-1px);
 }
 
+/*
+ * 渐变 + 1px 边框的元素必须把 background-origin 改成 border-box。
+ *
+ * 默认 background-origin 是 padding-box 而 background-clip 是 border-box，于是渐变
+ * 只按内边距盒计算，外圈那 1px 边框区域会「平铺」渐变 —— 平铺回来的正好是渐变的
+ * 另一头（--accent-gradient 的深红 #ff2d55），在胶囊左弧上就露出一条红色细边
+ * （用户截图里「按钮左侧多出来一条红色」就是这个）。改成 border-box 让渐变铺满
+ * 整个边框盒，边缘就是渐变真正的起始色。
+ */
 .home .chip.is-active,
 .explore .chip.is-active,
 .search .chip.is-active {
   background: var(--accent-gradient);
+  background-origin: border-box;
   border-color: transparent;
   color: var(--text-on-accent);
   box-shadow: 0 8px 20px var(--accent-soft);
@@ -167,6 +177,8 @@
 
 .home-date.is-today {
   background: var(--accent-gradient);
+  /* 同 .chip.is-active：不让渐变平铺进 1px 边框圈，否则左弧会露出深红那头。 */
+  background-origin: border-box;
   border-color: transparent;
   color: var(--text-on-accent);
   font-weight: 600;
@@ -594,6 +606,8 @@
 
 .np-fs__tool.is-active {
   background: var(--accent-gradient);
+  /* 同 .chip.is-active：这套工具按钮也有 1px 边框，必须让渐变铺满边框盒。 */
+  background-origin: border-box;
   border-color: transparent;
   color: var(--text-on-accent);
 }
