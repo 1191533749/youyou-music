@@ -139,3 +139,8 @@ npm run typecheck        # 主进程与渲染进程分别类型检查
 - 本项目作为其衍生作品，沿用 **LGPL-3.0**，见 [LICENSE](LICENSE)。发布 exe 时需一并提供对应源码。
 - mpv 以 **GPL-2.0-or-later** 发布，作为独立进程被调用（非链接），随包分发时需遵守其许可。
 - 本项目是非官方客户端，与网易云音乐无任何关联。
+
+## 仓库与发布
+
+- 源码与 Release：https://github.com/1191533749/youyou-music
+- 内置更新从该仓库的 Releases 拉取；新版本仅在你确认后打包发布。
