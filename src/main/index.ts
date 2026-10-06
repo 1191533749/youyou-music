@@ -581,6 +581,16 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
     const missing = assertAllChannelsRegistered()
     record('IPC 通道全注册', missing.length === 0, missing.length ? `缺失: ${missing.join(', ')}` : '全部已注册')
 
+    // 更新通道契约：dev 模式下被门控为「无更新」，但必须正常响应并带当前版本号。
+    const updateCheck = (await window.webContents.executeJavaScript(
+      `window.kumone.invoke('update:check').then((r) => r.data)`
+    )) as { current?: string; version?: string }
+    record(
+      '更新检查通道正常响应',
+      typeof updateCheck?.current === 'string' && updateCheck.current.length > 0,
+      `current=${updateCheck?.current} version=${updateCheck?.version ?? '无'}`
+    )
+
     // End-to-end playback through the app's own IPC. Playing a real NetEase
     // track would need a login, so the audio is planted into the cache the
     // player would have written anyway — which exercises queue → cache hit →
