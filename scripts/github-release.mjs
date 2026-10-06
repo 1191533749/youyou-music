@@ -6,7 +6,8 @@
  * 安全：token 只走环境变量/命令行；默认 dry-run，正式发布需 --confirm。
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 
@@ -28,6 +29,14 @@ const releaseTag = `v${version}`
 const installer = path.join(root, 'release', `悠悠音乐安装版${version}.exe`)
 const portable = path.join(root, 'release', `悠悠音乐便携版${version}.exe`)
 const sums = path.join(root, 'release', 'sha256sums.txt')
+// GitHub 上传接口对本机非 ASCII 资产名会截断（实测 CJK 全部丢失只剩 ASCII 尾巴），
+// 所以发布资产用 ASCII 名，更新器按 Portable/Setup 关键词识别形态；
+// 本地产物保持中文名不变。
+const uploadNames = {
+  [installer]: `YouyouMusic-Setup-${version}.exe`,
+  [portable]: `YouyouMusic-Portable-${version}.exe`,
+  [sums]: 'sha256sums.txt'
+}
 const apiBase = 'https://api.github.com'
 
 function log(message) {
@@ -122,9 +131,16 @@ async function main() {
     }
   }
 
-  // 4. 上传资产（便携版 / 安装版 / 哈希清单）
+  // 4. 上传资产（便携版 / 安装版 / 哈希清单），发布名用 ASCII（见 uploadNames 注释）
+  // 哈希清单也用 ASCII 资产名重写，这样更新器下载后能按名对号校验。
+  if (!dryRun) {
+    const asciiSums = [portable, installer]
+      .map((file) => `${sha256(file)}  ${uploadNames[file]}`)
+      .join('\n') + '\n'
+    writeFileSync(sums, asciiSums, 'utf8')
+  }
   for (const file of [portable, installer, sums]) {
-    const name = path.basename(file)
+    const name = uploadNames[file]
     if (dryRun) {
       log(`将上传 ${name} (${(statSync(file).size / 1024 / 1024).toFixed(1)} MB)（dry-run）`)
       continue
@@ -160,6 +176,10 @@ async function main() {
   if (!dryRun) {
     log(`仓库地址: https://github.com/${login}/youyou-music`)
   }
+}
+
+function sha256(file) {
+  return createHash('sha256').update(readFileSync(file)).digest('hex')
 }
 
 function releaseNotes(version) {

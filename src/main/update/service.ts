@@ -125,7 +125,9 @@ export function releaseToManifest(release: GitHubRelease): UpdateManifest {
       name: asset.name,
       url: asset.browser_download_url,
       size: asset.size,
-      kind: /便携版/.test(asset.name) ? 'portable' : 'installer'
+      // 命名约定（本地文件为中文名；GitHub 资产为 ASCII 名，两者都识别）：
+      // 便携版 / Portable → portable；安装版 / Setup → installer。
+      kind: /便携版|portable/i.test(asset.name) ? 'portable' : 'installer'
     }))
   return { version, notes: release.body, assets }
 }

@@ -41,6 +41,18 @@ describe('releaseToManifest', () => {
     expect(manifest.assets[0].kind).toBe('portable')
     expect(manifest.assets[1].kind).toBe('installer')
   })
+
+  it('ASCII 发布资产名同样识别形态（GitHub 上传对非 ASCII 名会截断，故发布用 ASCII）', () => {
+    const manifest = releaseToManifest({
+      tag_name: 'v0.3.0',
+      assets: [
+        { name: 'YouyouMusic-Portable-0.3.0.exe', browser_download_url: 'https://x/p.exe' },
+        { name: 'YouyouMusic-Setup-0.3.0.exe', browser_download_url: 'https://x/i.exe' }
+      ]
+    })
+    expect(manifest.assets[0].kind).toBe('portable')
+    expect(manifest.assets[1].kind).toBe('installer')
+  })
 })
 
 describe('buildApplyScript', () => {
