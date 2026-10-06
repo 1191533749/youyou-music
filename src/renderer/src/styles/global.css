@@ -362,13 +362,13 @@ img {
 
 /* --- 侧栏 -------------------------------------------------------------- */
 
-/* 侧栏本身透明：品牌行直接融进主背景渐变，导航/账号收在内部玻璃面板里。 */
+/* 侧栏本身透明：导航/账号收在内部玻璃面板里；padding 归零让面板与右侧内容区等高。 */
 .sidebar {
   grid-area: sidebar;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 18px 12px 12px;
+  padding: 0;
 }
 
 .sidebar__panel {
@@ -493,16 +493,48 @@ img {
 
 /* --- 顶部搜索条 -------------------------------------------------------- */
 
-/* 居中的胶囊搜索条：小巧精致，不占满整行。 */
-.top-search {
+/* 顶部一行：返回在左，搜索居中。 */
+.top-row {
   position: sticky;
   top: 8px;
   z-index: 30;
+  display: grid;
+  grid-template-columns: 72px 1fr 72px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.top-row__back {
+  justify-self: start;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.top-row__back:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--glass-strong);
+}
+
+.top-row__back.is-hidden {
+  visibility: hidden;
+}
+
+/* 居中的胶囊搜索条：小巧精致，不占满整行。 */
+.top-search {
+  grid-column: 2;
   display: flex;
   align-items: center;
   gap: 8px;
   width: min(340px, 100%);
-  margin: 0 auto 20px;
+  margin: 0 auto;
   padding: 7px 14px;
   color: var(--text-tertiary);
   background: var(--glass-weak);

@@ -232,15 +232,12 @@ function PlaylistDetail({ id, kicker: kickerOverride }: { id: number; kicker?: s
       ) : null}
 
       <section
-        className="hero detail-hero"
+        className="hero"
         onContextMenu={(event) => {
           event.preventDefault()
           setMenuAt({ x: event.clientX, y: event.clientY })
         }}
       >
-        <button type="button" className="detail-back" onClick={() => navigation.back()}>
-          返回
-        </button>
         <div className="hero__art">
           <RemoteImage
             src={coverUrl(detail.coverURL, 512)}

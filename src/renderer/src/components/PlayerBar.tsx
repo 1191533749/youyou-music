@@ -4,7 +4,7 @@
  * 布局沿用 macOS 版底部条的分工：左侧是封面与曲目信息（点封面进播放页），
  * 中间是传输控件与进度，右侧是音质、队列与音量。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePlayerStore, repeatLabel } from '../store/player'
 import { useNavigation } from '../store/navigation'
 import { useAuthStore } from '../store/auth'
@@ -46,6 +46,7 @@ export default function PlayerBar(): JSX.Element {
   const { state, current } = player
 
   const [liked, setLiked] = useState(false)
+  const likePending = useRef(false)
   const trackId = current?.id
 
   useEffect(() => {
@@ -64,14 +65,24 @@ export default function PlayerBar(): JSX.Element {
     }
   }, [auth.loggedIn, trackId])
 
-  const toggleLike = (): void => {
+  const toggleLike = async (): Promise<void> => {
     if (!auth.loggedIn || !current) {
       navigation.push({ name: 'library' })
       return
     }
+    // 连点保护：请求在途时忽略后续点击。之前没有这层保护，快速连点会出现
+    // 「点了没反应、要反复点几次」——多个写入互相覆盖/回滚。
+    if (likePending.current) return
+    likePending.current = true
     const next = !liked
     setLiked(next)
-    void call('library:likeTrack', { id: current.id, like: next }).catch(() => setLiked(!next))
+    try {
+      await call('library:likeTrack', { id: current.id, like: next })
+    } catch {
+      setLiked(!next)
+    } finally {
+      likePending.current = false
+    }
   }
 
   const progress = useMemo(() => {
@@ -111,7 +122,7 @@ export default function PlayerBar(): JSX.Element {
           className={`player-bar__like${liked ? ' is-active' : ''}`}
           title={liked ? '取消喜欢' : '喜欢'}
           aria-label={liked ? '取消喜欢' : '喜欢'}
-          onClick={toggleLike}
+          onClick={() => void toggleLike()}
         >
           {liked ? <IconHeartFilled size={18} /> : <IconHeart size={18} />}
         </button>

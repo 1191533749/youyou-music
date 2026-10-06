@@ -125,27 +125,31 @@ export function parseLyrics(response: LyricResponseShape | undefined): ParsedLyr
   out.translationContributor = response.transUser?.nickname
 
   const raw = response.lrc?.lyric
-  if (!raw) return out
-  let main = parseLRC(raw)
+  const yrcRaw = response.yrc?.lyric
+  // 有些歌只回逐字（yrc）而没有普通 lrc：以前这里直接 return out，
+  // 结果整首歌在「逐字卡拉OK」下变成空歌词。现在两者任一存在都继续解析。
+  if (!raw && !yrcRaw) return out
+
+  let main = raw ? parseLRC(raw) : []
 
   // Instrumental marker handling (mirrors YesPlayMusic).
-  if (main.length <= 10 && main.some((l) => l.text.includes(INSTRUMENTAL_MARKER))) {
+  if (raw && main.length <= 10 && main.some((l) => l.text.includes(INSTRUMENTAL_MARKER))) {
     out.isInstrumental = true
     main = main.filter(
       (l) => !l.text.includes(INSTRUMENTAL_MARKER) && !CREDIT_PREFIX.test(l.text)
     )
-    if (main.length === 0) return out
+    if (main.length === 0 && !yrcRaw) return out
   }
   main = main.filter((l) => !CREDIT_NO_LYRIC.test(l.text))
 
   let lines: LyricLine[] = main.map((pair, idx) => ({ id: idx, time: pair.time, text: pair.text }))
 
   // Prefer verbatim (word-by-word) lines when the song has them.
-  const yrcRaw = response.yrc?.lyric
   if (yrcRaw) {
     const yrcLines = parseYRC(yrcRaw)
     if (yrcLines.length > 0) lines = yrcLines
   }
+  if (lines.length === 0) return out
 
   const merge = (body: string | undefined, key: 'translation' | 'romaji'): void => {
     if (!body) return

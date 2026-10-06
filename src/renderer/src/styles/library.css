@@ -306,6 +306,41 @@
   border-radius: 0;
 }
 
+/*
+ * 展开列表上方的返回条：展开是页面内状态，顶部导航的返回按钮管不到它，所以
+ * 这里给一个同款玻璃胶囊（取值与 .top-row__back 一致）。
+ */
+.library__list-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 10px;
+}
+
+.library__collapse {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: var(--glass-shadow-soft);
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.library__collapse:hover {
+  color: var(--accent);
+  background: var(--glass-strong);
+}
+
+.library__list-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
 .library__list .song-row + .song-row {
   border-top: 1px solid var(--border);
 }

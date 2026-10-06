@@ -90,8 +90,11 @@ function LockGlyph({ open }: { open: boolean }): JSX.Element {
       aria-hidden="true"
       focusable="false"
     >
+      {/* 几何按「整体包围盒中心 = viewBox 中心 (12,12)」算过：锁体 y 11–20，
+          锁梁弦在 7.5、半圆顶点 4，合起来 y 4–20 → 中心正好 12；
+          x 方向 5–19 → 中心 12。开锁状态只是少了右侧竖边，包围盒不变。 */}
       <rect x="5" y="11" width="14" height="9" rx="2.5" />
-      <path d={open ? 'M8.5 11V8.2a3.5 3.5 0 0 1 6.7-1.4' : 'M8.5 11V8.2a3.5 3.5 0 0 1 7 0V11'} />
+      <path d={open ? 'M8.5 11V7.5a3.5 3.5 0 0 1 7 0' : 'M8.5 11V7.5a3.5 3.5 0 0 1 7 0V11'} />
     </svg>
   )
 }
@@ -148,10 +151,14 @@ export default function DesktopLyrics(): JSX.Element {
     }
   }, [trackID])
 
-  const current = useMemo(() => {
-    if (!lyrics || lyrics.empty) return undefined
+  // next 只用于卡拉OK的整行扫词：没有逐字时间轴时拿下一行的起点当本行的终点。
+  const { current, next } = useMemo(() => {
+    if (!lyrics || lyrics.empty) return { current: undefined, next: undefined }
     const index = activeIndexOf(lyrics, player?.position ?? 0)
-    return index >= 0 ? lyrics.lines[index] : lyrics.lines[0]
+    return {
+      current: index >= 0 ? lyrics.lines[index] : lyrics.lines[0],
+      next: index >= 0 ? lyrics.lines[index + 1] : lyrics.lines[1]
+    }
   }, [lyrics, player?.position])
 
   const { fontSize, opacity, effect, locked } = preferences
@@ -287,9 +294,20 @@ export default function DesktopLyrics(): JSX.Element {
   }, [effect])
 
   const position = player?.position ?? 0
-  // 只有逐字特效才拆词；其余特效（以及没有逐字时间轴的行）都整行显示。
+  // 只有逐字特效才拆词；其余特效都整行显示。
   const words = effect === 'karaoke' ? current?.words : undefined
   const line = current?.text ?? (player?.track ? '正在载入歌词' : '悠悠音乐 桌面歌词')
+  /**
+   * 卡拉OK的兜底：这一行没有逐字时间轴（words 为空，服务端没返回 yrc 时很常见）时，
+   * 退化成按「本行时长」整行扫词，否则选了这个特效却什么都不动，看起来就像没生效。
+   */
+  const sweep = useMemo(() => {
+    if (effect !== 'karaoke' || !current) return undefined
+    if (current.words && current.words.length > 0) return undefined
+    const start = current.time
+    const end = next?.time !== undefined && next.time > start ? next.time : start + 4
+    return Math.min(100, Math.max(0, ((position - start) / (end - start)) * 100))
+  }, [current, effect, next, position])
 
   return (
     <div
@@ -304,7 +322,10 @@ export default function DesktopLyrics(): JSX.Element {
       onMouseLeave={handleMouseLeave}
     >
       <div ref={dragRef} className="desktop-lyrics__drag">
-        <div className="desktop-lyrics__line">
+        <div
+          className={`desktop-lyrics__line${sweep !== undefined ? ' is-sweep' : ''}`}
+          style={sweep !== undefined ? ({ '--fill': `${sweep.toFixed(1)}%` } as CSSProperties) : undefined}
+        >
           {words && words.length > 0
             ? words.map((word, index) => (
                 <span
@@ -342,7 +363,8 @@ export default function DesktopLyrics(): JSX.Element {
           title={`歌词特效：${EFFECT_LABELS[effect]}（点击切换）`}
           aria-label={`歌词特效：${EFFECT_LABELS[effect]}，点击切换下一种`}
         >
-          <IconLayers size={14} />
+          {/* 图层图标的包围盒偏上（y 4–16.5，中心 10.25），加类做 1px 视觉补偿。 */}
+          <IconLayers size={14} className="desktop-lyrics__icon-layer" />
         </button>
       </div>
     </div>

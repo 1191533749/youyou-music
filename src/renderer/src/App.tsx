@@ -66,6 +66,8 @@ const NAV_ITEMS = [
 /**
  * 顶部搜索条：每页可见，回车直达搜索页。
  * 放在内容区顶部并 sticky，滚动内容时依然可用。
+ * 左侧在可返回时给出「返回」按钮——详情页的返回统一收在这一行，
+ * 不再浮在封面上（用户反馈过返回按钮压住图片）。
  */
 function TopSearch(): JSX.Element {
   const navigation = useNavigation()
@@ -78,29 +80,40 @@ function TopSearch(): JSX.Element {
   }
 
   return (
-    <div className="top-search">
-      <IconSearch size={16} />
-      <input
-        type="text"
-        className="top-search__input"
-        placeholder="搜索音乐、歌手、专辑、歌单"
-        value={keywords}
-        aria-label="搜索"
-        onChange={(event) => setKeywords(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') submit()
-        }}
-      />
-      {keywords ? (
-        <button
-          type="button"
-          className="top-search__clear"
-          aria-label="清空搜索词"
-          onClick={() => setKeywords('')}
-        >
-          <IconClose size={14} />
-        </button>
-      ) : null}
+    <div className="top-row">
+      <button
+        type="button"
+        className={`top-row__back${navigation.canGoBack ? '' : ' is-hidden'}`}
+        onClick={() => navigation.back()}
+        aria-label="返回"
+        disabled={!navigation.canGoBack}
+      >
+        返回
+      </button>
+      <div className="top-search">
+        <IconSearch size={16} />
+        <input
+          type="text"
+          className="top-search__input"
+          placeholder="搜索音乐、歌手、专辑、歌单"
+          value={keywords}
+          aria-label="搜索"
+          onChange={(event) => setKeywords(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') submit()
+          }}
+        />
+        {keywords ? (
+          <button
+            type="button"
+            className="top-search__clear"
+            aria-label="清空搜索词"
+            onClick={() => setKeywords('')}
+          >
+            <IconClose size={14} />
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }

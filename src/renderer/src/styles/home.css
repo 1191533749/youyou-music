@@ -287,6 +287,13 @@
   gap: 12px;
 }
 
+/* 听书/儿童这类「不是歌单分类」的分类，用一行说明代替页签。 */
+.explore__hint {
+  margin-bottom: 12px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 .explore__skeleton {
   height: 180px;
 }
@@ -470,6 +477,19 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  /*
+   * 窗口是无边框 + 自绘标题栏（global.css 的 .titlebar 带 -webkit-app-region: drag，
+   * 高 44px）。全屏层盖住了那条拖动区，必须显式声明 no-drag：拖动区是按元素盒子
+   * 算的，一个叠在上面的、没声明 no-drag 的层并不能取消它，于是落在顶部 44px 里的
+   * 点击会被窗口拖动吞掉 —— 表现就是顶栏按钮「只有下边缘能点」。下面三行把整层
+   * 以及顶栏、按钮全部标成不拖动。
+   */
+  -webkit-app-region: no-drag;
+}
+
+.np-fullscreen .np-fs__bar,
+.np-fullscreen .np-fs__bar * {
+  -webkit-app-region: no-drag;
 }
 
 /* 背景层：模糊放大的封面 + 玻璃遮罩。整层自带底色，不依赖下面的应用外壳。 */

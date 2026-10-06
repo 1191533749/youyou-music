@@ -87,8 +87,12 @@
 }
 
 .desktop-lyrics__control {
+  /* grid + place-items:center 让图标落在容器正中；line-height 归零 + svg 转 block，
+     彻底排掉行盒基线与行高带来的垂直偏移。 */
   display: grid;
   place-items: center;
+  line-height: 0;
+  padding: 0;
   width: 24px;
   height: 24px;
   border-radius: var(--radius-pill);
@@ -98,6 +102,17 @@
   /* 根层是 drag 区域：按钮不声明 no-drag 的话，点击会被当成拖窗口。 */
   -webkit-app-region: no-drag;
   transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+/* 图标本身不参与行盒基线：inline svg 会带一条基线间隙，居中就会偏上/偏下。 */
+.desktop-lyrics__control svg {
+  display: block;
+}
+
+/* IconLayers 的包围盒是 y 4–16.5（中心 10.25），比 viewBox 中心高 1.75 单位，
+   14px 尺寸下约 1px；这里补回来，让两个图标的视觉中心都落在容器中心。 */
+.desktop-lyrics__icon-layer {
+  transform: translateY(1px);
 }
 
 .desktop-lyrics__control:hover {
@@ -172,6 +187,16 @@
   transition: --fill 0.28s linear;
 }
 
+/* 兜底：这一行没有逐字时间轴（服务端没返回 yrc）时，按整行时长做从左到右的扫词，
+   同一套 --fill / 渐变 / 镂空，只是把进度来源换成整行。 */
+.desktop-lyrics--karaoke .desktop-lyrics__line.is-sweep {
+  background-image: linear-gradient(90deg, var(--accent) var(--fill, 0%), currentColor var(--fill, 0%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transition: --fill 0.28s linear;
+}
+
 /* --- 降低动态效果：全部特效退化为静态 --- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -179,7 +204,8 @@
     animation: none;
   }
 
-  .desktop-lyrics--karaoke .desktop-lyrics__word {
+  .desktop-lyrics--karaoke .desktop-lyrics__word,
+  .desktop-lyrics--karaoke .desktop-lyrics__line.is-sweep {
     transition: none;
   }
 

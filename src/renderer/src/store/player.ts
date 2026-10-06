@@ -91,12 +91,17 @@ export function usePlayerStore(): PlayerStore {
   )
 }
 
+/**
+ * 循环模式的显示名。
+ * 注意不要用「顺序播放」——那是随机开关的关闭态文案，
+ * 两个按钮都写「顺序播放」会让用户以为有两个重复的按钮（用户已反馈过）。
+ */
 export function repeatLabel(mode: RepeatMode): string {
   switch (mode) {
     case 'off':
-      return '顺序播放'
+      return '不循环'
     case 'all':
-      return '列表循环'
+      return '循环全部'
     case 'one':
       return '单曲循环'
   }

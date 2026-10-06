@@ -570,6 +570,15 @@ export class NeteaseAPI {
   }
 
   async topPlaylists(category: string, order = 'hot', limit = 50, offset = 0): Promise<TopPlaylistResponse> {
+    // 实测（2026-10）：网易云 `/playlist/list` 在 order=new 下**恒返回 0 条**
+    // （code 200、total 0；各种变体 cat 空/华语、new:true、sort:new 都一样），
+    // 而 order=hot 正常。所以「最新」改用精品歌单接口：它按更新时间倒序返回，
+    // 是真正的「最新歌单」且数据稳定。该接口用 lasttime 游标而非 offset，
+    // 因此「最新」只提供首页（more=false 让前端停止无限滚动）。
+    if (order === 'new') {
+      const latest = await this.highQualityPlaylists(category, limit, 0)
+      return { playlists: latest.playlists, total: latest.playlists.length, more: false }
+    }
     return this.weapi(
       '/playlist/list',
       { cat: category, order, limit, offset, total: true },

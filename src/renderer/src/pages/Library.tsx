@@ -409,16 +409,29 @@ export default function Library(): JSX.Element {
               </button>
             </div>
           ) : expanded.liked ? (
-            <div className="library__list">
-              <SongList
-                tracks={visibleLiked}
-                likedTrackIDs={likedIDs}
-                currentTrackID={player.state.track?.id}
-                onPlay={(index) => void player.playTracks(visibleLiked, index)}
-                onToggleLike={(track) => void toggleLike(track)}
-                emptyMessage="还没有喜欢的歌曲，点歌曲右侧的心形按钮就会出现在这里"
-              />
-            </div>
+            <>
+              {/* 展开是页面内状态，顶部导航的返回按钮管不到，所以列表上方再给一个返回。 */}
+              <div className="library__list-bar">
+                <button
+                  type="button"
+                  className="library__collapse"
+                  onClick={() => setExpanded((current) => ({ ...current, liked: false }))}
+                >
+                  返回
+                </button>
+                <span className="library__list-count">共 {visibleLiked.length} 首</span>
+              </div>
+              <div className="library__list">
+                <SongList
+                  tracks={visibleLiked}
+                  likedTrackIDs={likedIDs}
+                  currentTrackID={player.state.track?.id}
+                  onPlay={(index) => void player.playTracks(visibleLiked, index)}
+                  onToggleLike={(track) => void toggleLike(track)}
+                  emptyMessage="还没有喜欢的歌曲，点歌曲右侧的心形按钮就会出现在这里"
+                />
+              </div>
+            </>
           ) : null}
         </section>
 
@@ -647,7 +660,21 @@ export default function Library(): JSX.Element {
               <div>听过的歌会按播放次数排在这里</div>
             </div>
           ) : (
-            <div className={`library-recent${expanded.recent ? ' is-scroll' : ''}`}>
+            <>
+              {/* 展开态同样给一个页面内的返回入口。 */}
+              {expanded.recent ? (
+                <div className="library__list-bar">
+                  <button
+                    type="button"
+                    className="library__collapse"
+                    onClick={() => setExpanded((current) => ({ ...current, recent: false }))}
+                  >
+                    返回
+                  </button>
+                  <span className="library__list-count">共 {recent.length} 首</span>
+                </div>
+              ) : null}
+              <div className={`library-recent${expanded.recent ? ' is-scroll' : ''}`}>
               {recentRows.map((record, index) => {
                 const current = player.state.track?.id === record.song.id
                 return (
@@ -679,7 +706,8 @@ export default function Library(): JSX.Element {
                   </div>
                 )
               })}
-            </div>
+              </div>
+            </>
           )}
         </section>
       </div>
