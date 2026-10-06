@@ -6,6 +6,9 @@
  * 避免每次 npm run dev 都去敲 GitHub。
  */
 import { app } from 'electron'
+import { writeFileSync } from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { defineHandler } from './registry.js'
 import {
   checkForUpdates,
@@ -17,6 +20,15 @@ import {
 
 /** 最近一次 check 的完整结果（install 用它选择资产）。 */
 let lastCheck: Awaited<ReturnType<typeof checkForUpdates>> | undefined
+
+/** 排障落盘（与 service.ts 同一套约定）：应用退出后没有控制台。 */
+function trace(name: string, content: string): void {
+  try {
+    writeFileSync(path.join(os.tmpdir(), name), content)
+  } catch {
+    /* ignore */
+  }
+}
 
 export function registerUpdateHandlers(): void {
   defineHandler('update:check', async () => {
@@ -35,10 +47,12 @@ export function registerUpdateHandlers(): void {
   })
 
   defineHandler('update:install', async () => {
+    trace('youyou-install-start.log', `install invoked at=${new Date().toISOString()}`)
     if (!lastCheck || lastCheck.assets.length === 0) {
       lastCheck = await checkForUpdates()
     }
     if (!lastCheck || lastCheck.assets.length === 0) {
+      trace('youyou-install-start.log', 'no assets available')
       throw new Error('没有可用的更新资产')
     }
     const portable = isPortableBuild()
@@ -46,7 +60,9 @@ export function registerUpdateHandlers(): void {
       lastCheck.assets.find((asset) => (portable ? asset.kind === 'portable' : asset.kind === 'installer')) ??
       lastCheck.assets[0]
     if (!pick) throw new Error('没有可用的更新资产')
+    trace('youyou-install-start.log', `picked=${pick.name} portable=${portable}`)
     const localPath = await downloadAsset(pick)
+    trace('youyou-install-start.log', `downloaded=${localPath}`)
     applyUpdate(pick, localPath)
   })
 }

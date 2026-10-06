@@ -10,9 +10,8 @@
  * 测试/内网场景可用环境变量 KUMONE_UPDATE_URL 指向一个 JSON 清单。
  */
 import { app } from 'electron'
-import { createWriteStream, existsSync, mkdirSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { get } from 'node:https'
 import { spawn } from 'node:child_process'
 import * as path from 'node:path'
 import * as os from 'node:os'
@@ -22,6 +21,8 @@ export interface UpdateAsset {
   url: string
   kind: 'installer' | 'portable'
   size?: number
+  /** 提供时下载完成后必须校验 SHA-256，不一致就拒绝执行。 */
+  sha256?: string
 }
 
 export interface UpdateManifest {
@@ -143,7 +144,7 @@ export async function checkForUpdates(currentOverride?: string): Promise<UpdateC
     const manifest =
       'assets' in raw && Array.isArray(raw.assets) && !('tag_name' in raw)
         ? (raw as unknown as UpdateManifest)
-        : releaseToManifest(raw as GitHubRelease)
+        : await withGitHubHashes(raw as GitHubRelease)
     if (!manifest.version || compareVersions(manifest.version, current) <= 0) return empty
     return {
       current,
@@ -160,6 +161,31 @@ export async function checkForUpdates(currentOverride?: string): Promise<UpdateC
   }
 }
 
+/**
+ * GitHub Release 上没有逐资产哈希，但我们的发布流程会附带 sha256sums.txt：
+ * 拉下来解析成「文件名 → SHA-256」并挂到对应资产上，下载后先验哈希再执行。
+ */
+export async function withGitHubHashes(release: GitHubRelease): Promise<UpdateManifest> {
+  const manifest = releaseToManifest(release)
+  const sums = (release.assets ?? []).find((asset) => /sha256sums/i.test(asset.name))
+  if (!sums) return manifest
+  try {
+    const text = await fetchText(sums.browser_download_url, 8000)
+    const table = new Map<string, string>()
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$/.exec(line.trim())
+      if (match) table.set(match[2].trim(), match[1].toLowerCase())
+    }
+    for (const asset of manifest.assets) {
+      const hash = table.get(asset.name)
+      if (hash) asset.sha256 = hash
+    }
+  } catch {
+    // 拿不到哈希清单只是退化为不校验，不阻断更新。
+  }
+  return manifest
+}
+
 /** 读取应用版本；在非 Electron 环境（单测）下退回 '0.0.0'。 */
 function safeAppVersion(): string {
   try {
@@ -174,9 +200,13 @@ export function downloadAsset(asset: UpdateAsset, onProgress?: (fraction: number
   const dir = path.join(os.tmpdir(), 'youyou-update')
   mkdirSync(dir, { recursive: true })
   const target = path.join(dir, asset.name)
+  // 已有文件也必须过哈希（可能来自上次中断的下载）；不匹配就删掉重下。
   if (existsSync(target)) {
-    onProgress?.(1)
-    return Promise.resolve(target)
+    if (!asset.sha256 || sha256File(target).toLowerCase() === asset.sha256.toLowerCase()) {
+      onProgress?.(1)
+      return Promise.resolve(target)
+    }
+    rmSync(target, { force: true })
   }
   const tmp = `${target}.part`
   const lib = asset.url.startsWith('https://') ? require('node:https') : require('node:http')
@@ -203,7 +233,7 @@ export function downloadAsset(asset: UpdateAsset, onProgress?: (fraction: number
         if (total > 0) onProgress?.(Math.min(1, received / total))
       })
       response.pipe(out)
-      out.on('finish', () => out.close(() => resolve(target)))
+      out.on('finish', () => out.close(() => resolve(tmp)))
       out.on('error', (cause) => reject(cause))
     })
     request.on('error', reject)
@@ -211,13 +241,25 @@ export function downloadAsset(asset: UpdateAsset, onProgress?: (fraction: number
       request.destroy()
       reject(new Error('下载超时'))
     })
-  }).then((result) => {
-    // .part 重命名为最终文件名
-    if (result === target) return target
+  }).then(() => {
+    // 下载完先验哈希（有清单时），再落成最终文件名。
+    if (asset.sha256) {
+      const actual = sha256File(tmp).toLowerCase()
+      if (actual !== asset.sha256.toLowerCase()) {
+        rmSync(tmp, { force: true })
+        throw new Error(`下载校验失败：${asset.name} 的 SHA-256 与发布清单不一致`)
+      }
+    }
     const { renameSync } = require('node:fs') as typeof import('node:fs')
     renameSync(tmp, target)
     return target
   })
+}
+
+function sha256File(file: string): string {
+  const { createHash } = require('node:crypto') as typeof import('node:crypto')
+  const { readFileSync } = require('node:fs') as typeof import('node:fs')
+  return createHash('sha256').update(readFileSync(file)).digest('hex')
 }
 
 /** 当前程序是不是便携版形态（electron-builder portable 会注入这两个环境变量）。 */
@@ -226,46 +268,189 @@ export function isPortableBuild(): boolean {
 }
 
 /**
+ * 生成「退出 → 替换/安装 → 重开」的 PowerShell 脚本（不执行）。
+ * 独立导出便于单测断言脚本形状与转义。
+ *
+ * 便携版有两个实测要点：
+ *  1. 内层应用退出后，便携版外壳进程还会短暂存活并占用 exe——
+ *     必须连外壳（父进程 + 任何指向目标路径的进程）一起等；
+ *  2. 覆盖用带重试的复制循环（10 秒内最多 40 次），
+ *     兜住杀毒扫描/句柄释放等任何瞬时占用。
+ */
+export function buildApplyScript(options: {
+  pid: number
+  parentPid: number
+  portable: boolean
+  currentExe: string
+  newFile: string
+}): string {
+  const { pid, parentPid, portable, currentExe, newFile } = options
+  // 替换脚本自带的落盘日志：应用退出后 PowerShell 没有控制台，
+  // 出错时只有这个文件能说明卡在哪一步（排障与支持都靠它）。
+  // 注意写在 TEMP 根，不写 youyou-update 子目录——那个目录可能被新实例启动时的
+  // cleanUpdateCache 删掉，日志放里面会一起消失。
+  const logLine = `$log = Join-Path $env:TEMP 'youyou-apply.log'; function L($m) { try { Add-Content -Path $log -Value ("$(Get-Date -Format o) " + $m) -Encoding utf8 } catch {} }; L 'apply script started'`
+  // 用换行拼接成完整多行脚本：try/catch、for 这类块结构绝不能用分号拼接
+  // （`}; catch` 在 PowerShell 里是语法错误，PS 会启动即挂且退出码 0）。
+  const lines: string[] = [
+    logLine,
+    `$pidToWait = ${pid}`,
+    '$waits = 0',
+    'while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500; $waits++; if ($waits % 20 -eq 0) { L ("still waiting for app pid, polls=" + $waits) } }',
+    'L "old app exited"'
+  ]
+  if (portable) {
+    lines.push(
+      `$target = '${escapePS(currentExe)}'`,
+      `$newFile = '${escapePS(newFile)}'`,
+      `$parentToWait = ${parentPid}`,
+      'while (($parentToWait -gt 0) -and (Get-Process -Id $parentToWait -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 300 }',
+      'while (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ExecutablePath -eq $target }) { Start-Sleep -Milliseconds 300 }',
+      'L "holder processes exited"',
+      '$copied = $false',
+      'for ($i = 0; $i -lt 40 -and -not $copied; $i++) {',
+      '  try {',
+      '    Copy-Item -Path $newFile -Destination $target -Force -ErrorAction Stop',
+      '    $copied = $true',
+      '  } catch {',
+      '    L ("copy attempt " + $i + " failed: " + $_.Exception.Message)',
+      '    Start-Sleep -Milliseconds 250',
+      '  }',
+      '}',
+      'L ("copied=" + $copied)',
+      'if ($copied) { Start-Process -FilePath $target; L "relaunched" }',
+      'L "apply script done"'
+    )
+  } else {
+    lines.push(
+      `$installer = '${escapePS(newFile)}'`,
+      "Start-Process -FilePath $installer -ArgumentList '/S' -Wait",
+      'L "installer finished"',
+      `Start-Process -FilePath '${escapePS(currentExe)}'`,
+      'L "relaunched"',
+      'L "apply script done"'
+    )
+  }
+  return lines.join('\n')
+}
+
+/**
  * 排定「退出 → 替换/安装 → 重开」流程并退出应用。
  * 用 PowerShell 做脱离进程：它等我们的 PID 消失后再动手，避免覆盖被占用/被自己杀掉的局面。
  */
 export function applyUpdate(asset: UpdateAsset, localPath: string): void {
-  const pid = String(process.pid)
   const portable = isPortableBuild()
+  const currentExe = portable
+    ? (process.env.PORTABLE_EXECUTABLE_FILE ?? process.execPath)
+    : process.execPath
+  const script = buildApplyScript({
+    pid: process.pid,
+    parentPid: process.ppid,
+    portable,
+    currentExe,
+    newFile: localPath
+  })
 
-  let script: string
-  if (portable) {
-    // 便携版：覆盖当前正在运行的 exe（用 PORTABLE_EXECUTABLE_FILE 更准，拿不到就用 execPath），
-    // 然后重新启动它。路径统一用单引号包裹并转义，避免中文路径/空格问题。
-    const currentExe = process.env.PORTABLE_EXECUTABLE_FILE ?? process.execPath
-    script = [
-      `$pidToWait = ${pid}`,
-      `$target = '${escapePS(currentExe)}'`,
-      `$newFile = '${escapePS(localPath)}'`,
-      'while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }',
-      'Copy-Item -Path $newFile -Destination $target -Force',
-      'Start-Process -FilePath $target'
-    ].join('; ')
-  } else {
-    // 安装版：静默运行新安装包（覆盖安装到原目录），完成后启动安装后的主程序。
-    const installedExe = process.execPath
-    script = [
-      `$pidToWait = ${pid}`,
-      `$installer = '${escapePS(localPath)}'`,
-      'while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }',
-      "Start-Process -FilePath $installer -ArgumentList '/S' -Wait",
-      `Start-Process -FilePath '${escapePS(installedExe)}'`
-    ].join('; ')
+  // 排障落盘：applyUpdate 被调用、spawn 成功/失败、子进程退出码，全部记到 TEMP。
+  // 应用退出后没有控制台，这是唯一能回答「替换为什么没发生」的证据。
+  try {
+    writeFileSync(
+      path.join(os.tmpdir(), 'youyou-apply-start.log'),
+      JSON.stringify({ at: new Date().toISOString(), pid: process.pid, parentPid: process.ppid, portable, currentExe, localPath }, null, 2)
+    )
+  } catch {
+    /* ignore */
   }
 
-  spawn(
-    'powershell.exe',
-    ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { detached: true, stdio: 'ignore', windowsHide: true }
-  ).unref()
+  // 把脚本落成 .ps1 再用 -File 启动：比 -Command 传一大串内嵌引号可靠得多。
+  const ps1Path = path.join(os.tmpdir(), 'youyou-apply.ps1')
+  try {
+    writeFileSync(ps1Path, script, 'utf8')
+  } catch {
+    /* ignore */
+  }
 
-  // 给脱离进程一点启动时间，再退出本进程，让锁定的文件被释放。
-  setTimeout(() => app.quit(), 1500)
+  // stdout/stderr 接文件而不是 ignore：PowerShell 的解析/运行错误只走这两个流，
+  // 接住才能排障（对正常流程零影响，-WindowStyle Hidden 本身就没有控制台）。
+  // 注意必须用 openSync 拿真实 fd：直接把 WriteStream 传给 spawn 会因 fd 尚未打开
+  // 同步抛 "The argument 'stdio' is invalid"。
+  const outFd = openSync(path.join(os.tmpdir(), 'youyou-apply-out.log'), 'a')
+  const errFd = openSync(path.join(os.tmpdir(), 'youyou-apply-err.log'), 'a')
+
+  // 关键：必须经 `cmd /c start` 启动 PowerShell。
+  // 实测本环境下「父进程退出会连带杀掉子进程」（作业对象 kill-on-close），
+  // 直接 spawn 的 PS 会随应用退出一起死掉，替换永远不执行；而 cmd 的 `start`
+  // 通过 ShellExecute 把 PS 挂到独立会话，是唯一实测能活过应用退出的通道。
+  // 注意用独立 argv 元素（与验证时的形式一致）；拼成单串给 /c 会被 cmd 的引号
+  // 解析坑掉。
+  const child = spawn('cmd.exe', [
+    '/c',
+    'start',
+    '',
+    'powershell.exe',
+    '-NoProfile',
+    '-WindowStyle',
+    'Hidden',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    ps1Path
+  ], {
+    stdio: ['ignore', outFd, errFd],
+    windowsHide: true
+  })
+  try {
+    writeFileSync(
+      path.join(os.tmpdir(), 'youyou-apply-pid.log'),
+      `child.pid=${child.pid} at=${new Date().toISOString()}`
+    )
+  } catch {
+    /* ignore */
+  }
+  child.on('spawn', () => {
+    try {
+      writeFileSync(path.join(os.tmpdir(), 'youyou-apply-spawned.log'), `spawned at=${new Date().toISOString()}`)
+    } catch {
+      /* ignore */
+    }
+  })
+  child.on('error', (cause) => {
+    try {
+      writeFileSync(path.join(os.tmpdir(), 'youyou-apply-spawn-error.log'), String(cause))
+    } catch {
+      /* ignore */
+    }
+  })
+  child.on('exit', (code) => {
+    try {
+      writeFileSync(path.join(os.tmpdir(), 'youyou-apply-exit.log'), `exit code=${code} at=${new Date().toISOString()}`)
+    } catch {
+      /* ignore */
+    }
+  })
+  child.unref()
+
+  // 给脱离进程一点启动时间，再退出本进程。
+  // 必须用 app.exit 而不是 app.quit：托盘开启时 window-all-closed 会把 quit 拦下来
+  // （"关闭时最小化到托盘"语义），那样旧进程永远不退、替换永远不执行。
+  setTimeout(() => {
+    try {
+      writeFileSync(path.join(os.tmpdir(), 'youyou-exit-firing.log'), `firing at=${new Date().toISOString()}`)
+    } catch {
+      /* ignore */
+    }
+    app.exit(0)
+  }, 1500)
+  // 兜底：万一 app.exit 因为任何原因没有终止进程（本环境实测过它失效的场景），
+  // 5 秒后用 process.exit 硬杀——更新流程绝不能卡在「旧进程不退出」。
+  setTimeout(() => {
+    try {
+      writeFileSync(path.join(os.tmpdir(), 'youyou-exit-fallback.log'), `fallback at=${new Date().toISOString()}`)
+    } catch {
+      /* ignore */
+    }
+    process.exit(0)
+  }, 5000)
 }
 
 /** 把路径转义成 PowerShell 单引号字面量。 */

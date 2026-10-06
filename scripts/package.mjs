@@ -13,7 +13,8 @@
  * 顺带做产物自检：两个 exe 都在、且 exe 里有 asar 完整性资源（缺了会静默退出）。
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 
@@ -63,9 +64,20 @@ run('portable')
 const version = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version
 // 命名约定见 electron-builder.yml：悠悠音乐安装版<版本>.exe / 悠悠音乐便携版<版本>.exe
 // （更新源按「安装版/便携版」关键词匹配资产，命名不能随意改）
-assertArtifact(`悠悠音乐安装版${version}.exe`)
-assertArtifact(`悠悠音乐便携版${version}.exe`)
+const installer = assertArtifact(`悠悠音乐安装版${version}.exe`)
+const portable = assertArtifact(`悠悠音乐便携版${version}.exe`)
 assertIntegrity(path.join(unpacked, 'YouyouMusic.exe'))
 
+// 发布侧哈希清单：更新器下载资产后先验 SHA-256 再执行。
+const sums = [installer, portable]
+  .map((file) => `${sha256(file)}  ${path.basename(file)}`)
+  .join('\n') + '\n'
+writeFileSync(path.join(root, 'release', 'sha256sums.txt'), sums, 'utf8')
+console.log(`OK  sha256sums.txt  ${sums.split('\n')[0].split(' ')[0].slice(0, 12)}…（含 2 个资产哈希）`)
+
 console.log('\n打包完成，产物在 release/ 目录。')
+
+function sha256(file) {
+  return createHash('sha256').update(readFileSync(file)).digest('hex')
+}
 
