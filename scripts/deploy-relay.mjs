@@ -156,7 +156,7 @@ After=network.target
 WorkingDirectory=${REMOTE_DIR}
 Environment=PORT=${RELAY_PORT}
 Environment=ALIPAY_APP_ID=2019101168266558
-ExecStart=${nodeBin} ${REMOTE_DIR}/index.mjs
+${process.env.RELAY_TOKEN ? `Environment=RELAY_TOKEN=${process.env.RELAY_TOKEN}\n` : ''}ExecStart=${nodeBin} ${REMOTE_DIR}/index.mjs
 Restart=always
 RestartSec=3
 User=root

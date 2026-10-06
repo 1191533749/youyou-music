@@ -1,0 +1,729 @@
+/**
+ * 「一起听」页面样式。
+ *
+ * 只消费 global.css 的设计令牌（颜色、圆角、玻璃、阴影全部走 var()），所以深浅两套
+ * 主题都能直接成立；页面里需要出现表情的只有聊天内容与礼物图标（那是用户要求的
+ * 功能，不是界面装饰），其它地方一律不出现表情符号。
+ *
+ * 结构见 src/renderer/src/pages/Together.tsx。带 .glass 的元素材质由全局类给，
+ * 这里只补布局与排版，避免两处重复定义玻璃参数。
+ */
+
+/* --- 页面骨架 ----------------------------------------------------------- */
+
+.together {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.together__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.together__sub {
+  margin: 0;
+  max-width: 720px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.together__h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 640;
+}
+
+.together__h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 10px;
+  font-size: 14px;
+  font-weight: 640;
+}
+
+.together__h3:first-child {
+  margin-top: 0;
+}
+
+/* --- 连接卡（多列表单） -------------------------------------------------- */
+
+.together__connect {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px 14px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+}
+
+.together__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.together__field label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* 下拉与输入框统一成白卡质感；select 没有全局类，这里补一套。 */
+.together__field input,
+.together__field select,
+.together__filter select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--glass-strong);
+  color: var(--text);
+  font-size: 13px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.together__field input:focus,
+.together__field select:focus,
+.together__filter select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+.together__field input::placeholder,
+.together__filter input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.together__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* 状态胶囊：小圆点 + 文案，颜色随连接状态变化。 */
+.together__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-weak);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.together__status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.together__status--connected {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.together__status--connecting {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.together__status--idle {
+  color: var(--text-secondary);
+}
+
+.together__status--closed,
+.together__status--error {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.together__balance {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.together__balance strong {
+  color: var(--accent);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.together__error {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--warn);
+  background: var(--glass-weak);
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.together__connect .together__error {
+  grid-column: 1 / -1;
+}
+
+/* --- 双栏 --------------------------------------------------------------- */
+
+.together__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.together__panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+}
+
+@media (max-width: 1080px) {
+  .together__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- 房间 --------------------------------------------------------------- */
+
+.together__create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.together__create .text-input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.together__rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.together__room {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  transition: background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.together__room:hover {
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow-soft);
+  transform: translateY(-1px);
+}
+
+.together__room-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.together__room-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.together__room-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.together__empty {
+  margin: 0 0 14px;
+  padding: 16px 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* --- 听友 --------------------------------------------------------------- */
+
+/* 五个控件（性别 / 地区 / 最小年龄 / 最大年龄 / 搜索）自适应一行。 */
+.together__filter {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.together__filter .text-input {
+  min-width: 0;
+}
+
+.together__listeners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.together__listener {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.together__listener:hover {
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.together__listener-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.together__listener-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.together__listener-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.together__listener-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- 房间内 ------------------------------------------------------------- */
+
+.together__room-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.together__room-head .together__h2 {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.together__badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.together__now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.together__members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.together__member {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-weak);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* --- 聊天 --------------------------------------------------------------- */
+
+/* 固定高度 + 内部滚动：房间消息再多也不会把整页撑开。 */
+.together__chat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 260px;
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  scroll-behavior: smooth;
+}
+
+.together__chat .together__empty {
+  margin: auto;
+  padding: 0;
+}
+
+.together__msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 78%;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-strong);
+}
+
+/* 自己的消息靠右，并用强调色渐变区分。 */
+.together__msg.is-mine {
+  align-self: flex-end;
+  align-items: flex-end;
+  background: var(--accent-gradient);
+  background-origin: border-box;
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+.together__msg-name {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.together__msg.is-mine .together__msg-name {
+  color: var(--text-on-accent);
+  opacity: 0.82;
+}
+
+.together__msg-text {
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.together__msg-emoji {
+  margin-left: 6px;
+  font-size: 18px;
+  font-style: normal;
+  vertical-align: -2px;
+}
+
+.together__compose {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.together__compose .text-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.together__emoji-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* 表情按钮：28px 圆角方块，hover 轻微放大。 */
+.together__emoji {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+}
+
+.together__emoji:hover {
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow-soft);
+  transform: scale(1.12);
+}
+
+/* --- 礼物 --------------------------------------------------------------- */
+
+.together__gifts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.together__gift-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.together__gift-tier {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.together__gift-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.together__gift {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--glass-weak);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.together__gift:hover:not(:disabled) {
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow-soft);
+  transform: translateY(-2px);
+}
+
+.together__gift:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.together__gift-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.together__gift-name {
+  font-size: 12px;
+}
+
+.together__gift-price {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 四档礼物的描边与光晕分级（只用强调色系与令牌）。 */
+.together__gift.is-common {
+  border-color: var(--border-strong);
+}
+
+.together__gift.is-rare {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.together__gift.is-epic {
+  border-color: var(--accent-3);
+  box-shadow: 0 4px 16px var(--accent-soft);
+}
+
+.together__gift.is-legend {
+  border-color: var(--accent);
+  background:
+    linear-gradient(135deg, var(--accent-soft), transparent 70%),
+    var(--glass-weak);
+  box-shadow: 0 8px 22px var(--accent-soft);
+}
+
+.together__gift-log {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+}
+
+.together__gift-event {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* --- 充值弹窗 ----------------------------------------------------------- */
+
+/* 固定遮罩 + 居中：用玻璃做底，避免纯色蒙层把底下的内容压死。 */
+.together__modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--blur-strong)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(170%);
+}
+
+.together__dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 20px 22px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+.together__amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.together__hint {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.together__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.together__pay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 二维码：正方形、最大 200px；明暗格子由全局 .qr-grid__on/__off 提供。 */
+.together__qr {
+  display: grid;
+  width: min(200px, 58vw);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--glass-shadow-soft);
+}
+
+.together__qr-error {
+  width: min(200px, 58vw);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--glass-weak);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.together__pay-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.together__pay-amount strong {
+  color: var(--accent);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.together__pay-ok {
+  margin: 0;
+  color: var(--ok);
+  font-size: 12px;
+  text-align: center;
+}

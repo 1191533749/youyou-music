@@ -17,6 +17,7 @@ export type Route =
   | { name: 'artist'; id: number; title?: string }
   | { name: 'daily' }
   | { name: 'fm' }
+  | { name: 'together' }
   | { name: 'toplist'; id: number; title?: string }
   | { name: 'cloud' }
   | { name: 'settings' }

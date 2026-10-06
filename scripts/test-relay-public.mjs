@@ -7,13 +7,15 @@
 import process from 'node:process'
 
 const URL_BASE = process.env.RELAY_URL ?? 'ws://198.44.179.69:8787'
+const TOKEN = process.env.RELAY_TOKEN ?? ''
 const HTTP_BASE = URL_BASE.replace(/^ws/, 'http')
+const CONNECT_URL = TOKEN ? `${URL_BASE}${URL_BASE.includes('?') ? '&' : '?'}token=${TOKEN}` : URL_BASE
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function makeClient(name) {
   const received = []
-  const socket = new WebSocket(URL_BASE)
+  const socket = new WebSocket(CONNECT_URL)
   const ready = new Promise((resolve, reject) => {
     socket.addEventListener('open', () => resolve())
     socket.addEventListener('error', () => reject(new Error(`${name} 连接失败`)))
@@ -56,9 +58,23 @@ const record = (name, ok, detail = '') => {
 }
 
 async function main() {
-  console.log(`[public] 目标: ${URL_BASE}`)
+  console.log(`[public] 目标: ${URL_BASE}${TOKEN ? ' (带口令)' : ''}`)
   const health = await (await fetch(`${HTTP_BASE}/health`)).json()
   record('公网健康检查', health.ok === true, `alipay=${health.alipay} gifts=${health.gifts} uptime=${health.uptime}s`)
+
+  if (TOKEN) {
+    // 口令错误的连接必须被拒绝
+    const denied = await new Promise((resolve) => {
+      const bad = new WebSocket(`${URL_BASE}?token=wrong-token`)
+      bad.addEventListener('open', () => {
+        bad.close()
+        resolve(false)
+      })
+      bad.addEventListener('error', () => resolve(true))
+      setTimeout(() => resolve(true), 5000)
+    })
+    record('错误口令被拒绝', denied === true)
+  }
 
   const a = makeClient('A')
   const b = makeClient('B')

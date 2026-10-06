@@ -24,6 +24,8 @@ const dataDir = path.join(root, 'data')
 const stateFile = path.join(dataDir, 'state.json')
 const PORT = Number(process.env.PORT ?? 8787)
 const APP_ID = process.env.ALIPAY_APP_ID ?? '2019101168266558'
+/** 连接口令：设置后所有 WebSocket 连接都必须带 ?token=xxx，防止陌生人接入。 */
+const RELAY_TOKEN = process.env.RELAY_TOKEN ?? ''
 
 mkdirSync(dataDir, { recursive: true })
 
@@ -340,7 +342,8 @@ function leaveRoom(client) {
 
 // --- HTTP + WebSocket 升级 ---
 const server = createServer((request, response) => {
-  if (request.url === '/health') {
+  // 兼容反代前缀：/relay/health 与 /health 都算健康检查。
+  if (request.url === '/health' || request.url === '/relay/health' || request.url?.endsWith('/health')) {
     response.writeHead(200, { 'Content-Type': 'application/json' })
     response.end(
       JSON.stringify({
@@ -363,6 +366,21 @@ server.on('upgrade', (request, socket) => {
   if (!key) {
     socket.destroy()
     return
+  }
+  // 口令校验：/health 之外的连接都必须带对 token。
+  if (RELAY_TOKEN) {
+    let supplied
+    try {
+      supplied = new URL(request.url ?? '/', 'http://localhost').searchParams.get('token') ?? undefined
+    } catch {
+      supplied = undefined
+    }
+    supplied ??= request.headers['x-relay-token']
+    if (supplied !== RELAY_TOKEN) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n')
+      socket.destroy()
+      return
+    }
   }
   socket.write(
     [
@@ -431,4 +449,5 @@ server.on('upgrade', (request, socket) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[relay] 一起听中继已启动: http://0.0.0.0:${PORT}  (健康检查 /health)`)
+  console.log(`[relay] 连接口令: ${RELAY_TOKEN ? '已启用' : '未设置（任何人都能连接）'}`)
 })

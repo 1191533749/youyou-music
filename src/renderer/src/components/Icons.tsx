@@ -326,6 +326,26 @@ export function IconMinimize(props: IconProps): JSX.Element {
   )
 }
 
+/** 礼物盒：一起听里的赠礼入口。 */
+export function IconGift(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <rect x="3.5" y="9" width="17" height="11" rx="1.6" />
+      <path d="M3.5 13.5h17M12 9v11" />
+      <path d="M12 9S10.6 4.5 8.4 4.5a2.4 2.4 0 0 0 0 4.8H12zM12 9s1.4-4.5 3.6-4.5a2.4 2.4 0 0 1 0 4.8H12z" />
+    </Base>
+  )
+}
+
+/** 发送：纸飞机。 */
+export function IconSend(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <path d="M4.5 12 20 4.5l-7.5 15-2.2-6.3L4.5 12z" />
+    </Base>
+  )
+}
+
 /** 最大化：单方框。 */
 export function IconMaximize(props: IconProps): JSX.Element {
   return (

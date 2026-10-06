@@ -100,13 +100,16 @@ export function registerAppHandlers(context: AppContext): void {
   })
 
   /**
-   * Renders a login URL into a QR module matrix. The encoder runs here so the
-   * renderer only draws squares, and so the login URL never has to be turned
-   * into a QR code by code that also has DOM access.
+   * Renders a URL into a QR module matrix. The encoder runs here so the
+   * renderer only draws squares.
+   *
+   * 只接受白名单来源：网易云登录地址、以及「一起听」充值用的支付宝收款码。
+   * 白名单而不是任意 URL，避免被利用来渲染钓鱼二维码。
    */
   defineHandler('app:qrMatrix', ({ url }) => {
-    if (!/^https:\/\/music\.163\.com\//.test(url)) {
-      throw new Error('只允许为网易云登录地址生成二维码')
+    const allowed = /^https:\/\/music\.163\.com\//.test(url) || /^https:\/\/qr\.alipay\.com\//.test(url)
+    if (!allowed) {
+      throw new Error('只允许为网易云登录地址或支付宝收款码生成二维码')
     }
     return encodeQR(url)
   })

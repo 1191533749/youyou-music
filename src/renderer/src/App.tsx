@@ -21,6 +21,7 @@ import PlaylistPage from './pages/PlaylistPage'
 import AlbumPage from './pages/AlbumPage'
 import ArtistPage from './pages/ArtistPage'
 import DailyPage from './pages/DailyPage'
+import Together from './pages/Together'
 import FM from './pages/FM'
 import ToplistPage from './pages/ToplistPage'
 import Cloud from './pages/Cloud'
@@ -31,6 +32,7 @@ import {
   IconClose,
   IconCloud,
   IconCompass,
+  IconGift,
   IconHome,
   IconLibrary,
   IconMaximize,
@@ -61,6 +63,7 @@ const NAV_ITEMS = [
   // 搜索不再占侧边栏：每页顶部的搜索框直达搜索页，入口更顺手。
   { name: 'daily', label: '每日推荐', Icon: IconCalendar },
   { name: 'fm', label: '私人漫游', Icon: IconRadio },
+  { name: 'together', label: '一起听', Icon: IconGift },
   { name: 'cloud', label: '云盘', Icon: IconCloud }
 ] as const
 
@@ -294,6 +297,8 @@ function PageRouter({ authLoggedIn }: { authLoggedIn: boolean }): JSX.Element {
       return <DailyPage />
     case 'fm':
       return <FM />
+    case 'together':
+      return <Together />
     case 'toplist':
       return <ToplistPage id={route.id} />
     case 'cloud':

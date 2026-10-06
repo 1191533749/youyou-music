@@ -1159,6 +1159,11 @@ img {
   cursor: not-allowed;
 }
 
+.button--small {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
 .button--primary {
   background: var(--accent-gradient);
   /* 见 .sidebar__link.is-active 的注释：避免 1px 边框区域的渐变平铺细边。 */

@@ -14,6 +14,8 @@ import './styles/base.css'
 import './styles/home.css'
 import './styles/library.css'
 import './styles/detail.css'
+import './styles/together.css'
+import './styles/together-gift.css'
 
 const params = new URLSearchParams(window.location.search)
 const windowKind = params.get('window') ?? 'main'
