@@ -1,13 +1,10 @@
 /**
  * Data models for the NetEase Cloud Music API.
  *
- * Ported from `Sources/Kumone/Core/Models/Models.swift` and `Track.swift` of
- * missuo/kumone (LGPL-3.0). The Swift decoders explicitly tolerate the several
- * field spellings and numeric types NetEase uses across endpoints (v3
- * `ar`/`al`/`dt` versus legacy `artists`/`album`/`duration`, `picUrl` versus
- * `coverImgUrl` versus `cover`, `playCount` arriving as a float, …). Those
- * tolerances are reproduced here as normalising helpers rather than as a
- * schema, because the API is undocumented and drifts.
+ * 解码规则刻意宽容：同一字段在不同接口里有多种拼写与数值类型（v3 的
+ * `ar`/`al`/`dt` 与旧版 `artists`/`album`/`duration`，`picUrl`/`coverImgUrl`/`cover`，
+ * `playCount` 可能是浮点……），这里用归一化函数处理而不是定义严格 schema，
+ * 因为接口未公开且会漂移。
  */
 
 // MARK: - Normalising helpers
@@ -378,7 +375,7 @@ export function toTrackPrivilege(raw: unknown): TrackPrivilege | undefined {
 
 /**
  * Decodes both the "v3" song shape (`ar`/`al`/`dt`) and the legacy shape
- * (`artists`/`album`/`duration`), exactly like the Swift `Track` decoder.
+ * (`artists`/`album`/`duration`), exactly like the documented shape `Track` decoder.
  */
 export function toTrack(raw: unknown): Track | undefined {
   const c = obj(raw)
@@ -413,8 +410,8 @@ export function toTracks(raw: unknown): Track[] {
 export type TrackPlayability = 'playable' | 'vipOnly' | 'paidAlbum' | 'noCopyright' | 'delisted'
 
 /**
- * Mirrors YesPlayMusic's `isTrackPlayable` decision chain, with the VIP check
- * widened to cover 黑胶 SVIP (vipType 110 etc) — same as the Swift extension.
+ * 可播放性判定链：先看 VIP/付费状态，再看版权与下架标记；
+ * VIP 判定覆盖到黑胶 SVIP（vipType 110 等）。
  */
 export function playability(
   track: Track,

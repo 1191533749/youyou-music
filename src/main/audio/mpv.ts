@@ -4,10 +4,10 @@
  * mpv plays the audio itself (WASAPI out, gapless, no resampling surprises);
  * this process only drives it over the JSON IPC channel and mirrors its state
  * back to the UI. That is the same division of labour the macOS client has
- * between `PlaybackEngine` and AVFoundation, with libmpv in AVFoundation's
+ * between the playlist logic and the audio backend, with libmpv in that role's
  * seat.
  *
- * On Windows the IPC endpoint is a named pipe (`\\.\pipe\kumone-mpv-<pid>`),
+ * On Windows the IPC endpoint is a named pipe (`\\.\pipe\youyou-mpv-<pid>`),
  * which `net.connect` speaks directly — no extra native dependency, whereas
  * `mpv --input-ipc-server` accepts a pipe name as happily as a socket path.
  */
@@ -93,7 +93,7 @@ export class MpvController extends EventEmitter {
   constructor(options: MpvControllerOptions) {
     super()
     this.options = options
-    this.pipeName = `kumone-mpv-${process.pid}-${Math.floor(Math.random() * 1e6)}`
+    this.pipeName = `youyou-mpv-${process.pid}-${Math.floor(Math.random() * 1e6)}`
   }
 
   get currentState(): MpvState {
@@ -483,7 +483,7 @@ function once(child: ChildProcess, event: string): Promise<void> {
 export function resolveMpvBinary(explicit?: string): string | undefined {
   const candidates: string[] = []
   if (explicit) candidates.push(explicit)
-  if (process.env.KUMONE_MPV) candidates.push(process.env.KUMONE_MPV)
+  if (process.env.YOYOU_MPV) candidates.push(process.env.YOYOU_MPV)
   if (process.resourcesPath) {
     candidates.push(path.join(process.resourcesPath, 'mpv', 'mpv.exe'))
     candidates.push(path.join(process.resourcesPath, 'mpv.exe'))

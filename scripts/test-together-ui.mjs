@@ -23,14 +23,14 @@ const SYNC_ROOM = `同步房间${Date.now() % 10000}`
 const RELAY_URL = 'wss://yy.ytw.asia/relay'
 const RELAY_TOKEN = 'yy-7f3a9c2e51d84b06'
 /** 用 smoke 自检的离线样本造缓存音源：不需要登录、不需要网络也能真的播放。 */
-const FIXTURE = path.join(root, '..', 'kumone-upstream', 'Tests', 'KumoneCoreTests', 'Fixtures', 'offline.m4a')
+const FIXTURE = path.join(root, 'tests', 'fixtures', 'offline.m4a')
 const CACHED_TRACK_ID = 999000001
 const CACHED_TRACK_NAME = '同步测试曲'
 /** 记录实际使用的登录凭证来源，便于排查「实例没登录」。 */
 let plantCookiesSource = '(未复制)'
 
 function plantCachedAudio() {
-  const fixture = process.env.KUMONE_FIXTURE ?? FIXTURE
+  const fixture = process.env.YOYOU_FIXTURE ?? FIXTURE
   if (!existsSync(fixture)) {
     log(`未找到样本 ${fixture}，跳过真实播放同步验证`)
     return false
@@ -50,7 +50,7 @@ function plantCachedAudio() {
  */
 function plantCookies() {
   const candidates = [
-    process.env.KUMONE_COOKIE_PROFILE,
+    process.env.YOYOU_COOKIE_PROFILE,
     path.join(process.env.APPDATA ?? '', 'kumone-windows', 'cookies.json'),
     path.join(process.env.APPDATA ?? '', 'youyou-music', 'cookies.json'),
     path.join(process.env.APPDATA ?? '', 'YouyouMusic', 'cookies.json')
@@ -143,7 +143,7 @@ const record = (name, ok, detail = '') => {
 async function main() {
   const planted = plantCachedAudio()
   const loggedIn = plantCookies()
-  const env = { ...process.env, KUMONE_USER_DATA: userData }
+  const env = { ...process.env, YOYOU_USER_DATA: userData }
   delete env.ELECTRON_RUN_AS_NODE
   const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
     stdio: 'ignore',

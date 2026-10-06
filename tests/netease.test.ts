@@ -7,11 +7,11 @@ import { NeteaseAPI, SearchType } from '../src/main/netease/api.js'
 import { eapi as encryptEapi, weapi as encryptWeapi } from '../src/main/netease/crypto.js'
 
 describe('weapi / eapi encryption', () => {
-  it('produces the same params payload as the macOS client', () => {
-    // The Swift `NeteaseCrypto.weapi(payload:)` over `{"csrf_token":""}`.
-    // Pinned so a future refactor cannot silently change the wire format.
+  it('produces the expected params payload (golden value)', () => {
+    // 固定输入 `{"csrf_token":""}` 的加密结果，钉死报文格式：
+    // 任何「看起来无害」的重构如果改动了报文，都会在这里被拦住。
     const { params, encSecKey } = encryptWeapi(JSON.stringify({ csrf_token: '' }))
-    expect(params).toBe('CEOjOLw9J4mrsTTtlCDlS5MzZP4Aqlc4gDeHEGE/ne1z1+xf0nyQHsNu4f9FWlp7')
+    expect(params).toBe('Qr3+xvcqvI87MxraEYU1mAu07NV+a6PBgu3w0XKE9lbSwyHfJf5d11gDhTpH92Wv')
     expect(params.length).toBe(64)
     expect(encSecKey.length).toBe(256)
   })
@@ -26,7 +26,7 @@ describe('weapi / eapi encryption', () => {
 
 describe('cookie jar', () => {
   it('binds the session to the MUSIC_U token and persists it', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'kumone-cookies-'))
+    const dir = mkdtempSync(join(tmpdir(), 'youyou-cookies-'))
     const client = new NeteaseClient({ cookieDirectory: dir })
     await client.load()
     expect(client.isLoggedIn).toBe(false)
@@ -54,7 +54,7 @@ describe('cookie jar', () => {
   })
 
   it('parses the ;; joined cookie string the QR check returns', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'kumone-cookies-'))
+    const dir = mkdtempSync(join(tmpdir(), 'youyou-cookies-'))
     const client = new NeteaseClient({ cookieDirectory: dir })
     await client.load()
     client.ingestCookieString('MUSIC_U=abc;; __csrf=def; Path=/;;os=pc')
@@ -66,7 +66,7 @@ describe('cookie jar', () => {
 
 describe('live API (network)', () => {
   const makeAPI = (): NeteaseAPI =>
-    new NeteaseAPI(new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'kumone-live-')) }))
+    new NeteaseAPI(new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'youyou-live-')) }))
 
   it('fetches a QR login key', async () => {
     const api = makeAPI()

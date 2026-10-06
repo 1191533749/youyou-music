@@ -14,8 +14,8 @@ import type { IPCChannel, IPCRequest, IPCResponse } from '@shared/ipc'
 import { IPC_INVOKE_CHANNELS, IPC_EVENT_NAMES } from '@shared/ipc'
 import type { IPCResult } from '@shared/types'
 
-const INVOKE_PREFIX = 'kumone:invoke:'
-const EVENT_PREFIX = 'kumone:event:'
+const INVOKE_PREFIX = 'youyou:invoke:'
+const EVENT_PREFIX = 'youyou:event:'
 const registered = new Set<string>()
 
 export type Handler<C extends IPCChannel> = (

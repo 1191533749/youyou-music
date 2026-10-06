@@ -1,7 +1,7 @@
 /**
  * Headless smoke test.
  *
- * Boots the built app with `KUMONE_SMOKE_TEST=1`, which makes `src/main/index.ts`
+ * Boots the built app with `YOYOU_SMOKE_TEST=1`, which makes `src/main/index.ts`
  * drive the real window through its own IPC channels and exit non-zero on the
  * first wiring mistake. Electron has to run from a script rather than a shell
  * one-liner so the environment variable is set the same way on every platform
@@ -32,14 +32,14 @@ function electronBinary() {
   return found
 }
 
-const env = { ...process.env, KUMONE_SMOKE_TEST: '1', ELECTRON_ENABLE_LOGGING: '1' }
+const env = { ...process.env, YOYOU_SMOKE_TEST: '1', ELECTRON_ENABLE_LOGGING: '1' }
 // A leftover ELECTRON_RUN_AS_NODE (easy to leave behind while probing electron
 // with plain Node) makes Electron run as Node, where `require('electron')`
 // resolves to a path string and the app dies on `app.requestSingleInstanceLock`.
 delete env.ELECTRON_RUN_AS_NODE
 // Isolated profile: the check must not touch the real login, and a stale
 // single-instance lock left by a killed run must not make it exit silently.
-env.KUMONE_USER_DATA = mkdtempSync(path.join(tmpdir(), 'kumone-smoke-'))
+env.YOYOU_USER_DATA = mkdtempSync(path.join(tmpdir(), 'youyou-smoke-'))
 
 const child = spawn(electronBinary(), ['.'], {
   stdio: 'inherit',

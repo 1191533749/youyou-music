@@ -154,7 +154,7 @@ describe('update service 对本地清单源', () => {
     if (address === null || typeof address === 'string') throw new Error('测试服务器未就绪')
     baseURL = `http://127.0.0.1:${address.port}`
 
-    process.env.KUMONE_UPDATE_URL = `${baseURL}/manifest.json`
+    process.env.YOYOU_UPDATE_URL = `${baseURL}/manifest.json`
     const result = await checkForUpdates('0.3.0')
     expect(result.current).toBe('0.3.0')
     expect(result.latest?.version).toBe('9.9.9')
@@ -162,7 +162,7 @@ describe('update service 对本地清单源', () => {
 
     const local = await downloadAsset(result.assets[0])
     expect(local).toContain('悠悠音乐便携版9.9.9.exe')
-    delete process.env.KUMONE_UPDATE_URL
+    delete process.env.YOYOU_UPDATE_URL
   })
 
   it('下载后按 SHA-256 校验：一致通过、不一致拒绝', async () => {
@@ -220,9 +220,9 @@ describe('update service 对本地清单源', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
     if (address === null || typeof address === 'string') throw new Error('测试服务器未就绪')
-    process.env.KUMONE_UPDATE_URL = `http://127.0.0.1:${address.port}/m.json`
+    process.env.YOYOU_UPDATE_URL = `http://127.0.0.1:${address.port}/m.json`
     const result = await checkForUpdates('0.0.1')
     expect(result.assets).toHaveLength(0)
-    delete process.env.KUMONE_UPDATE_URL
+    delete process.env.YOYOU_UPDATE_URL
   })
 })

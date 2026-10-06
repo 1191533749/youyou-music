@@ -71,7 +71,7 @@ const AUDIO_SECTIONS: Record<string, { keywords: string; hint: string }> = {
 const PAGE_SIZE = 50
 /** 有声内容一页取多少（搜索接口按歌曲返回）。 */
 const AUDIO_PAGE_SIZE = 30
-/** 分类歌单最多翻到 500 首，与上游客户端一致，避免一直翻下去拖垮接口。 */
+/** 分类歌单最多翻到 500 首，避免一直翻下去拖垮接口。 */
 const MAX_ITEMS = 500
 
 interface Page {

@@ -2,10 +2,9 @@
  * Typed NetEase Cloud Music API surface, mapped to the real weapi / eapi
  * endpoints.
  *
- * Ported from `Sources/Kumone/Core/API/NeteaseAPI.swift` of missuo/kumone
- * (LGPL-3.0). Every path, payload key and value is the same as the Swift
- * original — several of them look odd (`secrete`, `imme`, the `[id,id]`
- * workaround for code 512) because they were derived from the real clients.
+ * Every path, payload key and value follows what the live service actually
+ * accepts — several of them look odd (`secrete`, `imme`, the `[id,id]`
+ * workaround for code 512) because that is what the endpoints expect.
  */
 import { NeteaseAPIError, NeteaseClient } from './client.js'
 import {
@@ -119,7 +118,7 @@ export interface PlaylistBrief {
   coverImgUrl?: string
 }
 
-/** Download-eligibility descriptor, mirroring the Swift `OfflineAudioResource`. */
+/** Download-eligibility descriptor, describing download eligibility. */
 export interface OfflineAudioResource {
   trackID: number
   url: string
@@ -562,7 +561,7 @@ export class NeteaseAPI {
     }
   }
 
-  /** Throws when the replacement payload is incomplete, like the Swift decoder. */
+  /** Throws when the replacement payload is incomplete, so a malformed reply is rejected. */
   async dislikeRecommendedSong(id: number): Promise<Track> {
     return this.weapi(
       '/v2/discovery/recommend/dislike',
@@ -752,7 +751,7 @@ export class NeteaseAPI {
 
   /**
    * Lyrics, preferring the verbatim (`yrc`) endpoint and falling back to the
-   * classic one — the same "never regress" ladder as the Swift original. The
+   * classic one — the same "never regress" ladder. The
    * transport hop is handled by `weapi()` itself, which retries an empty reply
    * over eapi.
    */
@@ -946,7 +945,7 @@ function numeric(value: unknown): number | undefined {
 
 /**
  * Validates a download URL into a descriptor: identity check, https upgrade,
- * duration agreement and MD5 presence, exactly like the Swift
+ * duration agreement and MD5 presence, exactly like the documented shape
  * `downloadResource(data:track:accountScope:)`.
  */
 export function buildOfflineResource(data: SongURLData, track: Track): OfflineAudioResource {

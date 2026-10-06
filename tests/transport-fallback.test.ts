@@ -19,7 +19,7 @@ import { NeteaseClient } from '../src/main/netease/client.js'
 import { NeteaseAPI, SearchType } from '../src/main/netease/api.js'
 
 function makeAPI(): NeteaseAPI {
-  return new NeteaseAPI(new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'kumone-fb-')) }))
+  return new NeteaseAPI(new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'youyou-fb-')) }))
 }
 
 describe('weapi endpoints survive the throttled-transport case', () => {

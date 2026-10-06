@@ -7,7 +7,7 @@
  *
  * 更新源默认是 GitHub Releases（https://api.github.com/repos/<owner>/<repo>/releases/latest），
  * 资产命名约定：文件名含「便携版」→ portable，「安装版」→ installer。
- * 测试/内网场景可用环境变量 KUMONE_UPDATE_URL 指向一个 JSON 清单。
+ * 测试/内网场景可用环境变量 YOYOU_UPDATE_URL 指向一个 JSON 清单。
  */
 import { app } from 'electron'
 import { createWriteStream, existsSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs'
@@ -44,7 +44,7 @@ const GITHUB_OWNER = '1191533749'
 const GITHUB_REPO = 'youyou-music'
 
 export function updateFeedURL(): string {
-  const override = process.env.KUMONE_UPDATE_URL
+  const override = process.env.YOYOU_UPDATE_URL
   if (override) return override
   return `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
 }
@@ -67,36 +67,88 @@ function parseVersion(version: string): [number, number, number] {
   return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0]
 }
 
-function fetchText(url: string, timeoutMS: number): Promise<string> {
+/**
+ * 带重定向跟随的 GET。
+ *
+ * 关键：GitHub Release 的资产地址会 **302 跳到 objects.githubusercontent.com**，
+ * 不跟随就会直接以 `HTTP 302` 失败 —— 哈希清单拿不到、更新包也永远下不下来。
+ * （本地假更新源不产生跳转，所以之前的 E2E 测不出这个问题。）
+ */
+function getFollowingRedirects(
+  url: string,
+  headers: Record<string, string>,
+  onResponse: (response: any, finalURL: string) => void,
+  onError: (cause: unknown) => void,
+  redirectsLeft = 5
+): void {
   const lib = url.startsWith('https://') ? require('node:https') : require('node:http')
-  return new Promise((resolve, reject) => {
-    const request = lib.get(url, { headers: { 'User-Agent': 'YouyouMusic-Updater' } }, (response: {
-      statusCode?: number
-      setEncoding: (encoding: string) => void
-      on: (event: string, cb: (chunk?: unknown) => void) => void
-      resume: () => void
-    }) => {
-      if (response.statusCode !== 200) {
-        response.resume()
-        reject(new Error(`更新源返回 ${response.statusCode}`))
+  const request = lib.get(url, { headers }, (response: any) => {
+    const status = Number(response.statusCode ?? 0)
+    const location = response.headers?.location
+    if (status >= 300 && status < 400 && location && redirectsLeft > 0) {
+      response.resume()
+      let next: string
+      try {
+        next = new URL(String(location), url).toString()
+      } catch {
+        onResponse(response, url)
         return
       }
-      let body = ''
-      response.setEncoding('utf8')
-      response.on('data', (chunk) => {
-        body += chunk as string
-        if (body.length > 2 * 1024 * 1024) {
-          request.destroy()
-          reject(new Error('更新清单过大'))
+      getFollowingRedirects(next, headers, onResponse, onError, redirectsLeft - 1)
+      return
+    }
+    onResponse(response, url)
+  })
+  request.on('error', onError)
+}
+
+function fetchText(url: string, timeoutMS: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        reject(new Error('更新源超时'))
+      }
+    }, timeoutMS)
+    const finish = (): void => {
+      settled = true
+      clearTimeout(timer)
+    }
+    getFollowingRedirects(
+      url,
+      { 'User-Agent': 'YouyouMusic-Updater' },
+      (response: {
+        statusCode?: number
+        setEncoding: (encoding: string) => void
+        on: (event: string, cb: (chunk?: unknown) => void) => void
+        resume: () => void
+      }) => {
+        if (response.statusCode !== 200) {
+          response.resume()
+          finish()
+          reject(new Error(`更新源返回 ${response.statusCode}`))
+          return
         }
-      })
-      response.on('end', () => resolve(body))
-    })
-    request.on('error', reject)
-    request.setTimeout(timeoutMS, () => {
-      request.destroy()
-      reject(new Error('更新源超时'))
-    })
+        let body = ''
+        response.setEncoding('utf8')
+        response.on('data', (chunk) => {
+          body += chunk as string
+          if (body.length > 2 * 1024 * 1024) {
+            finish()
+            reject(new Error('更新清单过大'))
+          }
+        })
+        response.on('end', () => {
+          finish()
+          resolve(body)
+        })
+      },
+      (cause) => {
+        finish()
+        reject(cause)
+      }
+    )
   })
 }
 
@@ -183,7 +235,7 @@ export async function checkForUpdates(currentOverride?: string): Promise<UpdateC
   const empty: UpdateCheckResult = { current, assets: [], updateType: null }
   try {
     const raw = await httpsJSONWithRetry<GitHubRelease | UpdateManifest>(updateFeedURL(), 8000)
-    // 两种来源：GitHub Release 原始 JSON，或直接给我们的清单格式（KUMONE_UPDATE_URL 用）。
+    // 两种来源：GitHub Release 原始 JSON，或直接给我们的清单格式（YOYOU_UPDATE_URL 用）。
     const manifest =
       'assets' in raw && Array.isArray(raw.assets) && !('tag_name' in raw)
         ? (raw as unknown as UpdateManifest)
@@ -254,38 +306,54 @@ export function downloadAsset(asset: UpdateAsset, onProgress?: (fraction: number
     rmSync(target, { force: true })
   }
   const tmp = `${target}.part`
-  const lib = asset.url.startsWith('https://') ? require('node:https') : require('node:http')
 
   return new Promise((resolve, reject) => {
-    const request = lib.get(asset.url, { headers: { 'User-Agent': 'YouyouMusic-Updater' } }, (response: {
-      statusCode?: number
-      headers: Record<string, string | string[] | undefined>
-      on: (event: string, cb: (chunk?: unknown) => void) => void
-      pipe: (out: NodeJS.WritableStream) => void
-      resume: () => void
-    }) => {
-      if (response.statusCode !== 200) {
-        response.resume()
-        reject(new Error(`下载失败：HTTP ${response.statusCode}`))
-        return
-      }
-      const rawLength = response.headers['content-length']
-      const total = Number(Array.isArray(rawLength) ? rawLength[0] : (rawLength ?? asset.size ?? 0))
-      let received = 0
-      const out = createWriteStream(tmp)
-      response.on('data', (chunk) => {
-        received += (chunk as Buffer).length
-        if (total > 0) onProgress?.(Math.min(1, received / total))
-      })
-      response.pipe(out)
-      out.on('finish', () => out.close(() => resolve(tmp)))
-      out.on('error', (cause) => reject(cause))
-    })
-    request.on('error', reject)
-    request.setTimeout(15 * 60 * 1000, () => {
-      request.destroy()
+    let timedOut = false
+    const watchdog = setTimeout(() => {
+      timedOut = true
       reject(new Error('下载超时'))
-    })
+    }, 15 * 60 * 1000)
+    getFollowingRedirects(
+      asset.url,
+      { 'User-Agent': 'YouyouMusic-Updater' },
+      (response: {
+        statusCode?: number
+        headers: Record<string, string | string[] | undefined>
+        on: (event: string, cb: (chunk?: unknown) => void) => void
+        pipe: (out: NodeJS.WritableStream) => void
+        resume: () => void
+      }) => {
+        if (response.statusCode !== 200) {
+          response.resume()
+          clearTimeout(watchdog)
+          reject(new Error(`下载失败：HTTP ${response.statusCode}`))
+          return
+        }
+        const rawLength = response.headers['content-length']
+        const total = Number(Array.isArray(rawLength) ? rawLength[0] : (rawLength ?? asset.size ?? 0))
+        let received = 0
+        const out = createWriteStream(tmp)
+        response.on('data', (chunk) => {
+          received += (chunk as Buffer).length
+          if (total > 0) onProgress?.(Math.min(1, received / total))
+        })
+        response.pipe(out)
+        out.on('finish', () =>
+          out.close(() => {
+            clearTimeout(watchdog)
+            if (!timedOut) resolve(tmp)
+          })
+        )
+        out.on('error', (cause) => {
+          clearTimeout(watchdog)
+          reject(cause)
+        })
+      },
+      (cause) => {
+        clearTimeout(watchdog)
+        reject(cause)
+      }
+    )
   }).then(() => {
     // 下载完先验哈希（有清单时），再落成最终文件名。
     if (asset.sha256) {

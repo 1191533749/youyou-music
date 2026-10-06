@@ -560,6 +560,16 @@ export default function Settings(): JSX.Element {
           <div>{info?.mpv ?? '未检测到 mpv'}</div>
           <div>开发者：小鱼</div>
           <div>
+            官方网站：
+            <button
+              type="button"
+              className="settings__link"
+              onClick={() => void call('app:openExternal', { url: 'https://yy.ytw.asia' })}
+            >
+              https://yy.ytw.asia
+            </button>
+          </div>
+          <div>
             项目发布地址：
             <button
               type="button"

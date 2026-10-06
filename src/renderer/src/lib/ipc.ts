@@ -26,7 +26,7 @@ export async function call<C extends IPCChannel>(
   channel: C,
   request?: IPCRequest<C>
 ): Promise<IPCResponse<C>> {
-  const bridge = window.kumone
+  const bridge = window.youyou
   if (!bridge) {
     throw new IPCError('预加载桥接未就绪，请重启应用', 'internal')
   }
@@ -53,5 +53,5 @@ export function onEvent<E extends keyof import('@shared/ipc').IPCEvents>(
   event: E,
   listener: (payload: import('@shared/ipc').IPCEvents[E]) => void
 ): () => void {
-  return window.kumone.on(event, listener)
+  return window.youyou.on(event, listener)
 }

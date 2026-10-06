@@ -2,7 +2,7 @@
  * 更新功能的 IPC 面。
  *
  * `update:check` 只读；`update:install` 下载并排定「退出 → 替换/安装 → 重开」，
- * 然后退出应用。开发模式（未打包且没有 KUMONE_UPDATE_URL）下 check 直接返回无更新，
+ * 然后退出应用。开发模式（未打包且没有 YOYOU_UPDATE_URL）下 check 直接返回无更新，
  * 避免每次 npm run dev 都去敲 GitHub。
  */
 import { app } from 'electron'
@@ -32,8 +32,8 @@ function trace(name: string, content: string): void {
 
 export function registerUpdateHandlers(): void {
   defineHandler('update:check', async () => {
-    // 开发模式不打扰；KUMONE_UPDATE_URL 存在时视为有意的联调，放行。
-    if (!app.isPackaged && !process.env.KUMONE_UPDATE_URL) {
+    // 开发模式不打扰；YOYOU_UPDATE_URL 存在时视为有意的联调，放行。
+    if (!app.isPackaged && !process.env.YOYOU_UPDATE_URL) {
       return { current: app.getVersion(), updateType: null }
     }
     const result = await checkForUpdates()

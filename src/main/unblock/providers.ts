@@ -1,13 +1,12 @@
 /**
  * 灰色/付费歌曲的第三方音源解析。
  *
- * 移植自上游 `Sources/Kumone/Core/Player/{UnblockService,KugouAudioSourceProvider,
- * KuwoAudioSourceProvider,AudioSourceProvider}.swift`：先在 pyncmd 上按网易云
- * 歌曲 ID 直取，取不到再用「站内搜索 + 严格匹配」从酷狗 / 酷我找同一首歌。
+ * 策略：先在 pyncmd 上按网易云歌曲 ID 直取，取不到再用「站内搜索 + 严格匹配」
+ * 从酷狗 / 酷我找同一首歌。
  *
- * 匹配规则与上游一致，且是这套方案能用的关键：只认时长相差 5 秒以内、
- * 标题归一化后相同、且「伴奏/翻唱/remix/live」等版本标记完全一致的结果。
- * 宁可返回"没找到"，也不能拿一首翻唱糊弄用户。
+ * 严格匹配是这套方案能用的关键：只认时长相差 5 秒以内、标题归一化后相同、
+ * 且「伴奏/翻唱/remix/live」等版本标记完全一致的结果。宁可返回"没找到"，
+ * 也不能拿一首翻唱糊弄用户。
  */
 import type { Track } from '../netease/models.js'
 
@@ -38,7 +37,7 @@ const KUWO_UA = 'okhttp/3.10.0'
 const REQUEST_TIMEOUT_MS = 12_000
 
 // ---------------------------------------------------------------------------
-// 匹配器（上游 AudioSourceTrackMatcher 的 1:1 移植）
+// 匹配器
 // ---------------------------------------------------------------------------
 
 /** 搜索关键词：歌名 + 首位歌手。 */
@@ -113,7 +112,7 @@ async function fetchText(url: string, ua = USER_AGENT): Promise<string> {
 
 /**
  * pyncmd：按网易云 ID 直取，最精确的一条路（不需要匹配，天然是同一首歌）。
- * 上游同样把它排在第一位。
+ * 这一项排在第一位的收益最明显。
  */
 export async function resolvePyncmd(track: Track): Promise<ResolvedAudioSource | null> {
   const payload = await fetchJSON(

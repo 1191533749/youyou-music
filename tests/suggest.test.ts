@@ -7,7 +7,7 @@ import { NeteaseAPI } from '../src/main/netease/api.js'
 import { stripEmoji } from '../src/main/ipc/explore.js'
 
 it('searchSuggest survives the throttled weapi transport', async () => {
-  const client = new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'kumone-sg-')) })
+  const client = new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'youyou-sg-')) })
   await client.load()
   const api = new NeteaseAPI(client)
   const suggest = await api.searchSuggest('周杰伦')

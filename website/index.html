@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>悠悠音乐 · Windows 桌面音乐客户端</title>
+    <meta
+      name="description"
+      content="悠悠音乐是一款 Windows 桌面音乐客户端：网易云账号登录、完整音源自动匹配、桌面歌词、全屏播放页，还能和朋友一起听。"
+    />
+    <link rel="icon" href="assets/icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- 背景光斑：与客户端的液态玻璃风格一致 -->
+    <div class="backdrop" aria-hidden="true">
+      <span class="blob blob--a"></span>
+      <span class="blob blob--b"></span>
+      <span class="blob blob--c"></span>
+      <span class="blob blob--d"></span>
+    </div>
+
+    <header class="nav">
+      <a class="nav__brand" href="#top">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 52 48" width="30" height="28">
+            <defs>
+              <linearGradient id="fish" x1="10" y1="8" x2="40" y2="42" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#ffb03a" />
+                <stop offset="0.52" stop-color="#ff5a1f" />
+                <stop offset="1" stop-color="#ff2d55" />
+              </linearGradient>
+            </defs>
+            <ellipse cx="26" cy="24" rx="13.5" ry="12" fill="url(#fish)" />
+            <path d="M13 24 4 17v14z" fill="url(#fish)" />
+            <circle cx="31" cy="20" r="2" fill="#fff" opacity="0.92" />
+          </svg>
+        </span>
+        <span class="nav__name">悠悠音乐</span>
+      </a>
+      <nav class="nav__links">
+        <a href="#features">功能</a>
+        <a href="#together">一起听</a>
+        <a href="#screens">界面</a>
+        <a href="#faq">常见问题</a>
+        <a class="nav__cta" href="#download">下载</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero__text">
+          <span class="tag">Windows 桌面客户端</span>
+          <h1>
+            把喜欢的歌<br />
+            <span class="gradient-text">完整地听下去</span>
+          </h1>
+          <p class="hero__sub">
+            悠悠音乐是一款 Windows 桌面音乐客户端：扫码登录网易云账号，歌单、专辑、歌手、每日推荐、
+            私人漫游一应俱全；拿不到完整音频的歌曲会自动匹配完整音源，绝不给你听半截。
+          </p>
+          <div class="hero__actions">
+            <a class="btn btn--primary" id="download-installer" href="#download">
+              下载安装版
+              <small id="installer-meta">Windows 10/11 · 64 位</small>
+            </a>
+            <a class="btn" id="download-portable" href="#download">
+              下载便携版
+              <small>免安装 · 单文件</small>
+            </a>
+          </div>
+          <p class="hero__note">
+            当前版本 <strong id="current-version">—</strong>
+            <span id="version-note"></span>
+          </p>
+        </div>
+
+        <div class="hero__art">
+          <div class="player glass">
+            <div class="player__cover">
+              <span class="player__disc" aria-hidden="true"></span>
+            </div>
+            <div class="player__body">
+              <div class="player__title">夜曲</div>
+              <div class="player__artist">周杰伦 · 十一月的萧邦</div>
+              <div class="player__bar"><span></span></div>
+              <div class="player__lyric">为你弹奏萧邦的夜曲</div>
+              <div class="player__controls" aria-hidden="true">
+                <span></span><span class="is-main"></span><span></span>
+              </div>
+            </div>
+          </div>
+          <div class="hero__cards">
+            <div class="mini glass">
+              <span class="mini__icon">♪</span>
+              <div>
+                <strong>完整音源自动匹配</strong>
+                <small>找不到完整版就跳过，不播半截</small>
+              </div>
+            </div>
+            <div class="mini glass">
+              <span class="mini__icon">☰</span>
+              <div>
+                <strong>桌面歌词</strong>
+                <small>四种特效，可换字体</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats">
+        <div class="stat glass"><strong>60+</strong><span>网易云接口</span></div>
+        <div class="stat glass"><strong>4</strong><span>播放页视觉</span></div>
+        <div class="stat glass"><strong>10</strong><span>一起听礼物</span></div>
+        <div class="stat glass"><strong>0</strong><span>半截歌曲</span></div>
+      </section>
+
+      <section id="features" class="section">
+        <h2 class="section__title">功能</h2>
+        <p class="section__sub">日常听歌需要的东西，都在这里。</p>
+        <div class="grid">
+          <article class="card glass">
+            <h3>扫码登录</h3>
+            <p>用网易云 App 扫一扫即可登录，歌单、收藏、每日推荐与云盘全部同步。</p>
+          </article>
+          <article class="card glass">
+            <h3>完整音源自动匹配</h3>
+            <p>官方拿不到完整音频时，自动到多个音源里严格匹配同一首歌；宁可跳过也不播翻唱或半截。</p>
+          </article>
+          <article class="card glass">
+            <h3>音质诚实降档</h3>
+            <p>达不到所选音质时自动降到可播放的最高档，并在播放条上如实显示，不虚报档位。</p>
+          </article>
+          <article class="card glass">
+            <h3>桌面歌词</h3>
+            <p>置顶透明歌词条，经典、渐变、霓虹、逐字卡拉OK 四种特效，可换字体与字号。</p>
+          </article>
+          <article class="card glass">
+            <h3>全屏播放页</h3>
+            <p>黑胶、胶片、波形、星海四种视觉；歌词逐行滚动，进入真全屏只属于音乐。</p>
+          </article>
+          <article class="card glass">
+            <h3>本地缓存</h3>
+            <p>听过的歌与封面缓存到本地，再次播放直接读盘；缓存上限可调，还能一键清理。</p>
+          </article>
+          <article class="card glass">
+            <h3>系统集成</h3>
+            <p>键盘媒体键、Ctrl + 方向键切歌与音量、任务栏缩略图按钮、托盘常驻与单实例。</p>
+          </article>
+          <article class="card glass">
+            <h3>内置更新</h3>
+            <p>启动时自动检查新版本，倒计时后可一键更新；便携版自替换，安装版静默安装。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="together" class="section section--together">
+        <div class="together">
+          <div class="together__text">
+            <h2 class="section__title">一起听</h2>
+            <p class="section__sub">
+              和朋友同步听同一首歌：一方建房间，另一方加入，进度自动同步。房间内可以聊天、
+              发表情、送礼物；还能用雷达找听友，按性别、年龄、地区筛选。
+            </p>
+            <ul class="ticks">
+              <li>播放进度同步，一进房间就是同一句歌词</li>
+              <li>聊天与表情，房间里的每个人都能看到</li>
+              <li>10 种礼物，四档动效，余额可直接充值</li>
+              <li>找听友雷达：性别 / 年龄 / 地区筛选</li>
+            </ul>
+          </div>
+          <div class="radar glass" aria-hidden="true">
+            <span class="radar__ring radar__ring--1"></span>
+            <span class="radar__ring radar__ring--2"></span>
+            <span class="radar__ring radar__ring--3"></span>
+            <span class="radar__sweep"></span>
+            <span class="radar__dot" style="--x: 62%; --y: 28%"></span>
+            <span class="radar__dot" style="--x: 30%; --y: 44%"></span>
+            <span class="radar__dot" style="--x: 54%; --y: 68%"></span>
+            <span class="radar__core"></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="screens" class="section">
+        <h2 class="section__title">界面</h2>
+        <p class="section__sub">把截图放进 <code>assets/</code> 目录即可替换（文件名见下方说明）。</p>
+        <div class="shots">
+          <figure class="shot glass">
+            <img src="assets/shot-home.png" alt="首页" onerror="this.classList.add('is-missing')" />
+            <figcaption>首页 · 每日推荐与推荐歌单</figcaption>
+          </figure>
+          <figure class="shot glass">
+            <img src="assets/shot-player.png" alt="播放页" onerror="this.classList.add('is-missing')" />
+            <figcaption>全屏播放页 · 黑胶与歌词</figcaption>
+          </figure>
+          <figure class="shot glass">
+            <img src="assets/shot-together.png" alt="一起听" onerror="this.classList.add('is-missing')" />
+            <figcaption>一起听 · 雷达找听友</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="download" class="section section--download">
+        <div class="download glass">
+          <h2 class="section__title">下载悠悠音乐</h2>
+          <p class="section__sub">Windows 10 / 11 · 64 位。安装版会创建桌面与开始菜单快捷方式；便携版是单文件，放在哪都能直接运行。</p>
+          <div class="download__buttons">
+            <a class="btn btn--primary btn--wide" id="download-installer-2" href="#">下载安装版<small id="installer-meta-2">—</small></a>
+            <a class="btn btn--wide" id="download-portable-2" href="#">下载便携版<small id="portable-meta-2">—</small></a>
+          </div>
+          <p class="download__note">
+            下载的是最新版本；如果你习惯用 GitHub，也可以到
+            <a id="github-link" href="https://github.com/1191533749/youyou-music" target="_blank" rel="noreferrer">项目发布页</a>
+            自行选择版本。
+          </p>
+        </div>
+      </section>
+
+      <section id="faq" class="section">
+        <h2 class="section__title">常见问题</h2>
+        <div class="faq">
+          <details class="glass">
+            <summary>为什么有些歌以前放不了？</summary>
+            <p>官方接口对部分歌曲只给试听片段或不返回完整音频。客户端会自动到多个音源里严格匹配同一个版本（时长、歌名、歌手、版本标记全部一致才采用），匹配不到就自动跳过，不会给你听半截。</p>
+          </details>
+          <details class="glass">
+            <summary>需要登录吗？</summary>
+            <p>扫码登录网易云账号后可用完整功能（歌单、每日推荐、云盘、一起听）。不登录也能浏览部分公开内容。</p>
+          </details>
+          <details class="glass">
+            <summary>提示「网易云可能正在限流」怎么办？</summary>
+            <p>出口 IP 被网易云限流了。客户端已经会在通道之间自动降级重试，仍失败时稍后再试或换个网络即可。</p>
+          </details>
+          <details class="glass">
+            <summary>便携版和安装版怎么选？</summary>
+            <p>想固定安装、要开始菜单入口就选安装版；想放 U 盘或换机器直接用就选便携版。两者功能完全一致，内置更新都支持。</p>
+          </details>
+          <details class="glass">
+            <summary>一起听需要什么条件？</summary>
+            <p>双方都装悠悠音乐并登录，进入「一起听」页面会自动连上服务，一方创建房间、另一方加入即可同步听歌、聊天与送礼物。</p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer__brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 52 48" width="26" height="24">
+            <ellipse cx="26" cy="24" rx="13.5" ry="12" fill="url(#fish)" />
+            <path d="M13 24 4 17v14z" fill="url(#fish)" />
+            <circle cx="31" cy="20" r="2" fill="#fff" opacity="0.92" />
+          </svg>
+        </span>
+        <span>悠悠音乐</span>
+      </div>
+      <div class="footer__links">
+        <a href="https://yy.ytw.asia">官方网站</a>
+        <a id="github-link-2" href="https://github.com/1191533749/youyou-music" target="_blank" rel="noreferrer">GitHub</a>
+        <a id="qq-link" href="https://qm.qq.com/q/L2I1RApP0o" target="_blank" rel="noreferrer">加入 QQ 群</a>
+      </div>
+      <p class="footer__note">非官方客户端，与网易云音乐无任何关联。本页为悠悠音乐官方网站。</p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

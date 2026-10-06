@@ -14,7 +14,7 @@ import { NeteaseAPIError, NeteaseClient } from '../src/main/netease/client'
 import { checkForUpdates, type UpdateManifest } from '../src/main/update/service.js'
 
 const originalFetch = globalThis.fetch
-const COOKIE_DIR = path.join(os.tmpdir(), 'kumone-retry-test')
+const COOKIE_DIR = path.join(os.tmpdir(), 'youyou-retry-test')
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -126,11 +126,11 @@ describe('更新检查的 GitHub 请求重试', () => {
     const address = server.address()
     if (address === null || typeof address === 'string') throw new Error('测试服务器未就绪')
     const baseURL = `http://127.0.0.1:${address.port}`
-    process.env.KUMONE_UPDATE_URL = `${baseURL}/manifest.json`
+    process.env.YOYOU_UPDATE_URL = `${baseURL}/manifest.json`
     try {
       await run(baseURL, () => requests)
     } finally {
-      delete process.env.KUMONE_UPDATE_URL
+      delete process.env.YOYOU_UPDATE_URL
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
   }

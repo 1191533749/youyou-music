@@ -69,7 +69,7 @@ const VIP_TRACK: Track = {
 }
 
 function buildPlayer(options: { unblock: boolean }) {
-  const client = new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'kumone-unblock-')) })
+  const client = new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'youyou-unblock-')) })
   const api = new NeteaseAPI(client)
   const mpv = new FakeMpv()
   const unblock = new UnblockService({

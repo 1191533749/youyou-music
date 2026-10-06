@@ -10,10 +10,10 @@ import { IPC_EVENT_NAMES, IPC_INVOKE_CHANNELS } from '@shared/ipc'
 import type { IPCChannel, IPCEventName, IPCEvents } from '@shared/ipc'
 import type { IPCResult } from '@shared/types'
 
-const INVOKE_PREFIX = 'kumone:invoke:'
-const EVENT_PREFIX = 'kumone:event:'
+const INVOKE_PREFIX = 'youyou:invoke:'
+const EVENT_PREFIX = 'youyou:event:'
 
-export interface KumoneBridge {
+export interface YouyouBridge {
   invoke<C extends IPCChannel>(
     channel: C,
     request?: unknown
@@ -24,7 +24,7 @@ export interface KumoneBridge {
   versions: { electron: string; chrome: string; node: string }
 }
 
-const bridge: KumoneBridge = {
+const bridge: YouyouBridge = {
   invoke: (channel, request) => {
     if (!IPC_INVOKE_CHANNELS.includes(channel)) {
       return Promise.resolve({
@@ -52,4 +52,4 @@ const bridge: KumoneBridge = {
   }
 }
 
-contextBridge.exposeInMainWorld('kumone', bridge)
+contextBridge.exposeInMainWorld('youyou', bridge)

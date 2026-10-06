@@ -436,23 +436,23 @@ export function LogoMark({ size = 40, ...rest }: IconProps): JSX.Element {
       {...rest}
     >
       <defs>
-        <linearGradient id="kumone-logo-body" x1="10" y1="8" x2="40" y2="42" gradientUnits="userSpaceOnUse">
+        <linearGradient id="youyou-logo-body" x1="10" y1="8" x2="40" y2="42" gradientUnits="userSpaceOnUse">
           <stop stopColor="#FFB03A" />
           <stop offset="0.55" stopColor="#FF5A1F" />
           <stop offset="1" stopColor="#FF2D55" />
         </linearGradient>
       </defs>
       {/* 身体 */}
-      <ellipse cx="26" cy="24" rx="13.5" ry="12" fill="url(#kumone-logo-body)" />
+      <ellipse cx="26" cy="24" rx="13.5" ry="12" fill="url(#youyou-logo-body)" />
       {/* 尾鳍 */}
       <path
         d="M13.5 24c-3.4-3.4-6.6-4.6-8.6-3.9-1.6.6-1.9 3-1.9 3.9 0 .9.3 3.3 1.9 3.9 2 .7 5.2-.5 8.6-3.9Z"
-        fill="url(#kumone-logo-body)"
+        fill="url(#youyou-logo-body)"
         opacity="0.85"
       />
       {/* 背鳍与腹鳍 */}
-      <path d="M24 12.5c1.6-2.6 3.6-4 5.6-3.5 1.5.4 2.2 2.2 2.2 3.5Z" fill="url(#kumone-logo-body)" opacity="0.9" />
-      <path d="M24 35.5c1.6 2.6 3.6 4 5.6 3.5 1.5-.4 2.2-2.2 2.2-3.5Z" fill="url(#kumone-logo-body)" opacity="0.9" />
+      <path d="M24 12.5c1.6-2.6 3.6-4 5.6-3.5 1.5.4 2.2 2.2 2.2 3.5Z" fill="url(#youyou-logo-body)" opacity="0.9" />
+      <path d="M24 35.5c1.6 2.6 3.6 4 5.6 3.5 1.5-.4 2.2-2.2 2.2-3.5Z" fill="url(#youyou-logo-body)" opacity="0.9" />
       {/* 音波 */}
       <rect x="21.5" y="21" width="1.8" height="6" rx="0.9" fill="#fff" />
       <rect x="25" y="18.5" width="1.8" height="11" rx="0.9" fill="#fff" />

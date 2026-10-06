@@ -17,8 +17,8 @@ function electronBinary() {
 
 const env = { ...process.env, ELECTRON_ENABLE_LOGGING: '1' }
 delete env.ELECTRON_RUN_AS_NODE
-delete env.KUMONE_SMOKE_TEST
-delete env.KUMONE_USER_DATA
+delete env.YOYOU_SMOKE_TEST
+delete env.YOYOU_USER_DATA
 
 const child = spawn(electronBinary(), ['.'], { stdio: 'inherit', env })
 const killer = setTimeout(() => child.kill(), 20_000)

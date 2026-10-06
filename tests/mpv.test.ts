@@ -17,16 +17,7 @@ import type { MpvState } from '../src/main/audio/mpv.js'
 
 const MPV = resolveMpvBinary()
 const FIXTURE = path.resolve(
-  process.env.KUMONE_FIXTURE ??
-    path.join(
-      process.cwd(),
-      '..',
-      'kumone-upstream',
-      'Tests',
-      'KumoneCoreTests',
-      'Fixtures',
-      'offline.flac'
-    )
+  process.env.YOYOU_FIXTURE ?? path.join(process.cwd(), 'tests', 'fixtures', 'offline.flac')
 )
 const RUNNABLE = !!MPV && existsSync(FIXTURE)
 

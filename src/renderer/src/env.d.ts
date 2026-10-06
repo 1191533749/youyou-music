@@ -1,8 +1,8 @@
-import type { KumoneBridge } from '../preload/index'
+import type { YouyouBridge } from '../preload/index'
 
 declare global {
   interface Window {
-    kumone: KumoneBridge
+    youyou: YouyouBridge
   }
 }
 

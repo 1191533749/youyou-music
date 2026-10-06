@@ -32,7 +32,7 @@ export interface TrackMappingContext {
   privileges?: Map<number, TrackPrivilege>
   /**
    * 开启灰色歌曲解锁后，受限曲目也会由第三方音源播放，因此对用户而言
-   * 全部可播——上游同样这么处理（SettingsManager.canResolveUnblockedTracks）。
+   * 全部可播。
    * 界面据此不再显示「VIP 专属 / 无版权」这类灰态。
    */
   unblockEnabled?: boolean

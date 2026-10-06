@@ -38,7 +38,7 @@ import { DEFAULT_SETTINGS } from '@shared/types'
 // to the userData path, so with the default path the smoke instance would
 // collide with the user's running app (or a zombie lock) and silently exit.
 bootLog('module loaded; userData=' + app.getPath('userData') + '; argv=' + process.argv.slice(1).join(' '))
-const smokeUserData = process.env.KUMONE_USER_DATA
+const smokeUserData = process.env.YOYOU_USER_DATA
 if (smokeUserData) {
   fs.mkdirSync(smokeUserData, { recursive: true })
   app.setPath('userData', smokeUserData)
@@ -334,7 +334,7 @@ async function bootstrap(): Promise<void> {
 
   const mpvPath = resolveMpvBinary(current.audioDevice ? undefined : undefined)
   if (!mpvPath) {
-    log('未找到 mpv.exe —— 播放功能不可用。请运行 scripts/fetch-mpv.ps1 或设置 KUMONE_MPV。')
+    log('未找到 mpv.exe —— 播放功能不可用。请运行 scripts/fetch-mpv.ps1 或设置 YOYOU_MPV。')
   }
   const mpv = new MpvController({
     binary: mpvPath ?? 'mpv',
@@ -480,7 +480,7 @@ async function bootstrap(): Promise<void> {
     })
   }
 
-  if (process.env.KUMONE_SMOKE_TEST === '1') {
+  if (process.env.YOYOU_SMOKE_TEST === '1') {
     await runSmokeTest(mainWindow, context)
   }
 
@@ -488,17 +488,15 @@ async function bootstrap(): Promise<void> {
 }
 
 /**
- * The audio sample used by the smoke test's playback check. Shipped by the
- * upstream repository's test suite, so it is available in a normal checkout and
- * overridable for CI.
+ * 自检用的音频样本（随仓库放在 tests/fixtures 下），可用环境变量覆盖。
  */
 function findFixture(): string | undefined {
   const candidates = [
-    process.env.KUMONE_FIXTURE,
-    // Source layout: <repo>/../kumone-upstream/…
-    path.resolve(__dirname, '..', '..', '..', 'kumone-upstream', 'Tests', 'KumoneCoreTests', 'Fixtures', 'offline.m4a'),
-    // Packaged layout: resources/app.asar → step out to the sibling checkout.
-    path.resolve(process.resourcesPath ?? '', '..', '..', '..', 'kumone-upstream', 'Tests', 'KumoneCoreTests', 'Fixtures', 'offline.m4a')
+    process.env.YOYOU_FIXTURE,
+    // 源码布局：<repo>/tests/fixtures/offline.m4a
+    path.resolve(__dirname, '..', '..', 'tests', 'fixtures', 'offline.m4a'),
+    // 打包布局：从 resources 往上找同级的源码目录（仅开发机可用）
+    path.resolve(process.resourcesPath ?? '', '..', '..', 'tests', 'fixtures', 'offline.m4a')
   ].filter((candidate): candidate is string => !!candidate)
   return candidates.find((candidate) => fs.existsSync(candidate))
 }
@@ -568,7 +566,7 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
     const ipc = (await window.webContents.executeJavaScript(`(async () => {
       const call = async (channel, request) => {
         try {
-          const result = await window.kumone.invoke(channel, request)
+          const result = await window.youyou.invoke(channel, request)
           return { ok: result.ok, keys: result.data && typeof result.data === 'object' ? Object.keys(result.data).slice(0, 8) : typeof result.data, error: result.error }
         } catch (error) { return { ok: false, error: String(error) } }
       }
@@ -592,7 +590,7 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
     record('未知通道被拒绝', ipc.unknown?.ok === false, String(ipc.unknown?.error))
 
     const info = await window.webContents.executeJavaScript(
-      `window.kumone.invoke('app:info').then((r) => r.data)`
+      `window.youyou.invoke('app:info').then((r) => r.data)`
     )
     record('mpv 已就绪', typeof (info as { mpv?: string })?.mpv === 'string', String((info as { mpv?: string })?.mpv))
 
@@ -601,7 +599,7 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
 
     // 更新通道契约：dev 模式下被门控为「无更新」，但必须正常响应并带当前版本号。
     const updateCheck = (await window.webContents.executeJavaScript(
-      `window.kumone.invoke('update:check').then((r) => r.data)`
+      `window.youyou.invoke('update:check').then((r) => r.data)`
     )) as { current?: string; version?: string }
     record(
       '更新检查通道正常响应',
@@ -632,12 +630,12 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
           isCloud: false,
           playability: 'playable'
         }
-        const started = await window.kumone.invoke('player:playTracks', { tracks: [track], startIndex: 0 })
+        const started = await window.youyou.invoke('player:playTracks', { tracks: [track], startIndex: 0 })
         // Sample is ~3s; sample the position quickly, then pause so the check
         // does not race the end of the file.
         await new Promise((resolve) => setTimeout(resolve, 1200))
-        const state = await window.kumone.invoke('player:state')
-        await window.kumone.invoke('player:pause')
+        const state = await window.youyou.invoke('player:state')
+        await window.youyou.invoke('player:pause')
         return { started: started.ok, error: started.error, state: state.data }
       })()`)) as {
         started: boolean
@@ -669,8 +667,8 @@ async function runSmokeTest(window: BrowserWindow, context: AppContext): Promise
         await new Promise((resolve) => setTimeout(resolve, 1200))
         const result = (await lyrics.webContents.executeJavaScript(`(async () => {
           window.__smokeState = null
-          window.kumone.on('player:state', (s) => { window.__smokeState = s })
-          await window.kumone.invoke('player:setVolume', { volume: 79 })
+          window.youyou.on('player:state', (s) => { window.__smokeState = s })
+          await window.youyou.invoke('player:setVolume', { volume: 79 })
           await new Promise((resolve) => setTimeout(resolve, 400))
           return { track: window.__smokeState?.track?.name ?? null, volume: window.__smokeState?.volume ?? null }
         })()`)) as { track: string | null; volume: number | null }
@@ -765,4 +763,4 @@ app.on('will-quit', (event) => {
 })
 
 // Diagnostics: the renderer can ask for the tail of the main-process log.
-ipcMain.handle('kumone:invoke:app:logTail', () => ({ ok: true, data: logLines.join('\n') }))
+ipcMain.handle('youyou:invoke:app:logTail', () => ({ ok: true, data: logLines.join('\n') }))

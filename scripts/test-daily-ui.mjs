@@ -206,7 +206,7 @@ async function diagnose(label) {
     const text = await cdp(`document.body.innerText.replace(/\\s+/g, ' ').slice(0, 220)`)
     const probe = await cdp(`(async () => {
       const call = (channel, request) => Promise.race([
-        window.kumone.invoke(channel, request),
+        window.youyou.invoke(channel, request),
         new Promise((resolve) => setTimeout(() => resolve({ ok: false, error: 'timeout-9s' }), 9000))
       ])
       const describe = (result) => result.ok ? ('ok:' + (Array.isArray(result.data) ? result.data.length : '?') + ' 首') : ('err:' + result.error)
@@ -239,7 +239,7 @@ async function main() {
   const loggedIn = prepareUserData()
   log(loggedIn ? '已复制真实 cookie（含 MUSIC_U），实例应处于登录态' : '没有可用登录态')
 
-  const env = { ...process.env, KUMONE_USER_DATA: userData }
+  const env = { ...process.env, YOYOU_USER_DATA: userData }
   delete env.ELECTRON_RUN_AS_NODE
   const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
     stdio: 'ignore',

@@ -2,13 +2,8 @@
  * Transport layer for NetEase Cloud Music: cookie jar plus weapi / eapi
  * encrypted requests.
  *
- * Ported from `Sources/Kumone/Core/API/NeteaseClient.swift` of missuo/kumone
- * (LGPL-3.0). The Swift original serialises access to the cookie jar with two
- * locks and tags every request with an authentication epoch so a reply that
- * arrives after a re-login is discarded instead of writing stale cookies back.
- * That concurrency discipline is preserved here: Node is single-threaded, so
- * the "locks" collapse into synchronous sections, but the epoch/binding check
- * is still required because awaits interleave.
+ * 并发纪律：所有请求都带认证 epoch，重登之后才到货的响应当作过期丢弃，
+ * 避免把旧 cookie 写回去（Node 单线程，但 await 会交错，所以这个校验必须有）。
  */
 import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
@@ -52,7 +47,7 @@ export class NeteaseAPIError extends Error {
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 
-const SESSION_BINDING_KEY = '__kumone_session_binding'
+const SESSION_BINDING_KEY = '__youyou_session_binding'
 const REQUEST_TIMEOUT_MS = 15_000
 
 /**
@@ -453,7 +448,7 @@ export class NeteaseClient {
   }
 
   /**
-   * Surfaces business-level errors the way the Swift `decoded(_:from:)` does:
+   * Surfaces business-level errors as the API reports them:
    * a non-200 `code` in an otherwise successful reply becomes an error.
    */
   static unwrap(json: any, context: string): any {

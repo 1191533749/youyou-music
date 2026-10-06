@@ -45,9 +45,9 @@ function countResources(Resource, NtExecutable, NtExecutableResource, buffer, ty
 
 module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== 'win32') return
-  // 排查用开关：KUMONE_SKIP_ICON=1 跳过资源写入，便于对比「写入前/后」的产物差异。
-  if (process.env.KUMONE_SKIP_ICON === '1') {
-    console.log('[afterPack] 已按 KUMONE_SKIP_ICON=1 跳过图标与版本写入')
+  // 排查用开关：YOYOU_SKIP_ICON=1 跳过资源写入，便于对比「写入前/后」的产物差异。
+  if (process.env.YOYOU_SKIP_ICON === '1') {
+    console.log('[afterPack] 已按 YOYOU_SKIP_ICON=1 跳过图标与版本写入')
     return
   }
 

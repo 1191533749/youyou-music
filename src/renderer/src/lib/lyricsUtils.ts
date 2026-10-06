@@ -3,7 +3,7 @@
  *
  * Parsing happens in the main process (once per track); the renderer only ever
  * finds the active line, which is a binary search over line start times — the
- * same approach as the Swift `ParsedLyrics.activeIndex(at:)`.
+ * same approach as the active-line lookup.
  */
 import type { LyricsDTO, LyricLineDTO } from '@shared/types'
 

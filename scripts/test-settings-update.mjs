@@ -56,7 +56,7 @@ async function cdpEvaluate(expression) {
 }
 
 async function main() {
-  const env = { ...process.env, KUMONE_USER_DATA: userData }
+  const env = { ...process.env, YOYOU_USER_DATA: userData }
   delete env.ELECTRON_RUN_AS_NODE
   const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
     stdio: 'ignore',

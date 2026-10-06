@@ -3,7 +3,7 @@
  *
  * 走**倒计时自动更新**主路径：
  *  1. 本地 HTTP 服务：/manifest.json 声称版本 9.9.9，资产给 0.3.0 便携版拷贝；
- *  2. 把 0.3.0 便携版拷到沙盒目录，带 KUMONE_UPDATE_URL + 隔离 userData 启动；
+ *  2. 把 0.3.0 便携版拷到沙盒目录，带 YOYOU_UPDATE_URL + 隔离 userData 启动；
  *  3. 等弹窗 30 秒倒计时走完自动触发 update:install；
  *  4. 断言：沙盒 exe 被替换为「新版」文件（哈希一致）→ 新实例自动启动
  *     （以「测试启动后新增且持续存活的相关进程」判定，避免误伤用户正常实例）。
@@ -127,7 +127,7 @@ async function main() {
   log(`本地更新源 http://127.0.0.1:${PORT}`)
 
   // 2. 启动待更新的便携版（隔离 userData；弹窗 30 秒倒计时会自动触发安装）
-  const env = { ...process.env, KUMONE_UPDATE_URL: `http://127.0.0.1:${PORT}/manifest.json`, KUMONE_USER_DATA: userData }
+  const env = { ...process.env, YOYOU_UPDATE_URL: `http://127.0.0.1:${PORT}/manifest.json`, YOYOU_USER_DATA: userData }
   delete env.ELECTRON_RUN_AS_NODE
   const startedAt = Date.now()
   const child = spawn(sandboxExe, [], { stdio: 'ignore', env, detached: true })

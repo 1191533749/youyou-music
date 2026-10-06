@@ -8,7 +8,7 @@
  * 检查项：
  *   1. release/win-unpacked 的装配布局齐全（exe / app.asar / resources/mpv）
  *   2. app.asar 里确实带上了主进程与渲染进程产物
- *   3. **随包的 mpv 真的能解码并输出音频**（播放上游测试 flac，位置要往前走）
+ *   3. **随包的 mpv 真的能解码并输出音频**（播放测试音频，位置要往前走）
  */
 import { spawn } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -21,8 +21,7 @@ const resources = path.join(unpacked, 'resources')
 const mpv = path.join(resources, 'mpv', 'mpv.exe')
 const asar = path.join(resources, 'app.asar')
 const fixture =
-  process.env.KUMONE_FIXTURE ??
-  path.resolve('..', 'kumone-upstream', 'Tests', 'KumoneCoreTests', 'Fixtures', 'offline.m4a')
+  process.env.YOYOU_FIXTURE ?? path.resolve('tests', 'fixtures', 'offline.m4a')
 
 // 主可执行文件名跟随 electron-builder 的 productName（当前为 YouyouMusic）。
 const appExe = readdirSync(unpacked).find((name) => name.toLowerCase().endsWith('.exe'))
@@ -48,7 +47,7 @@ if (existsSync(asar)) {
 
 // 随包的 mpv 必须能真的解码播放，而不只是「文件在」。
 if (existsSync(mpv) && existsSync(fixture)) {
-  const pipe = `kumone-verify-${process.pid}-${Math.floor(Math.random() * 1e6)}`
+  const pipe = `youyou-verify-${process.pid}-${Math.floor(Math.random() * 1e6)}`
   const child = spawn(mpv, [`--input-ipc-server=\\\\.\\pipe\\${pipe}`, '--idle=yes', '--no-video', '--no-terminal', '--really-quiet'], {
     stdio: 'ignore',
     windowsHide: true

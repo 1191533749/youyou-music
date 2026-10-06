@@ -1,9 +1,8 @@
 /**
  * Lyrics parsing: LRC, NetEase verbatim `yrc`, translations and romaji.
  *
- * Ported from `Sources/Kumone/Core/Models/LyricsParser.swift` of
- * missuo/kumone (LGPL-3.0) — same regexes, same instrumental-marker handling,
- * same nearest-within-0.3s merge for translation/romaji tracks.
+ * 逐字歌词用 yrc 词时间轴；翻译/罗马音按「时间最近且相差 0.3 秒以内」合并到主行，
+ * 纯音乐标记与制作人署名行在解析阶段剔除。
  */
 
 export interface LyricWord {
@@ -132,7 +131,7 @@ export function parseLyrics(response: LyricResponseShape | undefined): ParsedLyr
 
   let main = raw ? parseLRC(raw) : []
 
-  // Instrumental marker handling (mirrors YesPlayMusic).
+  // 纯音乐标记处理：整行只有「纯音乐，请欣赏」时视为伴奏。
   if (raw && main.length <= 10 && main.some((l) => l.text.includes(INSTRUMENTAL_MARKER))) {
     out.isInstrumental = true
     main = main.filter(
@@ -180,7 +179,7 @@ export function parseLyrics(response: LyricResponseShape | undefined): ParsedLyr
 
 /**
  * Index of the active line for a playback position, or -1 when nothing has
- * started yet. Binary search over line start times, same as the Swift
+ * started yet. Binary search over line start times, same as the reference behaviour
  * `activeIndex(at:)`.
  */
 export function activeIndex(lines: LyricLine[], time: number): number {

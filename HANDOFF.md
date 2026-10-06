@@ -4,23 +4,23 @@
 
 ## 1. 这是什么
 
-把 [missuo/kumone](https://github.com/missuo/kumone)（macOS/iOS 原生 SwiftUI 客户端，**LGPL-3.0**）**二开成 Windows exe**。
-上游 81,800 行 Swift 里，`SwiftUI / AVFoundation / CoreAudio / MLX / CarPlay` 在 Windows 上都不存在，
-所以「直接编译成 exe」不可行；本项目的路径是**逐行对译协议与业务逻辑，UI 与音频引擎换 Windows 技术栈重写**。
+Windows 桌面音乐客户端（Electron + React + TypeScript，音频后端 mpv），对接网易云音乐账号与接口，
+包含在线播放、歌单/专辑/歌手、每日推荐、私人漫游、云盘、桌面歌词、全屏播放页与「一起听」。
 
 - 工程根目录：`E:\deepseek 工作区\kumone-windows`
-- 上游只读参考：`E:\deepseek 工作区\kumone-upstream`（已克隆，勿修改）
+- 官方网站：<https://yy.ytw.asia>（源码 `website/`，部署在 `/www/wwwroot/yy.ytw.asia`）
+- 一起听中继：自有服务器 `/www/wwwroot/YYyinyue`（`wss://yy.ytw.asia/relay`，带连接口令）
 - 技术栈：Electron 33 + React 18 + TypeScript 5.7 + electron-vite；音频后端 **mpv**（子进程 + JSON IPC）
 
 ## 2. 已经验证过的事实（不要重新怀疑，除非有反证）
 
 | 结论 | 证据 |
 |---|---|
-| weapi/eapi 加密与上游字节级一致 | `tests/netease.test.ts` 黄金值；并对真实接口 POST 得到 `code:200` |
+| weapi/eapi 报文格式已钉死 | `tests/netease.test.ts` 黄金值；并对真实接口 POST 得到 `code:200` |
 | **weapi 通道会对被限流的 IP 返回 200 空体；同一请求走 eapi 一定成功** | `tests/_eapi-probe` 式对照实验（12 个只走 weapi 的接口全部如此）；`api.ts` 的 `weapi()` 因此内建传输降级，`tests/transport-fallback.test.ts` 锁定该行为 |
 | 扫码登录可用 | 真实调用 `/login/qrcode/unikey`、`/login/qrcode/client/login` 成功；限流时空体会被翻译成可重试提示 |
 | **Electron 33 的 ESM 主进程完全不可用** | 连 `import { app } from 'electron'` 都崩在 `cjsPreparseModuleExports`；因此 `electron.vite.config.ts` 强制 main/preload 输出 CJS，且 package.json **不能**有 `"type": "module"` |
-| mpv JSON IPC 在 Windows 命名管道上可用 | `tests/mpv.test.ts` 7 项全过（真实播放上游 flac/m4a 测试音频、跳转、音量、设备枚举） |
+| mpv JSON IPC 在 Windows 命名管道上可用 | `tests/mpv.test.ts` 7 项全过（真实播放测试音频、跳转、音量、设备枚举） |
 | 全链路可启动 | `npm run smoke` 打印 15 项 PASS + `SMOKE OK`（含队列→缓存→mpv→位置推进） |
 | 打包产物可运行 | `npm run dist` 产出 NSIS + portable；`npm run verify:packaged` 用随包 mpv 真实解码播放 |
 | **本机无法解压 winCodeSign** | 该包内含 macOS 符号链接，未开启开发者模式时创建失败并中断打包；已用 `signAndEditExecutable: false` 规避（代价：exe 无自定义图标/版本信息） |
@@ -57,7 +57,7 @@ src/renderer/   lib/(contract,ipc,format,hooks,lyricsUtils) store/(player,auth,n
    `npm run smoke` 里的「IPC 通道全注册」一项会抓出忘记注册的通道。
 3. **主进程/preload 输出 CJS，只有渲染进程是 ESM。** 见上表。
 4. **音质降级是特性不是兜底。** `player/controller.ts` 的 `QUALITY_LADDER` 逐档下降，并在 UI 上显示「实际」音质。
-5. **可播放性判定沿用上游 `playability()`**（VIP/付费/无版权/下架），不要自己另写一套规则。
+5. **可播放性判定集中在一处**（VIP/付费/无版权/下架），不要另写一套规则。
 6. **样式按功能拆文件**：`global.css`（令牌+骨架）、`base.css`（通用+设置）、`home.css`/`library.css`/`detail.css`（各功能）。
    并行开发时不要多人改同一个样式文件——这是当初拆分的原因。
 
@@ -81,7 +81,7 @@ src/renderer/   lib/(contract,ipc,format,hooks,lyricsUtils) store/(player,auth,n
 - ✅ **全站按钮液态毛玻璃**（.button/.glass-btn/各页 audit）
 - ✅ **内置更新**（`src/main/update/service.ts` + `ipc/update.ts` + App 更新对话框）：
   启动检测 → 30 秒倒计时自动更新（可稍后）；便携版下载新版 exe 覆盖自替换，安装版静默安装；更新后自动重开。
-  更新源 = GitHub Releases（owner/repo 常量在 service.ts 顶部）；`KUMONE_UPDATE_URL` 可覆盖用于联调
+  更新源 = GitHub Releases（owner/repo 常量在 service.ts 顶部）；`YOYOU_UPDATE_URL` 可覆盖用于联调
 - ✅ 产物命名：`悠悠音乐安装版<版本>.exe` / `悠悠音乐便携版<版本>.exe`（electron-builder.yml artifactName）
 - ✅ 本地 git 已提交并打 tag v0.3.0；**尚未推送 GitHub**——GitHub 已停用密码认证，等用户提供 PAT 后
   `git remote add origin <repo>` + push + 创建 Release（资产按「便携版/安装版」关键词匹配）
@@ -115,9 +115,9 @@ npm run verify:packaged
    pyncmd 对本例无结果**——换源覆盖度取决于第三方接口，属于外部依赖。
 2. **换源覆盖度有限。** 只有「时长 ±5 秒 + 歌名归一化相同 + 版本标记一致 + 歌手命中」四条全中才采用。
    想提高命中率可以增加音源（Migu / Bilibili 需要各自签名），或对纯音乐/现场版放宽版本判定。
-3. **AutoMix / StemKit（AI 分轨混音）未移植。** 上游用 MLX+Metal，Windows 上需要另找推理后端
-   （onnxruntime-node 等）。上游设计文档在 `docs/automix-*.md`。
-4. **歌词罗马音 / 振假名未实现。** 上游用 macOS 的 `CFStringTokenizer` 做日语形态素分析；
+3. **AutoMix / 分轨混音未实现。** 需要另找 Windows 上的推理后端
+   （onnxruntime-node 等）。
+4. **歌词罗马音 / 振假名未实现。** 需要日语形态素分析（Windows 上可用 MeCab 等）；
    `LyricLine.romaji/furigana` 字段已预留但无生成器。
 5. **心动模式未接线。** 主进程已有 `track:intelligence` 通道，页面未使用。
 6. **封面主色采样退回令牌色。** 网易 CDN 无 CORS 头，渲染进程 canvas 取不到像素；
@@ -136,7 +136,7 @@ npm run verify:packaged
 | 打包版静默退出，且确认环境干净 | 查 asar 完整性：`node scripts/verify-integrity.mjs`。rcedit 等工具重写 PE 资源会丢掉 `INTEGRITY/ELECTRONASAR` 块；图标必须用 `scripts/after-pack.cjs`（resedit，保留完整性块并自检）。 |
 | `require is not defined in ES module scope` | package.json 又被加了 `"type": "module"`。去掉它。 |
 | `Cannot read properties of undefined (reading 'requestSingleInstanceLock')` | 同上（`ELECTRON_RUN_AS_NODE=1` 下 `require('electron')` 返回路径字符串，`app` 为 undefined）。 |
-| 界面正常但点播放报错 | 没下载 mpv；跑 `scripts/fetch-mpv.ps1`，或设 `KUMONE_MPV` 指向 mpv.exe。 |
+| 界面正常但点播放报错 | 没下载 mpv；跑 `scripts/fetch-mpv.ps1`，或设 `YOYOU_MPV` 指向 mpv.exe。 |
 | 大量页面空数据 + 「可能正在限流」 | 出口 IP 被网易云限流。传输降级已尽力（weapi→eapi），两者都被限时只能等待或换网络。 |
 | 歌词空白但歌在放 | 未登录时歌词接口可能回空响应；确认 `api.lyric()` 的降级链与 `weapi()` 的传输降级没被改坏。 |
 | `npm test` 里 netease/fallback 用例失败 | 需要联网；若刚压测过接口可能被限流，稍后重试。 |
@@ -147,18 +147,18 @@ npm run verify:packaged
 
 ## 7b. 启动诊断
 
-设置 `KUMONE_BOOT_LOG=<路径>` 后启动（便携版同样有效，环境变量会传给解压后的子进程），
+设置 `YOYOU_BOOT_LOG=<路径>` 后启动（便携版同样有效，环境变量会传给解压后的子进程），
 主进程会在每个启动里程碑追加日志（`src/main/diagnostics.ts` + `src/main/index.ts` 里的 bootLog 埋点）。
 未设置时完全零开销。日志为空 = 主进程脚本根本没执行（优先查 ELECTRON_RUN_AS_NODE / asar 完整性）。
 
 ## 8. 协议要点速查
 
 - **weapi**：`POST https://music.163.com/weapi<path>`，form 字段 `params` + `encSecKey`。
-  密钥 `0CoJUm6Qyw8W8jud`（预设）+ `kumone2026abcDEF`（自选，RSA 密文已预计算），AES-128-CBC，IV `0102030405060708`。
+  密钥 `0CoJUm6Qyw8W8jud`（预设）+ 本项目自选密钥（RSA 密文在构建期算好写死），AES-128-CBC，IV `0102030405060708`。
 - **eapi**：`POST https://interface.music.163.com/eapi<path>`，`params` 为
   `AES-128-ECB(url + "-36cd479b6b5-" + json + "-36cd479b6b5-" + md5("nobody"+url+"use"+json+"md5forencrypt"))` 的十六进制大写；
   密钥 `e82ckenh8dichen8`；body 内需带 `header`（含 `os/appver/deviceId/requestId/buildver`）。
-- **桌面 cookie**：`os=pc; appver=3.1.17`；weblog 上报额外用 `os=osx`（与上游一致）。
+- **桌面 cookie**：`os=pc; appver=3.1.17`；weblog 上报额外用 `os=osx`（沿用客户端惯例）。
 - **登录态**：`MUSIC_U` cookie；客户端用 SHA-256 指纹把它绑定成一个 session binding，配合 authEpoch
   丢弃跨登录的迟到响应与过期 Set-Cookie（`main/netease/client.ts`）。
 
