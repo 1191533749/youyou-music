@@ -157,6 +157,14 @@ export function registerExploreHandlers(context: AppContext): void {
   })
 
   defineHandler('search:query', async ({ keywords, type, limit, offset }) => {
+    /*
+     * 测试钩子：网易云搜索太「宽容」，正常情况下（含乱码）都会返回结果，
+     * 导致渲染层的「站外兜底」分支在真机上无法自然复现。设 YOYOU_FORCE_EXTERNAL=1
+     * 时让单曲搜索返回空，就能把兜底链路完整跑一遍。只在显式设了环境变量时生效。
+     */
+    if (process.env.YOYOU_FORCE_EXTERNAL === '1' && type === 'songs') {
+      return { songs: [], songCount: 0, albums: undefined, artists: undefined, playlists: undefined }
+    }
     const searchType =
       type === 'songs'
         ? SearchType.songs

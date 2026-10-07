@@ -30,14 +30,17 @@
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background-color: var(--glass-weak);
-  backdrop-filter: blur(var(--blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
-  box-shadow: var(--glass-shadow-soft);
+  /*
+   * 不用阴影、也不用毛玻璃模糊：这两种效果在这个尺寸的小胶囊上会变成一圈灰晕，
+   * 看起来像每个日期底下拖了一块脏背景。这里就老老实实一个干净的圆角块。
+   */
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.25;
-  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease,
-    box-shadow 0.16s ease, transform 0.16s ease;
+  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
 .daily-dates__day:hover {
@@ -65,7 +68,8 @@
   background-clip: border-box;
   border-color: transparent;
   color: var(--text-on-accent);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 30%, transparent);
+  /* 选中态同样不加阴影，整条日期带保持"平的"。 */
+  box-shadow: none;
 }
 
 .daily-dates__day.is-active:hover {

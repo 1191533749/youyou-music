@@ -23,18 +23,15 @@ import {
   usePlayerStore,
   useToast
 } from '../lib/contract'
-import { useDebounced } from '../lib/hooks'
-import { IconDisc, IconLayers, IconMusic, IconPlay, IconPlus, IconSearch, IconUser } from '../components/Icons'
+import { isSearchRelevant } from '../lib/relevance'
+import { IconDisc, IconLayers, IconMusic, IconPlay, IconPlus, IconUser } from '../components/Icons'
 import type { SearchResultDTO, SearchSuggestDTO } from '@shared/ipc'
 import {
   EXTERNAL_SOURCES,
-  EXTERNAL_SOURCE_NAMES,
   type ExternalSource,
   type ExternalTrackDTO
 } from '@shared/types'
 
-/** 图标组件的公共形状：尺寸与类名可传，颜色跟随 currentColor。 */
-type IconComponent = (props: { size?: number; className?: string }) => JSX.Element
 
 const TABS = [
   { value: 'comprehensive', label: '综合' },
@@ -47,13 +44,8 @@ const TABS = [
 type Tab = (typeof TABS)[number]['value']
 type SearchType = 'songs' | 'artists' | 'albums' | 'playlists'
 
-/** 音源：网易云是本站曲库，其余三个是站外曲库。 */
-type SourceChoice = 'netease' | ExternalSource
-
-const SOURCES: Array<{ value: SourceChoice; label: string }> = [
-  { value: 'netease', label: '网易云' },
-  ...EXTERNAL_SOURCES.map((source) => ({ value: source, label: EXTERNAL_SOURCE_NAMES[source] }))
-]
+/** 兜底顺序：网易云 0 条时按这个顺序静默找，第一个有结果的源胜出。 */
+const FALLBACK_SOURCES: ExternalSource[] = [...EXTERNAL_SOURCES]
 
 /** 综合标签每类只取一小批，单类标签才是完整一页。 */
 const OVERVIEW_LIMIT = 8
@@ -112,30 +104,13 @@ function RefreshBar({ active }: { active: boolean }): JSX.Element | null {
   return <div className="refresh-bar" role="status" aria-label="正在刷新" />
 }
 
-interface Suggestion {
-  key: string
-  label: string
-  hint: string
-  /** 联想项的类别图标，替代原来的「单曲」文字前缀。 */
-  Icon: IconComponent
-  /** 点联想后用于搜索的关键词。 */
-  keywords: string
-}
-
 export default function Search({ initialKeywords }: { initialKeywords?: string }): JSX.Element {
   const navigation = useNavigation()
   const player = usePlayerStore()
   const toast = useToast()
 
-  const [input, setInput] = useState(initialKeywords ?? '')
   const [query, setQuery] = useState<{ keywords: string; nonce: number } | undefined>()
   const [tab, setTab] = useState<Tab>('comprehensive')
-  const [source, setSource] = useState<SourceChoice>('netease')
-  const [defaultKeyword, setDefaultKeyword] = useState<string | undefined>()
-
-  const [suggest, setSuggest] = useState<Suggestion[]>([])
-  const [suggestOpen, setSuggestOpen] = useState(false)
-  const [highlight, setHighlight] = useState(-1)
 
   const [result, setResult] = useState<SearchResultDTO | undefined>()
   const [loading, setLoading] = useState(false)
@@ -143,91 +118,40 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   const [error, setError] = useState<string | undefined>()
   const [more, setMore] = useState(false)
 
-  // 站外音源有自己的一套取数状态：三态 + 重试 + 正在点播的那一条。
+  // 静默兜底：网易云 0 条或结果不相关时找到的站外结果。界面不出现任何来源/条数文案，
+  // 只把它当普通歌曲列表渲染；点播放失败用普通 toast 报错。
   const [external, setExternal] = useState<ExternalTrackDTO[] | undefined>()
-  const [externalLoading, setExternalLoading] = useState(false)
-  const [externalRefreshing, setExternalRefreshing] = useState(false)
-  const [externalError, setExternalError] = useState<string | undefined>()
-  const [externalNonce, setExternalNonce] = useState(0)
+  const [fallbackLoading, setFallbackLoading] = useState(false)
+  /** 网易云那批结果被判为不相关、改走兜底：不再渲染它们，免得用户先看到一屏无关行。 */
+  const [fallbackActive, setFallbackActive] = useState(false)
   const [playingKey, setPlayingKey] = useState<string | undefined>()
-  /** 网易云档位在换页签/换关键词时的静默刷新标记（有旧内容时用它代替骨架）。 */
+  /** 换页签/换关键词时的静默刷新标记（有旧内容时用它代替骨架）。 */
   const [refreshing, setRefreshing] = useState(false)
 
   const generationRef = useRef(0)
-  const externalGenerationRef = useRef(0)
+  const fallbackRef = useRef(0)
   const offsetRef = useRef(0)
-  const boxRef = useRef<HTMLDivElement | null>(null)
   // effect 里要判断「屏幕上当前有没有内容」，闭包里的 result 可能是旧的，统一读 ref。
   const resultRef = useRef(result)
   resultRef.current = result
+  // 当前 result 对应的是哪次关键词（判定兜底前要确认结果已经跟上）
+  const resultForRef = useRef<string | undefined>(undefined)
 
   const keywords = query?.keywords ?? ''
   const nonce = query?.nonce ?? 0
-  const offline = source !== 'netease'
-
-  // 挂载时取一个热搜词当占位符，用户不知道搜什么的时候有个提示。
-  useEffect(() => {
-    void call('search:defaultKeyword')
-      .then((value) => setDefaultKeyword(value))
-      .catch(() => undefined)
-  }, [])
 
   /**
-   * 热搜词本身可能带表情符号（网易云会把它混进热搜文案里）。它只作为界面文案
-   * 出现，这里抹掉表情符号，免得破坏全站线性图标的视觉语言；搜索结果里的歌名、
-   * 歌手名属于内容，一律不动。
+   * 搜索页没有自己的输入框（搜索词只由顶部搜索框写入路由），这里只负责：
+   * 路由关键词变化时发起一次搜索 —— 从别处跳进来时也走这条，行为与以前一致。
    */
-  const defaultKeywordText = defaultKeyword?.replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '').trim()
-
-  const submit = useCallback((value: string): void => {
-    const trimmed = value.trim()
+  useEffect(() => {
+    const trimmed = initialKeywords?.trim()
     if (!trimmed) return
-    setInput(trimmed)
-    setSuggestOpen(false)
-    setHighlight(-1)
     setQuery((current) => ({ keywords: trimmed, nonce: (current?.nonce ?? 0) + 1 }))
-  }, [])
-
-  // 从别处跳进来（例如歌单页的「搜索」入口）时自动搜索一次。
-  useEffect(() => {
-    if (!initialKeywords) return
-    submit(initialKeywords)
-  }, [initialKeywords, submit])
-
-  // --- 联想 -------------------------------------------------------------
-  const debouncedInput = useDebounced(input.trim(), 300)
-
-  useEffect(() => {
-    if (!debouncedInput || debouncedInput === keywords) {
-      setSuggest([])
-      return
-    }
-    let cancelled = false
-    void call('search:suggest', { keywords: debouncedInput })
-      .then((value) => {
-        if (cancelled) return
-        setSuggest(flattenSuggestions(value))
-      })
-      .catch(() => {
-        if (!cancelled) setSuggest([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [debouncedInput, keywords])
-
-  // 点空白处收起下拉：mousedown 早于 blur，不会和选项点击抢事件。
-  useEffect(() => {
-    const onMouseDown = (event: MouseEvent): void => {
-      if (!boxRef.current?.contains(event.target as Node)) setSuggestOpen(false)
-    }
-    document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [])
+  }, [initialKeywords])
 
   // --- 搜索（网易云）----------------------------------------------------
   useEffect(() => {
-    if (offline) return
     if (!keywords) {
       setResult(undefined)
       return
@@ -277,6 +201,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
             albumCount: albums.status === 'fulfilled' ? albums.value.albumCount : undefined,
             playlistCount: playlists.status === 'fulfilled' ? playlists.value.playlistCount : undefined
           }
+          resultForRef.current = keywords
           setResult(page)
           writeSearchCache(cacheKey, { result: page, more: false, offset: 0 })
         } else {
@@ -284,6 +209,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           if (generation !== generationRef.current) return
           const offset = countOf(tab, page)
           const nextMore = hasMoreAfter(tab, page, 0)
+          resultForRef.current = keywords
           offsetRef.current = offset
           setResult(page)
           setMore(nextMore)
@@ -301,48 +227,86 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
     }
 
     void run()
-    // 切回网易云时也要重取一次（offline 变化会重新跑这个 effect）。
-  }, [keywords, nonce, tab, offline])
+  }, [keywords, nonce, tab])
 
-  // --- 搜索（站外曲库）--------------------------------------------------
+  /**
+   * 静默兜底：网易云「没搜到」时，后台按 汽水 → 酷狗 → 酷我 依次找，
+   * 第一个有结果的源胜出，以普通歌曲列表呈现。
+   *
+   * 「没搜到」= 单曲 0 条，**或者**返回的这批结果跟关键词根本不相干 ——
+   * 网易云搜索极其宽容（实测随机串都能返回 30 条），只看条数的话抖音热歌这类
+   * 曲库里没有的歌永远会显示一屏模糊结果，兜底也就永远不会触发。
+   *
+   * 用户不需要知道音源这件事：界面里没有切换按钮、没有来源标注、没有条数说明；
+   * 三个源都没有结果时保持网易云的空态，什么都不额外显示。
+   */
   useEffect(() => {
-    if (!offline || !keywords) {
+    // 每次重算都让在途的旧兜底作废：否则上一次搜索发出的站外请求晚到一步，
+    // 会把结果盖到这一次的列表上（实测「孤勇者」被上一轮的关键词污染过）。
+    const generation = ++fallbackRef.current
+    if (loading || !keywords || (tab !== 'comprehensive' && tab !== 'songs')) {
       setExternal(undefined)
-      setExternalError(undefined)
-      setExternalLoading(false)
+      setFallbackLoading(false)
+      setFallbackActive(false)
       return
     }
-    const generation = ++externalGenerationRef.current
-    const cacheKey = `${source}:${keywords}`
-    const cached = EXTERNAL_CACHE.get(cacheKey)
-    setExternalError(undefined)
-    if (cached && cached.length > 0) {
-      setExternal(cached)
-      setExternalLoading(false)
-      setExternalRefreshing(true)
-    } else {
-      // 换音源但没有这个源的缓存：保留上一个源的列表（压暗 + 细条），不清空。
-      setExternalLoading(false)
-      setExternalRefreshing(true)
+    // 结果还没跟上这次关键词（刚换词、网易云还在路上）时先什么都不做，
+    // 免得拿旧结果做判定。
+    if (resultForRef.current !== keywords) {
+      setExternal(undefined)
+      setFallbackLoading(false)
+      setFallbackActive(false)
+      return
     }
-    void call('search:external', { source, keywords, limit: EXTERNAL_LIMIT })
-      .then((items) => {
-        if (generation !== externalGenerationRef.current) return
-        setExternal(items)
-        writeExternalCache(cacheKey, items)
-      })
-      .catch((cause) => {
-        if (generation === externalGenerationRef.current) {
-          setExternalError(cause instanceof Error ? cause.message : String(cause))
+    const songs = result?.songs ?? []
+    const relevant = isSearchRelevant(
+      keywords,
+      songs.map((track) => ({
+        name: track.name,
+        // TrackDTO 的歌手是数组，拼成字符串再比对。
+        artists: (track.artists ?? []).map((artist) => artist.name).join(' '),
+        album: track.album?.name
+      }))
+    )
+    if (songs.length > 0 && relevant) {
+      setExternal(undefined)
+      setFallbackLoading(false)
+      setFallbackActive(false)
+      return
+    }
+    // 判为不相关（或压根没有结果）：走兜底，同时把网易云那批从界面上撤掉。
+    setFallbackActive(true)
+    setExternal(undefined)
+    setFallbackLoading(true)
+    void (async () => {
+      for (const candidate of FALLBACK_SOURCES) {
+        const key = `${candidate}:${keywords}`
+        const cached = EXTERNAL_CACHE.get(key)
+        if (cached && cached.length > 0) {
+          if (generation !== fallbackRef.current) return
+          setExternal(cached)
+          setFallbackLoading(false)
+          return
         }
-      })
-      .finally(() => {
-        if (generation === externalGenerationRef.current) {
-          setExternalLoading(false)
-          setExternalRefreshing(false)
+        try {
+          const items = await call('search:external', { source: candidate, keywords, limit: EXTERNAL_LIMIT })
+          if (generation !== fallbackRef.current) return
+          writeExternalCache(key, items)
+          if (items.length > 0) {
+            setExternal(items)
+            setFallbackLoading(false)
+            return
+          }
+        } catch {
+          // 这个源挂了就试下一个，全程不打扰用户。
         }
-      })
-  }, [offline, source, keywords, nonce, externalNonce])
+      }
+      if (generation === fallbackRef.current) {
+        setExternal([])
+        setFallbackLoading(false)
+      }
+    })()
+  }, [loading, keywords, tab, result])
 
   /**
    * 点播站外曲目：主进程会严格匹配到完整音频，匹配不到直接抛错。
@@ -391,93 +355,16 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   const playlists = result?.playlists ?? []
   const overview = tab === 'comprehensive'
   const loaded = songs.length + artists.length + albums.length + playlists.length
-  // 综合标签展示的是四类各一小批，说「共 N 条」会误导，只报单类标签的真实总数。
-  const totalCount = overview ? undefined : (totalOf(tab, result ?? {}) ?? loaded)
 
   return (
     <div className="page search">
       <header className="page__header">
         <div>
           <h1 className="page__title">搜索</h1>
-          <div className="page__subtitle">支持歌曲、歌手、专辑与歌单</div>
         </div>
       </header>
 
-      <div className="search__box" ref={boxRef}>
-        <div className="search__field">
-          <span className="search__icon">
-            <IconSearch size={17} />
-          </span>
-          <input
-            className="search__input"
-            value={input}
-            placeholder={defaultKeywordText ? `搜索「${defaultKeywordText}」` : '搜索歌曲、歌手、专辑或歌单'}
-            onChange={(event) => {
-              setInput(event.target.value)
-              setSuggestOpen(true)
-              setHighlight(-1)
-            }}
-            onFocus={() => setSuggestOpen(true)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                if (suggestOpen && highlight >= 0 && suggest[highlight]) submit(suggest[highlight].keywords)
-                else submit(input)
-              } else if (event.key === 'ArrowDown') {
-                event.preventDefault()
-                setSuggestOpen(true)
-                setHighlight((current) => (current + 1) % Math.max(1, suggest.length))
-              } else if (event.key === 'ArrowUp') {
-                event.preventDefault()
-                setHighlight((current) => (current <= 0 ? suggest.length - 1 : current - 1))
-              } else if (event.key === 'Escape') {
-                setSuggestOpen(false)
-              }
-            }}
-          />
-          <button type="button" className="button button--primary" onClick={() => submit(input)}>
-            搜索
-          </button>
-        </div>
-
-        {suggestOpen && suggest.length > 0 ? (
-          <ul className="search__suggest">
-            {suggest.map((item, index) => (
-              <li key={item.key}>
-                <button
-                  type="button"
-                  className={`search__suggest-item${index === highlight ? ' is-active' : ''}`}
-                  onMouseEnter={() => setHighlight(index)}
-                  onClick={() => submit(item.keywords)}
-                >
-                  <span className="search__suggest-label">{item.label}</span>
-                  <span className="search__suggest-hint">
-                    <item.Icon size={13} />
-                    {item.hint}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      {/* 音源切换：默认网易云；另外三个是站外曲库，用来找网易云没有的歌。 */}
-      <div className="toolbar search__sources">
-        <div className="chip-row">
-          {SOURCES.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className={`chip${source === item.value ? ' is-active' : ''}`}
-              onClick={() => setSource(item.value)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {!offline && keywords ? (
+      {keywords ? (
         <div className="toolbar search__tabs">
           <div className="chip-row">
             {TABS.map((item) => (
@@ -491,32 +378,12 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
               </button>
             ))}
           </div>
-          <span className="search__summary">
-            {loading
-              ? '正在搜索…'
-              : totalCount === undefined
-                ? `「${keywords}」的搜索结果`
-                : `「${keywords}」共 ${totalCount} 条结果`}
-          </span>
         </div>
       ) : null}
 
-      {/* 站外曲库只有单曲，且没有综合/歌手/专辑/歌单之分，只给一行结果说明。 */}
-      {offline && keywords ? (
-        <div className="toolbar search__tabs">
-          <span className="search__summary">
-            {externalLoading
-              ? `正在 ${EXTERNAL_SOURCE_NAMES[source]} 里搜索…`
-              : externalRefreshing
-                ? `正在 ${EXTERNAL_SOURCE_NAMES[source]} 里搜索…`
-                : `「${keywords}」· ${EXTERNAL_SOURCE_NAMES[source]}${external ? ` 共 ${external.length} 条结果` : ''}`}
-          </span>
-        </div>
-      ) : null}
+      {error ? <div className="page__error">搜索失败：{error}</div> : null}
 
-      {!offline && error ? <div className="page__error">搜索失败：{error}</div> : null}
-
-      {!offline && loading ? (
+      {loading ? (
         <div className="search__loading">
           <div className="loading-state">
             <IconDisc size={16} className="spin" />
@@ -527,46 +394,18 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
         </div>
       ) : null}
 
-      {offline && externalError ? (
-        <div className="page__error">
-          <span>搜索失败：{externalError}</span>
-          <button type="button" className="button" onClick={() => setExternalNonce((value) => value + 1)}>
-            重试
-          </button>
-        </div>
-      ) : null}
+      {/* 静默刷新：细条 + 内容压暗，切页签/兜底找歌时不出现空白帧。 */}
+      <RefreshBar active={refreshing || fallbackLoading} />
 
-      {offline && externalLoading ? (
-        <div className="search__loading">
-          <div className="loading-state">
-            <IconDisc size={16} className="spin" />
-            <span>正在搜索站外曲库…</span>
-          </div>
-          <div className="skeleton search__skeleton" />
-          <div className="skeleton search__skeleton" />
-        </div>
-      ) : null}
-
-      {/* 静默刷新：细条 + 内容压暗，切页签/换音源时不出现空白帧。 */}
-      <RefreshBar active={!offline && refreshing} />
-      <RefreshBar active={offline && externalRefreshing} />
-
+      {/* 关键词只由顶部搜索框写入路由，正常进来一定有词；这里只防「空词」这种边界。 */}
       {!loading && !keywords ? (
         <div className="placeholder">
-          <div className="placeholder__title">输入关键词开始搜索</div>
-          {defaultKeywordText ? <div>试试搜索「{defaultKeywordText}」</div> : null}
+          <div className="placeholder__title">没有搜索词</div>
         </div>
       ) : null}
 
-      {offline && keywords && !externalLoading && !externalError && external?.length === 0 ? (
-        <div className="placeholder">
-          <div className="placeholder__title">没有找到相关歌曲</div>
-          <div>换个关键词，或者换一个音源再试试。</div>
-        </div>
-      ) : null}
-
-      {offline && external && external.length > 0 ? (
-        <section className={`page__section${externalRefreshing ? ' is-refreshing' : ''}`}>
+      {external && external.length > 0 ? (
+        <section className="page__section">
           <div className="song-list">
             {external.map((item, index) => {
               const key = `${item.source}:${item.sourceId}`
@@ -579,7 +418,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
                   className={`song-row song-row--external${current ? ' is-current' : ''}`}
                   style={{ gridTemplateColumns: EXTERNAL_COLUMNS }}
                   onDoubleClick={() => void playExternal(item)}
-                  title={`${item.name} — ${item.artists}（${EXTERNAL_SOURCE_NAMES[item.source]}）`}
+                  title={`${item.name} — ${item.artists}`}
                 >
                   <div className="song-row__index">{index + 1}</div>
                   <div className="ext-row__cover">
@@ -598,7 +437,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
                     </button>
                     <div style={{ minWidth: 0 }}>
                       <div className="song-row__name">{item.name}</div>
-                      <div className="song-row__sub">{item.artists || EXTERNAL_SOURCE_NAMES[item.source]}</div>
+                      <div className="song-row__sub">{item.artists}</div>
                     </div>
                   </div>
                   <div className="song-row__artist">{item.artists}</div>
@@ -611,21 +450,30 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
         </section>
       ) : null}
 
-      {!offline && !loading && keywords && !error && loaded === 0 ? (
+      {/*
+        空态：网易云本来就没结果，或者判为不相关且三个站外源也没找到内容时显示。
+        兜底正在找、或兜底列表已经有内容时都不显示。
+      */}
+      {!loading &&
+      !fallbackLoading &&
+      !(external && external.length > 0) &&
+      keywords &&
+      !error &&
+      (loaded === 0 || fallbackActive) ? (
         <div className="placeholder">
           <div className="placeholder__title">没有找到与「{keywords}」相关的内容</div>
           <div>换个关键词，或者检查一下输入。</div>
         </div>
       ) : null}
 
-      {!offline && !loading && result ? (
+      {/* 判为不相关且兜底找到内容时，整段不渲染网易云那批结果。 */}
+      {!loading && result && !(fallbackActive && (external?.length ?? 0) > 0) ? (
         <div className={refreshing ? 'is-refreshing' : undefined}>
           {songs.length > 0 ? (
             <section className="page__section">
               <SectionHeader
                 icon={IconMusic}
                 title="单曲"
-                count={result.songCount}
                 // 整表播放入口：随机起播；点具体某一行仍然从那一行开始。
                 onPlayAll={() => void player.playTracks(songs, 0, { randomStart: true })}
                 action={overview ? { label: '查看全部', onClick: () => setTab('songs') } : undefined}
@@ -643,7 +491,6 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
               <SectionHeader
                 icon={IconUser}
                 title="歌手"
-                count={result.artistCount}
                 action={overview ? { label: '查看全部', onClick: () => setTab('artists') } : undefined}
               />
               <div className="grid grid--artists">
@@ -666,7 +513,6 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
               <SectionHeader
                 icon={IconDisc}
                 title="专辑"
-                count={result.albumCount}
                 action={overview ? { label: '查看全部', onClick: () => setTab('albums') } : undefined}
               />
               <div className="grid grid--albums">
@@ -688,7 +534,6 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
               <SectionHeader
                 icon={IconLayers}
                 title="歌单"
-                count={result.playlistCount}
                 action={overview ? { label: '查看全部', onClick: () => setTab('playlists') } : undefined}
               />
               <div className="grid grid--playlists">
@@ -742,13 +587,12 @@ function ExternalCover({ url }: { url?: string }): JSX.Element {
 function SectionHeader({
   icon: Icon,
   title,
-  count,
   action,
   onPlayAll
 }: {
-  icon: IconComponent
+  /** 板块标题左侧的线性图标组件（尺寸/类名可传，颜色跟随 currentColor）。 */
+  icon: (props: { size?: number; className?: string }) => JSX.Element
   title: string
-  count?: number
   action?: { label: string; onClick: () => void }
   /** 整表播放入口（随机起播）；不传则不显示。 */
   onPlayAll?: () => void
@@ -770,55 +614,10 @@ function SectionHeader({
           <button type="button" className="section__more search__more-link" onClick={action.onClick}>
             {action.label}
           </button>
-        ) : count !== undefined && count > 0 ? (
-          <span className="section__more">共 {count} 条</span>
         ) : null}
       </div>
     </div>
   )
-}
-
-/** 把四类联想压成一个扁平列表，键盘上下键只需要在这一个列表里移动。 */
-function flattenSuggestions(value: SearchSuggestDTO | undefined): Suggestion[] {
-  if (!value) return []
-  const items: Suggestion[] = []
-  for (const [index, track] of (value.songs ?? []).entries()) {
-    items.push({
-      key: `song-${track.id}-${index}`,
-      label: track.name,
-      hint: artistLine(track),
-      Icon: IconMusic,
-      keywords: track.name
-    })
-  }
-  for (const artist of value.artists ?? []) {
-    items.push({
-      key: `artist-${artist.id}`,
-      label: artist.name,
-      hint: '歌手',
-      Icon: IconUser,
-      keywords: artist.name
-    })
-  }
-  for (const album of value.albums ?? []) {
-    items.push({
-      key: `album-${album.id}`,
-      label: album.name,
-      hint: album.artistName,
-      Icon: IconDisc,
-      keywords: album.name
-    })
-  }
-  for (const playlist of value.playlists ?? []) {
-    items.push({
-      key: `playlist-${playlist.id}`,
-      label: playlist.name,
-      hint: `${playlist.trackCount} 首`,
-      Icon: IconLayers,
-      keywords: playlist.name
-    })
-  }
-  return items.slice(0, 12)
 }
 
 function countOf(tab: SearchType, result: SearchResultDTO): number {

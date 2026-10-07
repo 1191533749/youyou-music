@@ -59,8 +59,8 @@ import type { AppInfoDTO } from '@shared/types'
 const NAV_ITEMS = [
   { name: 'home', label: '首页', Icon: IconHome },
   { name: 'explore', label: '发现', Icon: IconCompass },
+  { name: 'search', label: '搜索', Icon: IconSearch },
   { name: 'library', label: '我的音乐', Icon: IconLibrary },
-  // 搜索不再占侧边栏：每页顶部的搜索框直达搜索页，入口更顺手。
   { name: 'daily', label: '每日推荐', Icon: IconCalendar },
   { name: 'fm', label: '私人漫游', Icon: IconRadio },
   { name: 'together', label: '一起听', Icon: IconGift },
@@ -68,19 +68,56 @@ const NAV_ITEMS = [
 ] as const
 
 /**
- * 顶部搜索条：每页可见，回车直达搜索页。
- * 放在内容区顶部并 sticky，滚动内容时依然可用。
- * 左侧在可返回时给出「返回」按钮——详情页的返回统一收在这一行，
- * 不再浮在封面上（用户反馈过返回按钮压住图片）。
+ * 顶部行：只在搜索页显示搜索框，其余页面不显示（用户明确反馈：
+ * 每个页面顶部都挂一个搜索框是「多出来的」，只有搜索页需要它）。
+ * 详情页的可返回时，这里只保留「返回」按钮。
  */
 function TopSearch(): JSX.Element {
   const navigation = useNavigation()
   const [keywords, setKeywords] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const route = navigation.route
+  const onSearchPage = route.name === 'search'
+  const routeKeywords = route.name === 'search' ? route.keywords : undefined
+
+  // 进到搜索页时把当前搜索词显示出来，否则看起来像是空的。
+  useEffect(() => {
+    if (routeKeywords !== undefined) setKeywords(routeKeywords)
+  }, [routeKeywords])
+
+  // 从侧边栏进来（没有关键词）时自动聚焦，用户可以直接输入。
+  useEffect(() => {
+    if (route.name === 'search' && route.keywords === undefined) {
+      inputRef.current?.focus()
+    }
+  }, [route])
 
   const submit = (): void => {
     const trimmed = keywords.trim()
     if (!trimmed) return
+    // 已经在搜索页就替换当前搜索（避免返回栈里堆一串搜索历史）。
+    if (navigation.route.name === 'search') {
+      navigation.replace({ name: 'search', keywords: trimmed })
+      return
+    }
     navigation.push({ name: 'search', keywords: trimmed })
+  }
+
+  if (!onSearchPage) {
+    // 非搜索页：不显示搜索框；只在可返回时给「返回」按钮。
+    if (!navigation.canGoBack) return <></>
+    return (
+      <div className="top-row">
+        <button
+          type="button"
+          className="top-row__back"
+          onClick={() => navigation.back()}
+          aria-label="返回"
+        >
+          返回
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -97,6 +134,7 @@ function TopSearch(): JSX.Element {
       <div className="top-search">
         <IconSearch size={16} />
         <input
+          ref={inputRef}
           type="text"
           className="top-search__input"
           placeholder="搜索音乐、歌手、专辑、歌单"

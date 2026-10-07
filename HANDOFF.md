@@ -164,6 +164,13 @@ npm run verify:packaged
 
 ## 8. GitHub 发布与更新通道（v0.3.0 已上线）
 
+> ⛔ **发布审批规则（用户明确要求，最高优先级）**：
+> **任何版本在用户本人明确说出「发布」之前，一律不得创建/上传 Release。**
+> 允许做的事：本地打包（`scripts/package.mjs`）、装机自检、把便携版放到桌面给用户测试。
+> 禁止做的事：`scripts/github-release.mjs --confirm`、`git push` tag 触发发布、把 Release 从预发布改为正式。
+> 若已误发：立刻 `PATCH /repos/{owner}/{repo}/releases/{id}` → `{"prerelease": true}`，
+> 让 `/releases/latest` 回退到用户已审批的版本（官网与更新器都以 latest 为准），然后如实告知用户。
+
 - 仓库：https://github.com/1191533749/youyou-music （token 由用户提供，发布用 scripts/github-release.mjs --confirm）
 - Release 资产用 ASCII 名（GitHub 上传接口会截断非 ASCII 资产名）：YouyouMusic-Portable-<v>.exe / YouyouMusic-Setup-<v>.exe / sha256sums.txt（ASCII 哈希清单）
 - 更新器匹配：/便携版|portable/i → portable，否则 installer；下载后按 sha256sums.txt 校验
