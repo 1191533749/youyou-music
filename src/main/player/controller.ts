@@ -113,6 +113,11 @@ interface QueueEntry {
   /** Playability for the current login, computed when the queue was built. */
   playability: 'playable' | 'vipOnly' | 'paidAlbum' | 'noCopyright' | 'delisted'
   playabilityReason?: string
+  /**
+   * 站外曲目（汽水/酷狗/酷我搜索来的歌）：音频地址已在主进程解析好，
+   * 播放时跳过网易云的解析链路。
+   */
+  preResolved?: { url: string; sourceName: string }
 }
 
 export class PlayerController extends EventEmitter {
@@ -217,8 +222,19 @@ export class PlayerController extends EventEmitter {
     if (this.index >= 0) await this.playIndex(this.index, { keepQueue: true })
   }
 
-  async append(tracks: Track[]): Promise<void> {
-    const existing = new Set(this.queue.map((entry) => entry.track.id))
+  /**
+   * 播放一首站外曲目（汽水/酷狗/酷我 搜索来的歌）。
+   * 音频地址由调用方解析好，这里只把它作为队列里的唯一一首歌播放。
+   */
+  async playExternal(track: Track, resolved: { url: string; sourceName: string }): Promise<void> {
+    this.queue = [{ track, playability: 'playable', preResolved: resolved }]
+    this.index = 0
+    this.consecutiveFailures = 0
+    this.emitSnapshot()
+    await this.playIndex(0, { keepQueue: true })
+  }
+
+  async append(tracks: Track[]): Promise<void> {    const existing = new Set(this.queue.map((entry) => entry.track.id))
     const added = tracks.filter((track) => !existing.has(track.id))
     if (added.length === 0) return
     this.queue.push(...added.map((track) => this.toEntry(track)))
@@ -281,7 +297,16 @@ export class PlayerController extends EventEmitter {
 
     const entry = this.queue[index]
     try {
-      const resolved = await this.resolveSource(entry.track)
+      const resolved: ResolvedPlayback = entry.preResolved
+        ? {
+            source: entry.preResolved.url,
+            level: 'standard',
+            claimedLevel: undefined,
+            cached: false,
+            cacheVariant: 'netease',
+            servedFrom: entry.preResolved.sourceName
+          }
+        : await this.resolveSource(entry.track)
       if (generation !== this.resolveGeneration) return
       // 第三方音源只在码率已知时才声称音质档位；不知道就不虚报。
       this.servedQuality = resolved.servedFrom

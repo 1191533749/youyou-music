@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { NavigationProvider, useNavigation } from './store/navigation'
+import { NavigationProvider, useNavigation, type Route } from './store/navigation'
 import { useAuthStore } from './store/auth'
 import { usePlayerStore } from './store/player'
 import PlayerBar from './components/PlayerBar'
@@ -293,36 +293,84 @@ function Backdrop(): JSX.Element {
   )
 }
 
-function PageRouter({ authLoggedIn }: { authLoggedIn: boolean }): JSX.Element {
-  const { route } = useNavigation()
-  switch (route.name) {
+/**
+ * 侧栏一级页面：切来切去**不重新挂载**，回到页面时内容与滚动位置都还在，
+ * 不会出现「点一下先转圈、像重新加载了一遍」的感觉。
+ *
+ * 详情页（歌单/专辑/歌手/搜索/播放页）仍然按路由挂载，因为它们带参数、
+ * 且数量不可控（常驻会越堆越多）。
+ */
+const KEEP_ALIVE_PAGES = [
+  'home',
+  'explore',
+  'library',
+  'daily',
+  'fm',
+  'together',
+  'cloud',
+  'settings'
+] as const
+
+type KeepAliveName = (typeof KEEP_ALIVE_PAGES)[number]
+
+function isKeepAlive(name: string): name is KeepAliveName {
+  return (KEEP_ALIVE_PAGES as readonly string[]).includes(name)
+}
+
+function renderKeepAlivePage(name: KeepAliveName, authLoggedIn: boolean): JSX.Element {
+  switch (name) {
     case 'home':
       return <Home />
     case 'explore':
       return <Explore />
-    case 'search':
-      return <Search initialKeywords={route.keywords} />
     case 'library':
       return authLoggedIn ? <Library /> : <Login />
+    case 'daily':
+      return <DailyPage />
+    case 'fm':
+      return <FM />
+    case 'together':
+      return <Together />
+    case 'cloud':
+      return authLoggedIn ? <Cloud /> : <Login />
+    case 'settings':
+      return <Settings />
+  }
+}
+
+function PageRouter({ authLoggedIn }: { authLoggedIn: boolean }): JSX.Element {
+  const { route } = useNavigation()
+  // 已访问过的一级页面按顺序常驻（保持挂载，切回来直接看到原内容）。
+  const visited = useRef<KeepAliveName[]>([])
+  const active = isKeepAlive(route.name) ? route.name : undefined
+  if (active && !visited.current.includes(active)) visited.current.push(active)
+
+  return (
+    <>
+      {visited.current.map((name) => (
+        <div key={name} className="page-slot" hidden={name !== active}>
+          {renderKeepAlivePage(name, authLoggedIn)}
+        </div>
+      ))}
+
+      {!active ? renderDetailPage(route, authLoggedIn) : null}
+    </>
+  )
+}
+
+/** 带参数的页面（详情页等）：按路由正常挂载/卸载。 */
+function renderDetailPage(route: Route, authLoggedIn: boolean): JSX.Element {
+  switch (route.name) {
+    case 'search':
+      return <Search initialKeywords={route.keywords} />
     case 'playlist':
       return <PlaylistPage id={route.id} />
     case 'album':
       return <AlbumPage id={route.id} />
     case 'artist':
       return <ArtistPage id={route.id} />
-    case 'daily':
-      // 每日推荐不再整页显示二维码：未登录时页面内给轻提示，登录后直接是歌曲。
-      return <DailyPage />
-    case 'fm':
-      return <FM />
-    case 'together':
-      return <Together />
     case 'toplist':
       return <ToplistPage id={route.id} />
-    case 'cloud':
-      return authLoggedIn ? <Cloud /> : <Login />
-    case 'settings':
-      return <Settings />
     case 'nowPlaying':
       return <NowPlaying />
     default:

@@ -92,8 +92,16 @@ function roomSummary(room) {
 
 function listenerList(filter = {}) {
   const list = []
+  // 按账号去重：同一 uid 只显示最新的一条连接（旧连接被顶掉后可能还有几秒
+  // 在内存里，列表不能出现好几个「自己」）。
+  const newestByUid = new Map()
   for (const client of clients.values()) {
-    if (!client.profile) continue
+    if (!client.alive || !client.profile) continue
+    const uid = String(client.profile.uid)
+    const existing = newestByUid.get(uid)
+    if (!existing || client.id > existing.id) newestByUid.set(uid, client)
+  }
+  for (const client of newestByUid.values()) {
     if (filter.gender && client.profile.gender !== filter.gender) continue
     if (filter.region && !String(client.profile.region ?? '').includes(filter.region)) continue
     if (filter.minAge && Number(client.profile.age ?? 0) < Number(filter.minAge)) continue
@@ -111,6 +119,15 @@ function listenerList(filter = {}) {
     })
   }
   return list
+}
+
+/** 健康检查里的在线人数：按账号去重后的真实在线数。 */
+function onlineCount() {
+  const uids = new Set()
+  for (const client of clients.values()) {
+    if (client.alive && client.profile) uids.add(String(client.profile.uid))
+  }
+  return uids.size
 }
 
 function balanceOf(uid) {
@@ -136,6 +153,16 @@ async function handleMessage(client, message) {
         signature: message.profile?.signature
       }
       state.users[client.profile.uid] = client.profile
+      // 同一账号只保留最新一条连接：把更早的连接顶掉（close code 4000，
+      // 客户端收到 4000 不会自动重连，避免两个连接互相顶、无限循环）。
+      {
+        const uid = client.profile.uid
+        for (const other of clients.values()) {
+          if (other !== client && other.alive && String(other.profile?.uid) === uid) {
+            other.cleanup?.(4000)
+          }
+        }
+      }
       // 首次使用一起听：赠送 1 元礼物额度（每个账号只送一次）。
       state.gifted ??= {}
       let firstGift = false
@@ -376,7 +403,7 @@ const server = createServer((request, response) => {
       JSON.stringify({
         ok: true,
         rooms: rooms.size,
-        online: clients.size,
+        online: onlineCount(),
         gifts: GIFTS.length,
         alipay: alipay.configured,
         uptime: Math.round(process.uptime())
@@ -420,11 +447,12 @@ server.on('upgrade', (request, socket) => {
   )
   socket.setNoDelay(true)
 
-  const client = { id: nextClientId++, socket, profile: undefined, roomId: undefined, alive: true }
+  const client = { id: nextClientId++, socket, profile: undefined, roomId: undefined, alive: true, lastSeen: Date.now(), cleanup: undefined }
   clients.set(client.id, client)
 
   let buffered = Buffer.alloc(0)
   socket.on('data', (chunk) => {
+    client.lastSeen = Date.now()
     buffered = Buffer.concat([buffered, chunk])
     const { frames, rest } = decodeFrames(buffered)
     buffered = rest
@@ -457,24 +485,43 @@ server.on('upgrade', (request, socket) => {
     }
   })
 
-  const cleanup = () => {
+  const cleanup = (code = 1000) => {
     if (!client.alive) return
     client.alive = false
     leaveRoom(client)
     clients.delete(client.id)
     try {
-      socket.write(encodeClose())
+      socket.write(encodeClose(code))
     } catch {
       /* ignore */
     }
     socket.destroy()
   }
+  client.cleanup = cleanup
 
-  socket.on('close', cleanup)
-  socket.on('error', cleanup)
+  socket.on('close', () => cleanup())
+  socket.on('error', () => cleanup())
 })
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[relay] 一起听中继已启动: http://0.0.0.0:${PORT}  (健康检查 /health)`)
+
+  // 心跳回收：浏览器对服务端 ping 会自动回 pong，任何数据都会刷新 lastSeen。
+  // 超过 90 秒没有任何数据的连接视为死连接清理掉，避免「幽灵在线」越积越多。
+  setInterval(() => {
+    const now = Date.now()
+    for (const client of [...clients.values()]) {
+      if (now - (client.lastSeen ?? now) > 90_000) {
+        console.log(`[relay] 清理无响应连接 #${client.id}（${client.profile?.nickname ?? '未打招呼'}）`)
+        client.cleanup?.()
+        continue
+      }
+      try {
+        client.socket.write(encodeFrame(Buffer.alloc(0), 0x9))
+      } catch {
+        client.cleanup?.()
+      }
+    }
+  }, 30_000).unref()
   console.log(`[relay] 连接口令: ${RELAY_TOKEN ? '已启用' : '未设置（任何人都能连接）'}`)
 })

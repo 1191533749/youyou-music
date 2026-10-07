@@ -432,6 +432,47 @@
   justify-content: space-between;
 }
 
+/*
+ * 页内切换（分类 / 页签 / 音源）时的静默刷新提示。
+ *
+ * 旧内容继续留在屏幕上、只压暗一点点，配一条 2px 的流动细条说明「正在取新数据」，
+ * 避免整块清空再出现的「重新加载」闪烁。只有首次进入（没有任何旧数据）才用骨架。
+ */
+.refresh-bar {
+  position: relative;
+  height: 2px;
+  margin: 6px 0;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--glass-weak);
+}
+
+.refresh-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 36%;
+  border-radius: inherit;
+  background: var(--accent-gradient);
+  animation: refresh-bar-slide 0.9s ease-in-out infinite;
+}
+
+@keyframes refresh-bar-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+.is-refreshing {
+  opacity: 0.68;
+  transition: opacity 0.18s ease;
+}
+
 .search__summary {
   font-size: 12px;
   color: var(--text-tertiary);

@@ -46,7 +46,13 @@ describe.skipIf(!RUNNABLE)('mpv backend', () => {
   it('reports the audio devices mpv can output to', async () => {
     const devices = await mpv.listAudioDevices()
     expect(devices.length).toBeGreaterThan(0)
-    expect(devices[0]).toBe('auto')
+    // 第一条是系统默认（auto），后面是 {id, label}：id 是 mpv 内部键，label 是友好名。
+    expect(devices[0]?.id).toBe('auto')
+    const wasapi = devices.find((device) => device.id.startsWith('wasapi/'))
+    expect(wasapi).toBeTruthy()
+    // 友好名来自 description（例如「扬声器 (Realtek(R) Audio)」），不再是 GUID 串。
+    expect(String(wasapi?.label).length).toBeGreaterThan(0)
+    expect(wasapi?.label).not.toContain('{')
   })
 
   it('plays a local file and advances the position', async () => {

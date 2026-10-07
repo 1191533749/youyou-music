@@ -41,7 +41,6 @@ export type RepeatMode = 'off' | 'all' | 'one'
 
 /** 桌面歌词的显示特效。 */
 export type DesktopLyricsEffect = 'classic' | 'gradient' | 'neon' | 'karaoke'
-
 /** 特效的展示顺序，也是桌面歌词窗口里切换按钮的循环顺序。 */
 export const DESKTOP_LYRICS_EFFECTS: DesktopLyricsEffect[] = ['classic', 'gradient', 'neon', 'karaoke']
 
@@ -123,6 +122,32 @@ export interface UserProfileDTO {
 export interface LoginStateDTO {
   loggedIn: boolean
   profile?: UserProfileDTO
+}
+
+/**
+ * 站外音源（网易云曲库里搜不到的歌，例如大量抖音热歌）。
+ * 汽水音乐只作「发现层」：它的搜索接口可用，但播放地址接口需要签名与登录态，
+ * 因此点播时统一走严格匹配到酷狗/酷我拿完整音频。
+ */
+export type ExternalSource = 'qishui' | 'kugou' | 'kuwo'
+
+export const EXTERNAL_SOURCES: ExternalSource[] = ['qishui', 'kugou', 'kuwo']
+
+export const EXTERNAL_SOURCE_NAMES: Record<ExternalSource, string> = {
+  qishui: '汽水音乐',
+  kugou: '酷狗音乐',
+  kuwo: '酷我音乐'
+}
+
+export interface ExternalTrackDTO {
+  source: ExternalSource
+  /** 源内 ID（汽水 track_id / 酷狗 hash / 酷我 rid） */
+  sourceId: string
+  name: string
+  artists: string
+  album?: string
+  durationMS: number
+  coverUrl?: string
 }
 
 export type QRLoginStatus = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error'

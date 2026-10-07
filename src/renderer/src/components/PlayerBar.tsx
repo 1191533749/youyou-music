@@ -246,6 +246,20 @@ export default function PlayerBar(): JSX.Element {
 
 function QualityMenu({ player }: { player: PlayerStore }): JSX.Element {
   const { state } = player
+  // 站外曲目（汽水/酷狗/酷我 搜索来的歌）不存在「首选音质」这个概念，
+  // 显示偏好档位会让人以为播到了那个档位。这里如实显示实际档位（不知道就是标准），
+  // 并且不允许切换。
+  const external = typeof state.track?.id === 'number' && state.track.id < 0
+  if (external) {
+    const served = state.servedQuality ?? 'standard'
+    return (
+      <label className="quality-select" title="站外曲目，音质以音源提供为准">
+        <select value={served} disabled aria-label="实际音质">
+          <option value={served}>{QUALITY_LABELS[served] ?? '标准'}</option>
+        </select>
+      </label>
+    )
+  }
   // 音质策略：达不到所选音质时自动降档（主进程保证），
   // 界面不提示、不虚报、不说来源——只保留用户的首选档位控件。
   return (

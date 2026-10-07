@@ -12,6 +12,8 @@ import type {
   ArtistSummaryDTO,
   AudioDeviceDTO,
   CacheUsageDTO,
+  ExternalSource,
+  ExternalTrackDTO,
   LyricsDTO,
   PageResult,
   PlaylistSummaryDTO,
@@ -173,6 +175,11 @@ export interface IPCContract {
   }
   'search:suggest': { request: { keywords: string }; response: SearchSuggestDTO | undefined }
   'search:defaultKeyword': { request: void; response: string | undefined }
+  /** 站外音源搜索（汽水音乐 / 酷狗 / 酷我）：网易云搜不到的歌在这里找。 */
+  'search:external': {
+    request: { source: ExternalSource; keywords: string; limit?: number }
+    response: ExternalTrackDTO[]
+  }
 
   // --- library ---
   'library:overview': { request: void; response: LibraryDTO }
@@ -211,6 +218,8 @@ export interface IPCContract {
     request: { tracks: TrackDTO[]; startIndex?: number; playlistID?: number; randomStart?: boolean }
     response: PlayerStateDTO
   }
+  /** 播放站外曲目（汽水/酷狗/酷我 搜索来的歌）：主进程解析完整音频后直接播放。 */
+  'player:playExternal': { request: { item: ExternalTrackDTO }; response: PlayerStateDTO }
   'player:playFMTracks': { request: { tracks: TrackDTO[] }; response: PlayerStateDTO }
   'player:toggle': { request: void; response: PlayerStateDTO }
   'player:play': { request: void; response: PlayerStateDTO }
@@ -323,6 +332,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'search:query',
   'search:suggest',
   'search:defaultKeyword',
+  'search:external',
   'library:overview',
   'library:createPlaylist',
   'library:deletePlaylist',
@@ -345,6 +355,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'track:intelligence',
   'player:state',
   'player:playTracks',
+  'player:playExternal',
   'player:playFMTracks',
   'player:toggle',
   'player:play',

@@ -302,6 +302,30 @@ describe('RelayClient 与中继服务器', () => {
   )
 
   it(
+    '同一账号重复连接 → 只保留最新一条，雷达列表不出现重复的「自己」',
+    async () => {
+      const uid = freshUid('dup')
+      const first = connect({ uid, nickname: '同一个我', gender: 'male' })
+      await waitFor(first, 'welcome')
+
+      // 第二个连接（同 uid，比如断网重连/多开实例）上线后，第一个连接被 4000 顶掉。
+      const second = connect({ uid, nickname: '同一个我', gender: 'male' })
+      await waitFor(second, 'welcome')
+
+      // 旧连接收到 close code 4000 → 不应自动重连（状态回到 closed）。
+      await waitForStatus(first, ['closed', 'error'])
+      expect(first.client.connected).toBe(false)
+
+      // 找听友列表里同一个 uid 只出现一次。
+      second.client.listListeners()
+      const listeners = await waitFor(second, 'listeners')
+      const mine = (listeners.listeners ?? []).filter((item) => item.nickname === '同一个我')
+      expect(mine).toHaveLength(1)
+    },
+    TEST_TIMEOUT
+  )
+
+  it(
     'A.recharge(100) 在未配置支付宝私钥时 → rechargeResult ok=false 且 message 含「私钥」',
     async () => {
       const payer = connect({ uid: freshUid('payer'), nickname: '充值听友', gender: 'male' })

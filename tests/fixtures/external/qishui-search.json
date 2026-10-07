@@ -1,0 +1,3310 @@
+{
+  "status_info": {
+    "log_id": "20261007090051C27081FB8255DD538277",
+    "now": 1791334851,
+    "now_ts_ms": 1791334851842
+  },
+  "result_groups": [
+    {
+      "id": "top_results",
+      "next_cursor": "",
+      "has_more": false,
+      "data": [
+        {
+          "meta": {
+            "item_type": "playlist"
+          },
+          "entity": {
+            "playlist": {
+              "id": "7299719359000264704",
+              "title": "爱如火",
+              "url_cover": {
+                "uri": "tos-cn-v-2774c002/cef2bc5d15674ad98ce94e358e5e0aa7",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "count_tracks": 8,
+              "owner": {
+                "id": "4257766657233264",
+                "nickname": "3818500982",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "public_name": "3818500982",
+                "is_luna_user": true
+              },
+              "stats": {
+                "count_collected": 192,
+                "count_visible": 25
+              },
+              "create_time": 1699609798,
+              "update_time": 1791322711,
+              "review_status": "Accept",
+              "type": 2,
+              "from_feed": false,
+              "cover_gradient_effect_color": [
+                {
+                  "rgb": "503c30"
+                },
+                {
+                  "rgb": "121212"
+                }
+              ],
+              "cover_shadow_color": {
+                "rgb": "231710"
+              },
+              "resource_cnt": {
+                "track_cnt": 25
+              },
+              "user_artist_info": {
+                "user_artist_type": 0,
+                "user_brief": {
+                  "id": "4257766657233264",
+                  "nickname": "3818500982",
+                  "medium_avatar_url": {
+                    "uri": "aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB",
+                    "urls": [
+                      "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                      "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "thumb_avatar_url": {
+                    "uri": "aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB",
+                    "urls": [
+                      "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143",
+                      "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_og3cavAPEui2QyOApAhYWKijBYAIz5vADIaPB.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "secret": false,
+                  "test_tag": 0,
+                  "vip_stage": "",
+                  "is_vip": false,
+                  "public_name": "3818500982",
+                  "is_luna_user": true
+                }
+              },
+              "snack_bar_color": {
+                "rgb": "443328"
+              },
+              "all_sort_types": [
+                1,
+                4,
+                5
+              ],
+              "shuffle_play_button_color": {
+                "rgb": "faf1ea"
+              },
+              "shuffle_play_text_color": {
+                "rgb": "2d2119"
+              },
+              "public_title": "爱如火"
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "artist",
+            "quick_play_info": {
+              "quick_play_deeplink_url": "luna://luna.com/play_source?queue_id=7188014330237945913&queue_type=artist&queue_name=%E9%82%A3%E8%89%BA%E5%A8%9C",
+              "landing_page_type": "artist"
+            }
+          },
+          "entity": {
+            "artist": {
+              "id": "7188014330237945913",
+              "name": "那艺娜",
+              "count_albums": 24,
+              "count_tracks": 31,
+              "stats": {
+                "count_collected": 1063272
+              },
+              "state": {
+                "blocked_by_me": false
+              },
+              "url_avatar": {
+                "uri": "tos-cn-v-2774c002/o0J41AdQmAP8efCkrAA1wIAOIKbhQfMlFZeGXF",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "user": {
+                "id": "620551347904375",
+                "nickname": "那艺娜官方号",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "artist_id": "7188014330237945913",
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "is_luna_user": true
+              },
+              "simple_display_name": "那艺娜",
+              "full_display_name": "那艺娜",
+              "user_artist_type": 2
+            }
+          }
+        }
+      ],
+      "display_view_all": false,
+      "display_title": "你可能想搜",
+      "description": "",
+      "bottom_desc": "",
+      "display_type": ""
+    },
+    {
+      "id": "tracks",
+      "next_cursor": "",
+      "has_more": false,
+      "data": [
+        {
+          "meta": {
+            "item_type": "track"
+          },
+          "entity": {
+            "track": {
+              "id": "7186091973790353463",
+              "album": {
+                "id": "7186091973790320695",
+                "name": "爱如火",
+                "release_date": 1673568002,
+                "url_cover": {
+                  "uri": "tos-cn-v-2774c002/6db6a0ed169e4dbfbefd21b55ada68be",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "url_player_bg": {
+                  "uri": "tos-cn-v-2774c002/6db6a0ed169e4dbfbefd21b55ada68be",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template": "background:${width}:${height}:30:90:0",
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "503c30"
+                  },
+                  {
+                    "rgb": "211812"
+                  }
+                ],
+                "playing_wave_color": null,
+                "paused_wave_color": null
+              },
+              "artists": [
+                {
+                  "id": "7188014330237945913",
+                  "name": "那艺娜",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/o0J41AdQmAP8efCkrAA1wIAOIKbhQfMlFZeGXF",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "620551347904375",
+                    "nickname": "那艺娜官方号",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                      "urls": [
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7188014330237945913",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "那艺娜",
+                  "user_artist_type": 2
+                }
+              ],
+              "duration": 204771,
+              "name": "爱如火",
+              "preview": {
+                "duration": 30047,
+                "vid": "v03ad6g10000cf0fnnbc77u9hh46bgbg",
+                "bit_rates": [
+                  {
+                    "br": 68729,
+                    "size": 257734,
+                    "quality": "medium"
+                  },
+                  {
+                    "br": 132721,
+                    "size": 497704,
+                    "quality": "higher"
+                  },
+                  {
+                    "br": 260808,
+                    "size": 978030,
+                    "quality": "highest"
+                  }
+                ]
+              },
+              "state": {},
+              "stats": {
+                "count_collected": 19281,
+                "count_comment": 653,
+                "count_shared": 2617
+              },
+              "vid": "v03ad6g10000cf0fl9bc77ubjqb8litg",
+              "label_info": {
+                "only_vip_download": true,
+                "quality_only_vip_can_download": [
+                  "medium",
+                  "higher",
+                  "highest",
+                  "lossless"
+                ],
+                "quality_only_vip_can_play": [
+                  "lossless"
+                ],
+                "is_original": true,
+                "quality_map": {
+                  "hi_res": {
+                    "play_detail": {
+                      "condition": "benefit_play_hi_res",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": null
+                  },
+                  "medium": {
+                    "play_detail": {
+                      "condition": "benefit_play_medium",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_medium",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "higher": {
+                    "play_detail": {
+                      "condition": "benefit_play_higher",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_higher",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "highest": {
+                    "play_detail": {
+                      "condition": "benefit_play_highest",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_highest",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "lossless": {
+                    "play_detail": {
+                      "condition": "benefit_play_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "spatial": {
+                    "play_detail": {
+                      "condition": "benefit_play_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  }
+                }
+              },
+              "sim_id": 7185460963280996000,
+              "bit_rates": [
+                {
+                  "br": 68210,
+                  "size": 1745928,
+                  "quality": "medium"
+                },
+                {
+                  "br": 132205,
+                  "size": 3383943,
+                  "quality": "higher"
+                },
+                {
+                  "br": 260239,
+                  "size": 6661115,
+                  "quality": "highest"
+                }
+              ],
+              "audition_info": {
+                "vid": "v03ad6g10000cf0fnnbc77u9hh46bgbg",
+                "duration_ms": 30047
+              },
+              "song_maker_team": {
+                "composers": [
+                  {
+                    "name": "婷婷"
+                  }
+                ],
+                "lyricists": [
+                  {
+                    "name": "婷婷"
+                  }
+                ]
+              },
+              "media_type": "track",
+              "chorus": {
+                "duration": 0,
+                "start": 22272
+              },
+              "colors": {
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "503c30"
+                  },
+                  {
+                    "rgb": "211812"
+                  }
+                ],
+                "normal_lyric_color": {
+                  "rgb": "a99589"
+                },
+                "playing_lyric_color": {
+                  "rgb": "ffefe5"
+                },
+                "recommend_reason_background_color": {
+                  "rgb": "1e1612",
+                  "alpha": "8c"
+                },
+                "featured_comment_tag_color": {
+                  "rgb": "b1a39a"
+                },
+                "background_color": {
+                  "rgb": "211812"
+                },
+                "playing_wave_color": {
+                  "rgb": "9a7a65"
+                },
+                "paused_wave_color": {
+                  "rgb": "776c65",
+                  "alpha": "bf"
+                },
+                "comment_share_additional_color": {
+                  "rgb": "211812"
+                },
+                "base_colors": [
+                  {
+                    "rgb": "faf1ea"
+                  },
+                  {
+                    "rgb": "d9c1b2"
+                  },
+                  {
+                    "rgb": "b19481"
+                  },
+                  {
+                    "rgb": "836756"
+                  },
+                  {
+                    "rgb": "503c30"
+                  },
+                  {
+                    "rgb": "443328"
+                  },
+                  {
+                    "rgb": "392a21"
+                  },
+                  {
+                    "rgb": "2d2119"
+                  },
+                  {
+                    "rgb": "211812"
+                  }
+                ],
+                "non_interactive_anchor_background": {
+                  "rgb": "413127",
+                  "alpha": "8c"
+                }
+              },
+              "limited_free_info": null,
+              "vocal": 1,
+              "lang_codes": [
+                "ZH"
+              ],
+              "first_vocal": {
+                "duration": 14976,
+                "start": 7296
+              },
+              "sharable_platforms": [
+                "link",
+                "aweme",
+                "aweme_publish",
+                "wechat_zone",
+                "wechat",
+                "weibo",
+                "qq_zone",
+                "qq"
+              ],
+              "playable_range": {
+                "duration": 29376,
+                "start": 22272
+              },
+              "sim_id_v3": 400286765314,
+              "plug_status": {
+                "can_plug": false,
+                "is_plugged": false
+              },
+              "tags": [
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201380171000,
+                    "tag_name": "Pop"
+                  },
+                  "second_level_tag": {
+                    "tag_id": 6826166022211373000,
+                    "tag_name": "Chinese Pop"
+                  }
+                },
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201380171000,
+                    "tag_name": "Pop"
+                  }
+                }
+              ],
+              "nodes": [
+                {
+                  "type": 2,
+                  "start": 22272,
+                  "duration": 0,
+                  "opacity": 1
+                }
+              ],
+              "is_support_bell": true,
+              "check_context": "{\"version\":\"1789707313-5469844345500939683-bit_rates\",\"req_time\":1791334851}",
+              "karaoke": {
+                "supported": true
+              },
+              "lyric_poster": {
+                "disabled": false
+              }
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "track"
+          },
+          "entity": {
+            "track": {
+              "id": "7189962926984202301",
+              "album": {
+                "id": "7189962926984169533",
+                "name": "爱如火",
+                "release_date": 1668700800,
+                "url_cover": {
+                  "uri": "tos-cn-v-2774c002/cef2bc5d15674ad98ce94e358e5e0aa7",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "url_player_bg": {
+                  "uri": "tos-cn-v-2774c002/cef2bc5d15674ad98ce94e358e5e0aa7",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template": "background:${width}:${height}:30:90:0",
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "503c30"
+                  },
+                  {
+                    "rgb": "211812"
+                  }
+                ],
+                "playing_wave_color": null,
+                "paused_wave_color": null
+              },
+              "artists": [
+                {
+                  "id": "7188014330237945913",
+                  "name": "那艺娜",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/o0J41AdQmAP8efCkrAA1wIAOIKbhQfMlFZeGXF",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "620551347904375",
+                    "nickname": "那艺娜官方号",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                      "urls": [
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7188014330237945913",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "那艺娜",
+                  "user_artist_type": 2
+                }
+              ],
+              "duration": 204771,
+              "name": "爱如火",
+              "preview": {
+                "duration": 30047,
+                "vid": "v03ad6g10000cf4fi8rc77u8e7i6jeu0",
+                "bit_rates": [
+                  {
+                    "br": 68729,
+                    "size": 257734,
+                    "quality": "medium"
+                  },
+                  {
+                    "br": 132721,
+                    "size": 497704,
+                    "quality": "higher"
+                  },
+                  {
+                    "br": 260808,
+                    "size": 978030,
+                    "quality": "highest"
+                  }
+                ]
+              },
+              "state": {},
+              "stats": {
+                "count_collected": 753707,
+                "count_comment": 18842,
+                "count_shared": 48917
+              },
+              "vid": "v0dad6g10000cf4ffrrc77u5cimslae0",
+              "label_info": {
+                "only_vip_download": true,
+                "only_vip_playable": true,
+                "quality_only_vip_can_download": [
+                  "medium",
+                  "higher",
+                  "highest",
+                  "lossless"
+                ],
+                "quality_only_vip_can_play": [
+                  "lossless"
+                ],
+                "is_original": true,
+                "quality_map": {
+                  "higher": {
+                    "play_detail": {
+                      "condition": "benefit_play_higher",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_higher",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "highest": {
+                    "play_detail": {
+                      "condition": "benefit_play_highest",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_highest",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "lossless": {
+                    "play_detail": {
+                      "condition": "benefit_play_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "spatial": {
+                    "play_detail": {
+                      "condition": "benefit_play_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "hi_res": {
+                    "play_detail": {
+                      "condition": "benefit_play_hi_res",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": null
+                  },
+                  "medium": {
+                    "play_detail": {
+                      "condition": "benefit_play_medium",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_medium",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  }
+                }
+              },
+              "sim_id": 7185460963280996000,
+              "bit_rates": [
+                {
+                  "br": 66142,
+                  "size": 1692989,
+                  "quality": "medium"
+                },
+                {
+                  "br": 132205,
+                  "size": 3383943,
+                  "quality": "higher"
+                },
+                {
+                  "br": 260239,
+                  "size": 6661115,
+                  "quality": "highest"
+                }
+              ],
+              "audition_info": {
+                "vid": "v03ad6g10000cf4fi8rc77u8e7i6jeu0",
+                "duration_ms": 30047
+              },
+              "song_maker_team": {
+                "composers": [
+                  {
+                    "name": "卫婷婷"
+                  }
+                ],
+                "lyricists": [
+                  {
+                    "name": "卫婷婷"
+                  }
+                ]
+              },
+              "media_type": "track",
+              "chorus": {
+                "duration": 0,
+                "start": 22272
+              },
+              "colors": {
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "503c30"
+                  },
+                  {
+                    "rgb": "211812"
+                  }
+                ],
+                "normal_lyric_color": {
+                  "rgb": "a99589"
+                },
+                "playing_lyric_color": {
+                  "rgb": "ffefe5"
+                },
+                "recommend_reason_background_color": {
+                  "rgb": "1e1612",
+                  "alpha": "8c"
+                },
+                "featured_comment_tag_color": {
+                  "rgb": "b1a39a"
+                },
+                "background_color": {
+                  "rgb": "211812"
+                },
+                "playing_wave_color": {
+                  "rgb": "9a7a65"
+                },
+                "paused_wave_color": {
+                  "rgb": "776c65",
+                  "alpha": "bf"
+                },
+                "comment_share_additional_color": {
+                  "rgb": "211812"
+                },
+                "base_colors": [
+                  {
+                    "rgb": "faf1ea"
+                  },
+                  {
+                    "rgb": "d9c1b2"
+                  },
+                  {
+                    "rgb": "b19481"
+                  },
+                  {
+                    "rgb": "836756"
+                  },
+                  {
+                    "rgb": "503c30"
+                  },
+                  {
+                    "rgb": "443328"
+                  },
+                  {
+                    "rgb": "392a21"
+                  },
+                  {
+                    "rgb": "2d2119"
+                  },
+                  {
+                    "rgb": "211812"
+                  }
+                ],
+                "non_interactive_anchor_background": {
+                  "rgb": "413127",
+                  "alpha": "8c"
+                }
+              },
+              "limited_free_info": null,
+              "vocal": 1,
+              "lang_codes": [
+                "ZH"
+              ],
+              "first_vocal": {
+                "duration": 14976,
+                "start": 7296
+              },
+              "sharable_platforms": [
+                "link",
+                "aweme",
+                "aweme_publish",
+                "wechat_zone",
+                "wechat",
+                "weibo",
+                "qq_zone",
+                "qq"
+              ],
+              "playable_range": {
+                "duration": 29376,
+                "start": 22272
+              },
+              "sim_id_v3": 361162498,
+              "plug_status": {
+                "can_plug": false,
+                "is_plugged": false
+              },
+              "tags": [
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201380171000,
+                    "tag_name": "Pop"
+                  }
+                },
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201380171000,
+                    "tag_name": "Pop"
+                  },
+                  "second_level_tag": {
+                    "tag_id": 6826166022211373000,
+                    "tag_name": "Chinese Pop"
+                  }
+                }
+              ],
+              "nodes": [
+                {
+                  "type": 2,
+                  "start": 22272,
+                  "duration": 0,
+                  "opacity": 1
+                }
+              ],
+              "is_support_bell": true,
+              "check_context": "{\"version\":\"1789532235-8726322652988755554-bit_rates\",\"req_time\":1791334851}",
+              "karaoke": {
+                "supported": true
+              },
+              "lyric_poster": {
+                "disabled": false
+              }
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "track"
+          },
+          "entity": {
+            "track": {
+              "id": "7646328210360600611",
+              "album": {
+                "id": "7646328210360567843",
+                "name": "爱如火（变速版）",
+                "release_date": 1780272002,
+                "url_cover": {
+                  "uri": "tos-cn-v-2774c002/okfaC8n6rAMzM3AIAQfQFnCGcBOXIuoxUAPfAA",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "url_player_bg": {
+                  "uri": "tos-cn-v-2774c002/okfaC8n6rAMzM3AIAQfQFnCGcBOXIuoxUAPfAA",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template": "background:${width}:${height}:30:90:0",
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "9c150e"
+                  },
+                  {
+                    "rgb": "5c0601"
+                  }
+                ],
+                "playing_wave_color": null,
+                "paused_wave_color": null
+              },
+              "artists": [
+                {
+                  "id": "7642679286004271158",
+                  "name": "天凉凉",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/oIcmbQIA9Ae41gMe13fbh6AIGeK5LCAloEAoQI",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "1166995642918732",
+                    "nickname": "天凉凉",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed",
+                      "urls": [
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7642679286004271158",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "天凉凉",
+                  "user_artist_type": 2
+                }
+              ],
+              "duration": 178128,
+              "name": "爱如火（变速版）",
+              "preview": {
+                "duration": 60047,
+                "vid": "v0dad6g10000dagfptvog65kljp4pi60",
+                "bit_rates": [
+                  {
+                    "br": 68430,
+                    "size": 513230,
+                    "quality": "medium"
+                  },
+                  {
+                    "br": 132419,
+                    "size": 993147,
+                    "quality": "higher"
+                  },
+                  {
+                    "br": 260469,
+                    "size": 1953519,
+                    "quality": "highest"
+                  }
+                ]
+              },
+              "state": {},
+              "stats": {
+                "count_collected": 384,
+                "count_comment": 1,
+                "count_shared": 12
+              },
+              "vid": "v03ad6g10000d8ejienog65pe80rdcl0",
+              "label_info": {
+                "only_vip_download": true,
+                "only_vip_playable": true,
+                "quality_only_vip_can_download": [
+                  "medium",
+                  "higher",
+                  "highest",
+                  "lossless"
+                ],
+                "quality_only_vip_can_play": [
+                  "lossless"
+                ],
+                "quality_map": {
+                  "medium": {
+                    "play_detail": {
+                      "condition": "benefit_play_medium",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_medium",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "higher": {
+                    "play_detail": {
+                      "condition": "benefit_play_higher",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_higher",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "highest": {
+                    "play_detail": {
+                      "condition": "benefit_play_highest",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_highest",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "lossless": {
+                    "play_detail": {
+                      "condition": "benefit_play_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "spatial": {
+                    "play_detail": {
+                      "condition": "benefit_play_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "hi_res": {
+                    "play_detail": {
+                      "condition": "benefit_play_hi_res",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": null
+                  }
+                }
+              },
+              "sim_id": 7244373032138738000,
+              "bit_rates": [
+                {
+                  "br": 68231,
+                  "size": 1518878,
+                  "quality": "medium"
+                },
+                {
+                  "br": 132218,
+                  "size": 2943275,
+                  "quality": "higher"
+                },
+                {
+                  "br": 260260,
+                  "size": 5793583,
+                  "quality": "highest"
+                }
+              ],
+              "audition_info": {
+                "vid": "v0dad6g10000dagfptvog65kljp4pi60",
+                "duration_ms": 60047
+              },
+              "song_maker_team": {
+                "composers": [
+                  {
+                    "name": "小海"
+                  }
+                ],
+                "lyricists": [
+                  {
+                    "name": "小海"
+                  }
+                ]
+              },
+              "media_type": "track",
+              "chorus": {
+                "duration": 0,
+                "start": 69504
+              },
+              "colors": {
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "9c150e"
+                  },
+                  {
+                    "rgb": "5c0601"
+                  }
+                ],
+                "normal_lyric_color": {
+                  "rgb": "eb645d"
+                },
+                "playing_lyric_color": {
+                  "rgb": "ffe7e5"
+                },
+                "recommend_reason_background_color": {
+                  "rgb": "4e0804",
+                  "alpha": "8c"
+                },
+                "featured_comment_tag_color": {
+                  "rgb": "ec6760"
+                },
+                "background_color": {
+                  "rgb": "5c0601"
+                },
+                "playing_wave_color": {
+                  "rgb": "bf4740"
+                },
+                "paused_wave_color": {
+                  "rgb": "835b59",
+                  "alpha": "bf"
+                },
+                "comment_share_additional_color": {
+                  "rgb": "5c0601"
+                },
+                "base_colors": [
+                  {
+                    "rgb": "ffe7e5"
+                  },
+                  {
+                    "rgb": "ff9c97"
+                  },
+                  {
+                    "rgb": "f8584f"
+                  },
+                  {
+                    "rgb": "d72b21"
+                  },
+                  {
+                    "rgb": "9c150e"
+                  },
+                  {
+                    "rgb": "840f08"
+                  },
+                  {
+                    "rgb": "6b0903"
+                  },
+                  {
+                    "rgb": "510400"
+                  },
+                  {
+                    "rgb": "330300"
+                  }
+                ],
+                "non_interactive_anchor_background": {
+                  "rgb": "7f110b",
+                  "alpha": "8c"
+                }
+              },
+              "limited_free_info": null,
+              "vocal": 1,
+              "lang_codes": [
+                "ZH"
+              ],
+              "first_vocal": {
+                "duration": 69504,
+                "start": 0
+              },
+              "sharable_platforms": [
+                "link",
+                "aweme",
+                "aweme_publish",
+                "wechat_zone",
+                "wechat",
+                "weibo",
+                "qq_zone",
+                "qq"
+              ],
+              "playable_range": {
+                "duration": 32256,
+                "start": 69504
+              },
+              "sim_id_v3": 388181974786,
+              "plug_status": {
+                "can_plug": false,
+                "is_plugged": false
+              },
+              "tags": [
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201380253000,
+                    "tag_name": "Hip Hop/Rap"
+                  }
+                }
+              ],
+              "nodes": [
+                {
+                  "type": 2,
+                  "start": 69504,
+                  "duration": 0,
+                  "opacity": 1
+                }
+              ],
+              "is_support_bell": true,
+              "check_context": "{\"version\":\"1790216815-6690638387792228159-tag_ids\",\"req_time\":1791334851}",
+              "karaoke": {
+                "supported": true
+              },
+              "lyric_poster": {
+                "disabled": false
+              }
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "track"
+          },
+          "entity": {
+            "track": {
+              "id": "7268581801738799105",
+              "album": {
+                "id": "7268581716271728641",
+                "name": "2023中国好声音 第四期",
+                "release_date": 1692288000,
+                "url_cover": {
+                  "uri": "tos-cn-v-2774c002/oACE9AQnkBMZbc0eDAAzECIAtBufb3wgxZIQGM",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "url_player_bg": {
+                  "uri": "tos-cn-v-2774c002/oACE9AQnkBMZbc0eDAAzECIAtBufb3wgxZIQGM",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template": "background:${width}:${height}:30:90:0",
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "c0a990"
+                  },
+                  {
+                    "rgb": "9c8367"
+                  }
+                ],
+                "playing_wave_color": null,
+                "paused_wave_color": null
+              },
+              "artists": [
+                {
+                  "id": "7268233832690681858",
+                  "name": "The Deep",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/owxpXMs6ACAeAZ6YgEFgoqQD1fLPszqEBtBCiE",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "3131886323896989",
+                    "nickname": "TheDeep-艾佳",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896",
+                      "urls": [
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7268233832690681858",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": false
+                  },
+                  "simple_display_name": "The Deep",
+                  "user_artist_type": 2
+                }
+              ],
+              "duration": 234656,
+              "name": "爱如火",
+              "preview": {
+                "duration": 60001,
+                "start": 131328,
+                "vid": "v10ad6g50000d4tqjlvog65sm2pffmh0",
+                "bit_rates": [
+                  {
+                    "br": 132424,
+                    "size": 993185,
+                    "quality": "higher"
+                  }
+                ]
+              },
+              "state": {},
+              "stats": {
+                "count_collected": 55783,
+                "count_comment": 133,
+                "count_shared": 1428
+              },
+              "vid": "v10ad6g50000cjfj1v3c77u54fhcstig",
+              "label_info": {
+                "only_vip_download": true,
+                "only_vip_playable": true,
+                "quality_only_vip_can_download": [
+                  "medium",
+                  "higher",
+                  "highest",
+                  "lossless"
+                ],
+                "quality_only_vip_can_play": [
+                  "lossless"
+                ],
+                "quality_map": {
+                  "medium": {
+                    "play_detail": {
+                      "condition": "benefit_play_medium",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_medium",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "higher": {
+                    "play_detail": {
+                      "condition": "benefit_play_higher",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_higher",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "highest": {
+                    "play_detail": {
+                      "condition": "benefit_play_highest",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_highest",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "lossless": {
+                    "play_detail": {
+                      "condition": "benefit_play_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "spatial": {
+                    "play_detail": {
+                      "condition": "benefit_play_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "hi_res": {
+                    "play_detail": {
+                      "condition": "benefit_play_hi_res",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": null
+                  }
+                }
+              },
+              "sim_id": 7268596813412698000,
+              "bit_rates": [
+                {
+                  "br": 68207,
+                  "size": 2000666,
+                  "quality": "medium"
+                },
+                {
+                  "br": 132204,
+                  "size": 3877815,
+                  "quality": "higher"
+                },
+                {
+                  "br": 260223,
+                  "size": 7632877,
+                  "quality": "highest"
+                }
+              ],
+              "audition_info": {
+                "vid": "v10ad6g50000d4tqjlvog65sm2pffmh0",
+                "start_time_ms": 131328,
+                "duration_ms": 60001
+              },
+              "song_maker_team": {
+                "composers": [
+                  {
+                    "name": "卫婷婷/The Deep/王思淼/霍含蕾/李翯"
+                  }
+                ],
+                "lyricists": [
+                  {
+                    "name": "卫婷婷/The Deep/王思淼/霍含蕾"
+                  }
+                ]
+              },
+              "media_type": "track",
+              "chorus": {
+                "duration": 0,
+                "start": 33216
+              },
+              "colors": {
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "c0a990"
+                  },
+                  {
+                    "rgb": "9c8367"
+                  }
+                ],
+                "normal_lyric_color": {
+                  "rgb": "e5ceb5"
+                },
+                "playing_lyric_color": {
+                  "rgb": "fff3e5"
+                },
+                "recommend_reason_background_color": {
+                  "rgb": "826e57",
+                  "alpha": "8c"
+                },
+                "featured_comment_tag_color": {
+                  "rgb": "e5cfb7"
+                },
+                "background_color": {
+                  "rgb": "9c8367"
+                },
+                "playing_wave_color": {
+                  "rgb": "c9b39c"
+                },
+                "paused_wave_color": {
+                  "rgb": "877f78",
+                  "alpha": "bf"
+                },
+                "comment_share_additional_color": {
+                  "rgb": "9c8367"
+                },
+                "base_colors": [
+                  {
+                    "rgb": "faf3ea"
+                  },
+                  {
+                    "rgb": "efe0d1"
+                  },
+                  {
+                    "rgb": "e0ceba"
+                  },
+                  {
+                    "rgb": "d0bba5"
+                  },
+                  {
+                    "rgb": "c0a990"
+                  },
+                  {
+                    "rgb": "9f856a"
+                  },
+                  {
+                    "rgb": "77624b"
+                  },
+                  {
+                    "rgb": "4d3e2d"
+                  },
+                  {
+                    "rgb": "211a12"
+                  }
+                ],
+                "non_interactive_anchor_background": {
+                  "rgb": "9d8a75",
+                  "alpha": "8c"
+                }
+              },
+              "limited_free_info": null,
+              "vocal": 1,
+              "lang_codes": [
+                "ZH"
+              ],
+              "first_vocal": {
+                "duration": 21696,
+                "start": 11520
+              },
+              "sharable_platforms": [
+                "link",
+                "aweme",
+                "aweme_publish",
+                "wechat_zone",
+                "wechat",
+                "weibo",
+                "qq_zone",
+                "qq"
+              ],
+              "playable_range": {
+                "duration": 19007,
+                "start": 131328
+              },
+              "sim_id_v3": 190363279618,
+              "plug_status": {
+                "can_plug": false,
+                "is_plugged": false
+              },
+              "tags": [
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201380171000,
+                    "tag_name": "Pop"
+                  },
+                  "second_level_tag": {
+                    "tag_id": 6826166022211373000,
+                    "tag_name": "Chinese Pop"
+                  }
+                },
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201380171000,
+                    "tag_name": "Pop"
+                  }
+                }
+              ],
+              "nodes": [
+                {
+                  "type": 2,
+                  "start": 33216,
+                  "duration": 0,
+                  "opacity": 1
+                }
+              ],
+              "is_support_bell": true,
+              "check_context": "{\"version\":\"1789545048-8472725484025243301-bit_rates\",\"req_time\":1791334851}",
+              "karaoke": {
+                "supported": true
+              },
+              "lyric_poster": {
+                "disabled": false
+              }
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "track"
+          },
+          "entity": {
+            "track": {
+              "id": "7407914592909903908",
+              "album": {
+                "id": "7407914592909920292",
+                "name": "爱如火 DJ",
+                "release_date": 1724428800,
+                "url_cover": {
+                  "uri": "tos-cn-v-2774c002/oUezEa1IYf5iDAeOTGCwEcLNAALrBNFGn5GGAI",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "url_player_bg": {
+                  "uri": "tos-cn-v-2774c002/oUezEa1IYf5iDAeOTGCwEcLNAALrBNFGn5GGAI",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template": "background:${width}:${height}:30:90:0",
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "c15291"
+                  },
+                  {
+                    "rgb": "94336a"
+                  }
+                ],
+                "playing_wave_color": null,
+                "paused_wave_color": null
+              },
+              "artists": [
+                {
+                  "id": "7351432545177946150",
+                  "name": "韩全春",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/oYhGZAsWEgBtLEAMAzAQqYNVmAfhHUBziJJYjG",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "94294549541",
+                    "nickname": "烽歌歌",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg",
+                      "urls": [
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_oA4SfHGXQLAggLEsQAI8AsBAJXlee7mkTTCNgg.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7351432545177946150",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "韩全春",
+                  "user_artist_type": 2
+                }
+              ],
+              "duration": 174384,
+              "name": "爱如火 DJ",
+              "preview": {
+                "duration": 30047,
+                "vid": "v02ad6g10000cr73hovog65n52fcdv70",
+                "bit_rates": [
+                  {
+                    "br": 68719,
+                    "size": 257697,
+                    "quality": "medium"
+                  },
+                  {
+                    "br": 132720,
+                    "size": 497703,
+                    "quality": "higher"
+                  },
+                  {
+                    "br": 260774,
+                    "size": 977903,
+                    "quality": "highest"
+                  }
+                ]
+              },
+              "state": {},
+              "stats": {
+                "count_collected": 140,
+                "count_comment": 5,
+                "count_shared": 6
+              },
+              "vid": "v03ad6g10000cr73denog65krj9fmr5g",
+              "label_info": {
+                "only_vip_download": true,
+                "quality_only_vip_can_download": [
+                  "medium",
+                  "higher",
+                  "highest",
+                  "lossless"
+                ],
+                "quality_only_vip_can_play": [
+                  "lossless"
+                ],
+                "quality_map": {
+                  "spatial": {
+                    "play_detail": {
+                      "condition": "benefit_play_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "hi_res": {
+                    "play_detail": {
+                      "condition": "benefit_play_hi_res",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": null
+                  },
+                  "medium": {
+                    "play_detail": {
+                      "condition": "benefit_play_medium",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_medium",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "higher": {
+                    "play_detail": {
+                      "condition": "benefit_play_higher",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_higher",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "highest": {
+                    "play_detail": {
+                      "condition": "benefit_play_highest",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_highest",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "lossless": {
+                    "play_detail": {
+                      "condition": "benefit_play_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  }
+                }
+              },
+              "sim_id": 7407919139643197000,
+              "bit_rates": [
+                {
+                  "br": 68202,
+                  "size": 1486470,
+                  "quality": "medium"
+                },
+                {
+                  "br": 132228,
+                  "size": 2881912,
+                  "quality": "higher"
+                },
+                {
+                  "br": 260278,
+                  "size": 5672777,
+                  "quality": "highest"
+                }
+              ],
+              "audition_info": {
+                "vid": "v02ad6g10000cr73hovog65n52fcdv70",
+                "duration_ms": 30047
+              },
+              "song_maker_team": {
+                "composers": [
+                  {
+                    "name": "韩全春"
+                  }
+                ],
+                "lyricists": [
+                  {
+                    "name": "韩全春"
+                  }
+                ]
+              },
+              "media_type": "track",
+              "chorus": {
+                "duration": 0,
+                "start": 35712
+              },
+              "colors": {
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "c15291"
+                  },
+                  {
+                    "rgb": "94336a"
+                  }
+                ],
+                "normal_lyric_color": {
+                  "rgb": "f586c5"
+                },
+                "playing_lyric_color": {
+                  "rgb": "ffe5f4"
+                },
+                "recommend_reason_background_color": {
+                  "rgb": "7c2c59",
+                  "alpha": "8c"
+                },
+                "featured_comment_tag_color": {
+                  "rgb": "f28ec7"
+                },
+                "background_color": {
+                  "rgb": "94336a"
+                },
+                "playing_wave_color": {
+                  "rgb": "cd67a1"
+                },
+                "paused_wave_color": {
+                  "rgb": "886679",
+                  "alpha": "bf"
+                },
+                "comment_share_additional_color": {
+                  "rgb": "94336a"
+                },
+                "base_colors": [
+                  {
+                    "rgb": "ffe5f4"
+                  },
+                  {
+                    "rgb": "fcb4dd"
+                  },
+                  {
+                    "rgb": "eb90c4"
+                  },
+                  {
+                    "rgb": "d770ab"
+                  },
+                  {
+                    "rgb": "c15291"
+                  },
+                  {
+                    "rgb": "a13a74"
+                  },
+                  {
+                    "rgb": "7c2757"
+                  },
+                  {
+                    "rgb": "54173a"
+                  },
+                  {
+                    "rgb": "2a091c"
+                  }
+                ],
+                "non_interactive_anchor_background": {
+                  "rgb": "9d4376",
+                  "alpha": "8c"
+                }
+              },
+              "limited_free_info": null,
+              "vocal": 1,
+              "lang_codes": [
+                "ZH"
+              ],
+              "first_vocal": {
+                "duration": 29184,
+                "start": 6528
+              },
+              "sharable_platforms": [
+                "link",
+                "aweme",
+                "aweme_publish",
+                "wechat_zone",
+                "wechat",
+                "weibo",
+                "qq_zone",
+                "qq"
+              ],
+              "playable_range": {
+                "duration": 36864,
+                "start": 87744
+              },
+              "sim_id_v3": 95674618370,
+              "plug_status": {
+                "can_plug": false,
+                "is_plugged": false
+              },
+              "tags": [
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6920130282687318000,
+                    "tag_name": "Others"
+                  }
+                },
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6920130282687318000,
+                    "tag_name": "Others"
+                  },
+                  "second_level_tag": {
+                    "tag_id": 6826164174565935000,
+                    "tag_name": "DJ"
+                  }
+                }
+              ],
+              "nodes": [
+                {
+                  "type": 2,
+                  "start": 35712,
+                  "duration": 0,
+                  "opacity": 1
+                }
+              ],
+              "is_support_bell": true,
+              "check_context": "{\"version\":\"1790757467-1784047462559114706-tag_ids\",\"req_time\":1791334851}",
+              "karaoke": {
+                "supported": true
+              },
+              "lyric_poster": {
+                "disabled": false
+              }
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "track"
+          },
+          "entity": {
+            "track": {
+              "id": "7679814833042229258",
+              "album": {
+                "id": "7679814833042196490",
+                "name": "爱如火",
+                "release_date": 1788048002,
+                "url_cover": {
+                  "uri": "tos-cn-v-2774c002/oUcAIBFLeEAeCzAAutaKnFEJP3S3GeICELIVhU",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "url_player_bg": {
+                  "uri": "tos-cn-v-2774c002/oUcAIBFLeEAeCzAAutaKnFEJP3S3GeICELIVhU",
+                  "urls": [
+                    "https://p3-luna.douyinpic.com/img/",
+                    "https://p6-luna.douyinpic.com/img/"
+                  ],
+                  "template": "background:${width}:${height}:30:90:0",
+                  "template_prefix": "tplv-b829550vbb"
+                },
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "3c3848"
+                  },
+                  {
+                    "rgb": "18161d"
+                  }
+                ],
+                "playing_wave_color": null,
+                "paused_wave_color": null
+              },
+              "artists": [
+                {
+                  "id": "7631955332835198982",
+                  "name": "jake",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/oE8YWAAGqFd47m2LIAA3fKQX1GdzeceAkmQjJf",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "1854198033155539",
+                    "nickname": "落",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2",
+                      "urls": [
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_o4A9DEgHIUnAHfAuQCCA4CFA6ACEBAfQ03A3N2.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7631955332835198982",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "jake",
+                  "user_artist_type": 2
+                }
+              ],
+              "duration": 124320,
+              "name": "爱如火",
+              "preview": {},
+              "state": {},
+              "stats": {
+                "count_collected": 37,
+                "count_shared": 3
+              },
+              "vid": "v02ad6g10000daa4hpfog65t7uoulmb0",
+              "label_info": {
+                "only_vip_download": true,
+                "quality_only_vip_can_download": [
+                  "medium",
+                  "higher",
+                  "highest",
+                  "lossless"
+                ],
+                "quality_only_vip_can_play": [
+                  "lossless"
+                ],
+                "quality_map": {
+                  "medium": {
+                    "play_detail": {
+                      "condition": "benefit_play_medium",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_medium",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "higher": {
+                    "play_detail": {
+                      "condition": "benefit_play_higher",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_higher",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "highest": {
+                    "play_detail": {
+                      "condition": "benefit_play_highest",
+                      "need_vip": false,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_highest",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "lossless": {
+                    "play_detail": {
+                      "condition": "benefit_play_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_lossless",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "spatial": {
+                    "play_detail": {
+                      "condition": "benefit_play_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": {
+                      "condition": "benefit_download_spatial",
+                      "need_vip": true,
+                      "need_purchase": false
+                    }
+                  },
+                  "hi_res": {
+                    "play_detail": {
+                      "condition": "benefit_play_hi_res",
+                      "need_vip": true,
+                      "need_purchase": false
+                    },
+                    "download_detail": null
+                  }
+                }
+              },
+              "sim_id": 7566224475578960000,
+              "bit_rates": [
+                {
+                  "br": 68222,
+                  "size": 1059886,
+                  "quality": "medium"
+                },
+                {
+                  "br": 132252,
+                  "size": 2054645,
+                  "quality": "higher"
+                },
+                {
+                  "br": 260312,
+                  "size": 4044151,
+                  "quality": "highest"
+                }
+              ],
+              "audition_info": {},
+              "song_maker_team": {
+                "composers": [
+                  {
+                    "name": "JAKE"
+                  }
+                ],
+                "lyricists": [
+                  {
+                    "name": "jake"
+                  }
+                ]
+              },
+              "media_type": "track",
+              "chorus": {
+                "duration": 0,
+                "start": 31872
+              },
+              "colors": {
+                "cover_gradient_effect_color": [
+                  {
+                    "rgb": "3c3848"
+                  },
+                  {
+                    "rgb": "18161d"
+                  }
+                ],
+                "normal_lyric_color": {
+                  "rgb": "9591a1"
+                },
+                "playing_lyric_color": {
+                  "rgb": "eeeafa"
+                },
+                "recommend_reason_background_color": {
+                  "rgb": "16151b",
+                  "alpha": "8c"
+                },
+                "featured_comment_tag_color": {
+                  "rgb": "a3a0ab"
+                },
+                "background_color": {
+                  "rgb": "18161d"
+                },
+                "playing_wave_color": {
+                  "rgb": "79718e"
+                },
+                "paused_wave_color": {
+                  "rgb": "6c6973",
+                  "alpha": "bf"
+                },
+                "comment_share_additional_color": {
+                  "rgb": "18161d"
+                },
+                "base_colors": [
+                  {
+                    "rgb": "f1eef6"
+                  },
+                  {
+                    "rgb": "c1bccf"
+                  },
+                  {
+                    "rgb": "948da5"
+                  },
+                  {
+                    "rgb": "676178"
+                  },
+                  {
+                    "rgb": "3c3848"
+                  },
+                  {
+                    "rgb": "332f3d"
+                  },
+                  {
+                    "rgb": "2a2733"
+                  },
+                  {
+                    "rgb": "211e28"
+                  },
+                  {
+                    "rgb": "18161d"
+                  }
+                ],
+                "non_interactive_anchor_background": {
+                  "rgb": "312d3a",
+                  "alpha": "8c"
+                }
+              },
+              "limited_free_info": null,
+              "vocal": 1,
+              "lang_codes": [
+                "ZH"
+              ],
+              "first_vocal": {
+                "duration": 14976,
+                "start": 16896
+              },
+              "sharable_platforms": [
+                "link",
+                "aweme",
+                "aweme_publish",
+                "wechat_zone",
+                "wechat",
+                "weibo",
+                "qq_zone",
+                "qq"
+              ],
+              "playable_range": {
+                "duration": 30528,
+                "start": 77760
+              },
+              "sim_id_v3": 271186580994,
+              "plug_status": {
+                "can_plug": false,
+                "is_plugged": false
+              },
+              "tags": [
+                {
+                  "category": {
+                    "tag_id": 1,
+                    "tag_name": "Genre"
+                  },
+                  "first_level_tag": {
+                    "tag_id": 6730932201384316000,
+                    "tag_name": "R&B/Soul"
+                  }
+                }
+              ],
+              "nodes": [
+                {
+                  "type": 1,
+                  "start": 16896,
+                  "duration": 14976,
+                  "opacity": 0.5
+                },
+                {
+                  "type": 2,
+                  "start": 31872,
+                  "duration": 0,
+                  "opacity": 1
+                }
+              ],
+              "is_support_bell": true,
+              "check_context": "{\"version\":\"1789494398-2497336356970629011-tag_ids\",\"req_time\":1791334851}",
+              "karaoke": {
+                "supported": true
+              },
+              "lyric_poster": {
+                "disabled": false
+              }
+            }
+          }
+        }
+      ],
+      "display_view_all": true,
+      "display_title": "歌曲",
+      "description": "",
+      "bottom_desc": "",
+      "display_type": ""
+    },
+    {
+      "id": "playlists",
+      "next_cursor": "",
+      "has_more": false,
+      "data": [
+        {
+          "meta": {
+            "item_type": "playlist"
+          },
+          "entity": {
+            "playlist": {
+              "id": "7225172905833840655",
+              "title": "爱如火",
+              "url_cover": {
+                "uri": "tos-cn-v-2774c002/cef2bc5d15674ad98ce94e358e5e0aa7",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "count_tracks": 5,
+              "owner": {
+                "id": "84029617462",
+                "nickname": "万 年。",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "public_name": "万 年。",
+                "is_luna_user": true
+              },
+              "stats": {
+                "count_collected": 33,
+                "count_visible": 11
+              },
+              "create_time": 1682258434,
+              "update_time": 1791330768,
+              "review_status": "Accept",
+              "type": 2,
+              "from_feed": false,
+              "cover_gradient_effect_color": [
+                {
+                  "rgb": "503c30"
+                },
+                {
+                  "rgb": "121212"
+                }
+              ],
+              "cover_shadow_color": {
+                "rgb": "231710"
+              },
+              "resource_cnt": {
+                "track_cnt": 11
+              },
+              "user_artist_info": {
+                "user_artist_type": 0,
+                "user_brief": {
+                  "id": "84029617462",
+                  "nickname": "万 年。",
+                  "medium_avatar_url": {
+                    "uri": "aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK",
+                    "urls": [
+                      "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                      "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "thumb_avatar_url": {
+                    "uri": "aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK",
+                    "urls": [
+                      "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143",
+                      "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813_oEHE3Er2Iw6BEGfEQf7DfBk7NuAFAAxAAqAPQK.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "secret": false,
+                  "test_tag": 0,
+                  "vip_stage": "",
+                  "is_vip": false,
+                  "public_name": "万 年。",
+                  "is_luna_user": true
+                }
+              },
+              "snack_bar_color": {
+                "rgb": "443328"
+              },
+              "all_sort_types": [
+                1,
+                4,
+                5
+              ],
+              "shuffle_play_button_color": {
+                "rgb": "faf1ea"
+              },
+              "shuffle_play_text_color": {
+                "rgb": "2d2119"
+              },
+              "public_title": "爱如火"
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "playlist",
+            "track_match": {
+              "track_name": "爱如火",
+              "track_id": "7189962926984202301",
+              "playable": true
+            }
+          },
+          "entity": {
+            "playlist": {
+              "id": "7195446067202539531",
+              "title": "蛋贩子派对专属歌曲",
+              "url_cover": {
+                "uri": "tos-cn-i-b829550vbb/9a7b656c81e246e8963db01dee54f775",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "count_tracks": 14,
+              "owner": {
+                "id": "620562953284392",
+                "nickname": "在下姓生名法蛋(生法蛋)",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "public_name": "在下姓生名法蛋(生法蛋)",
+                "is_luna_user": true
+              },
+              "stats": {
+                "count_collected": 1983,
+                "count_visible": 30
+              },
+              "create_time": 1675677456,
+              "update_time": 1791321501,
+              "review_status": "Accept",
+              "type": 2,
+              "from_feed": false,
+              "cover_gradient_effect_color": [
+                {
+                  "rgb": "304363"
+                },
+                {
+                  "rgb": "121212"
+                }
+              ],
+              "cover_shadow_color": {
+                "rgb": "0f1724"
+              },
+              "resource_cnt": {
+                "track_cnt": 30
+              },
+              "user_artist_info": {
+                "user_artist_type": 0,
+                "user_brief": {
+                  "id": "620562953284392",
+                  "nickname": "在下姓生名法蛋(生法蛋)",
+                  "medium_avatar_url": {
+                    "uri": "aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a",
+                    "urls": [
+                      "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                      "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "thumb_avatar_url": {
+                    "uri": "aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a",
+                    "urls": [
+                      "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143",
+                      "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/douyin-user-image-file_780124c8fbc6886bd50905051d4e106a.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "secret": false,
+                  "test_tag": 0,
+                  "vip_stage": "",
+                  "is_vip": false,
+                  "public_name": "在下姓生名法蛋(生法蛋)",
+                  "is_luna_user": true
+                }
+              },
+              "snack_bar_color": {
+                "rgb": "273854"
+              },
+              "all_sort_types": [
+                1,
+                4,
+                5
+              ],
+              "shuffle_play_button_color": {
+                "rgb": "e7effe"
+              },
+              "shuffle_play_text_color": {
+                "rgb": "172235"
+              },
+              "public_title": "蛋贩子派对专属歌曲"
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "playlist"
+          },
+          "entity": {
+            "playlist": {
+              "id": "7205784618405019663",
+              "title": "爱如火",
+              "url_cover": {
+                "uri": "tos-cn-v-2774c002/o8IarFSPfCACDFDDIfiaAgAAENf6S64QKD8Fzx",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "count_tracks": 6,
+              "owner": {
+                "id": "2445737411215767",
+                "nickname": "虚构😋👍🏻",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "public_name": "虚构😋👍🏻",
+                "is_luna_user": true
+              },
+              "stats": {
+                "count_collected": 38,
+                "count_visible": 9
+              },
+              "create_time": 1677753465,
+              "update_time": 1791330768,
+              "review_status": "Accept",
+              "type": 2,
+              "from_feed": false,
+              "cover_gradient_effect_color": [
+                {
+                  "rgb": "c0880e"
+                },
+                {
+                  "rgb": "121212"
+                }
+              ],
+              "cover_shadow_color": {
+                "rgb": "322301"
+              },
+              "resource_cnt": {
+                "track_cnt": 9
+              },
+              "user_artist_info": {
+                "user_artist_type": 0,
+                "user_brief": {
+                  "id": "2445737411215767",
+                  "nickname": "虚构😋👍🏻",
+                  "medium_avatar_url": {
+                    "uri": "aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg",
+                    "urls": [
+                      "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                      "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "thumb_avatar_url": {
+                    "uri": "aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg",
+                    "urls": [
+                      "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                      "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143",
+                      "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_o0CX9AB7pCffYAhcnAvMnGoiAc1iEAqzEIwAFg.jpeg?from=3782654143"
+                    ],
+                    "need_complete_url": true
+                  },
+                  "secret": false,
+                  "test_tag": 0,
+                  "vip_stage": "",
+                  "is_vip": false,
+                  "public_name": "虚构😋👍🏻",
+                  "is_luna_user": true
+                }
+              },
+              "snack_bar_color": {
+                "rgb": "a17007"
+              },
+              "all_sort_types": [
+                1,
+                4,
+                5
+              ],
+              "shuffle_play_button_color": {
+                "rgb": "fff7e5"
+              },
+              "shuffle_play_text_color": {
+                "rgb": "5a3d00"
+              },
+              "public_title": "爱如火"
+            }
+          }
+        }
+      ],
+      "display_view_all": true,
+      "display_title": "歌单",
+      "description": "",
+      "bottom_desc": "",
+      "display_type": ""
+    },
+    {
+      "id": "albums",
+      "next_cursor": "",
+      "has_more": false,
+      "data": [
+        {
+          "meta": {
+            "item_type": "album"
+          },
+          "entity": {
+            "album": {
+              "id": "7186091973790320695",
+              "name": "爱如火",
+              "artists": [
+                {
+                  "id": "7188014330237945913",
+                  "name": "那艺娜",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/o0J41AdQmAP8efCkrAA1wIAOIKbhQfMlFZeGXF",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "620551347904375",
+                    "nickname": "那艺娜官方号",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                      "urls": [
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c976de2b6b2dddf8024ec78e15e6fa9f.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7188014330237945913",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "那艺娜",
+                  "user_artist_type": 2
+                }
+              ],
+              "company": "抖音音乐",
+              "count_tracks": 1,
+              "state": {},
+              "stats": {
+                "count_collected": 400,
+                "count_shared": 76,
+                "total_count_purchased": 0
+              },
+              "url_cover": {
+                "uri": "tos-cn-v-2774c002/6db6a0ed169e4dbfbefd21b55ada68be",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "url_player_bg": {
+                "uri": "tos-cn-v-2774c002/6db6a0ed169e4dbfbefd21b55ada68be",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template": "tplv-2nwr2cc6gm-background:${width}:${height}:30:90:0"
+              },
+              "release_date": 1673568002,
+              "cover_gradient_effect_color": [
+                {
+                  "rgb": "503c30"
+                },
+                {
+                  "rgb": "121212"
+                }
+              ],
+              "cover_shadow_color": {
+                "rgb": "231710"
+              },
+              "snack_bar_color": {
+                "rgb": "443328"
+              }
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "album"
+          },
+          "entity": {
+            "album": {
+              "id": "7646328210360567843",
+              "name": "爱如火（变速版）",
+              "artists": [
+                {
+                  "id": "7642679286004271158",
+                  "name": "天凉凉",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/oIcmbQIA9Ae41gMe13fbh6AIGeK5LCAloEAoQI",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "1166995642918732",
+                    "nickname": "天凉凉",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed",
+                      "urls": [
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_4161657cc205c2364d0c9d3e5b5750ed.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7642679286004271158",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "天凉凉",
+                  "user_artist_type": 2
+                }
+              ],
+              "company": "抖音音乐",
+              "count_tracks": 1,
+              "state": {},
+              "stats": {
+                "count_collected": 3,
+                "total_count_purchased": 0
+              },
+              "url_cover": {
+                "uri": "tos-cn-v-2774c002/okfaC8n6rAMzM3AIAQfQFnCGcBOXIuoxUAPfAA",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "url_player_bg": {
+                "uri": "tos-cn-v-2774c002/okfaC8n6rAMzM3AIAQfQFnCGcBOXIuoxUAPfAA",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template": "tplv-2nwr2cc6gm-background:${width}:${height}:30:90:0"
+              },
+              "release_date": 1780272002,
+              "cover_gradient_effect_color": [
+                {
+                  "rgb": "9c150e"
+                },
+                {
+                  "rgb": "121212"
+                }
+              ],
+              "cover_shadow_color": {
+                "rgb": "320401"
+              },
+              "snack_bar_color": {
+                "rgb": "840f08"
+              }
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "album"
+          },
+          "entity": {
+            "album": {
+              "id": "7189962926984169533",
+              "name": "爱如火",
+              "artists": [
+                {
+                  "id": "7054125547688839183",
+                  "name": "卫婷婷",
+                  "url_avatar": {
+                    "uri": "tos-cn-v-2774c002/oAImE6IpxFrfAdGvEAekLTKMAfIwfAcvCm0qN1",
+                    "urls": [
+                      "https://p3-luna.douyinpic.com/img/",
+                      "https://p6-luna.douyinpic.com/img/"
+                    ],
+                    "template_prefix": "tplv-b829550vbb"
+                  },
+                  "state": {
+                    "blocked_by_me": false
+                  },
+                  "user_info": {
+                    "id": "4212959882788525",
+                    "nickname": "婷婷的音乐世界",
+                    "medium_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55",
+                      "urls": [
+                        "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55.jpeg?from=3782654143",
+                        "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "thumb_avatar_url": {
+                      "uri": "aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55",
+                      "urls": [
+                        "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55.jpeg?from=3782654143",
+                        "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55.jpeg?from=3782654143",
+                        "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c4babc677074d9b269bd226400716d55.jpeg?from=3782654143"
+                      ],
+                      "need_complete_url": true
+                    },
+                    "artist_id": "7054125547688839183",
+                    "secret": false,
+                    "test_tag": 0,
+                    "vip_stage": "",
+                    "is_vip": false,
+                    "is_luna_user": true
+                  },
+                  "simple_display_name": "卫婷婷",
+                  "user_artist_type": 2
+                }
+              ],
+              "company": "抖音音乐",
+              "count_tracks": 1,
+              "state": {},
+              "stats": {
+                "count_collected": 64,
+                "count_shared": 24,
+                "total_count_purchased": 0
+              },
+              "url_cover": {
+                "uri": "tos-cn-v-2774c002/cef2bc5d15674ad98ce94e358e5e0aa7",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "url_player_bg": {
+                "uri": "tos-cn-v-2774c002/cef2bc5d15674ad98ce94e358e5e0aa7",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template": "tplv-2nwr2cc6gm-background:${width}:${height}:30:90:0"
+              },
+              "release_date": 1668700800,
+              "cover_gradient_effect_color": [
+                {
+                  "rgb": "503c30"
+                },
+                {
+                  "rgb": "121212"
+                }
+              ],
+              "cover_shadow_color": {
+                "rgb": "231710"
+              },
+              "snack_bar_color": {
+                "rgb": "443328"
+              }
+            }
+          }
+        }
+      ],
+      "display_view_all": true,
+      "display_title": "专辑",
+      "description": "",
+      "bottom_desc": "",
+      "display_type": ""
+    },
+    {
+      "id": "artists",
+      "next_cursor": "",
+      "has_more": false,
+      "data": [
+        {
+          "meta": {
+            "item_type": "artist",
+            "quick_play_info": {
+              "quick_play_deeplink_url": "luna://luna.com/play_source?queue_id=7268233832690681858&queue_type=artist&queue_name=The%20Deep",
+              "landing_page_type": "artist"
+            }
+          },
+          "entity": {
+            "artist": {
+              "id": "7268233832690681858",
+              "name": "The Deep",
+              "count_albums": 3,
+              "count_tracks": 7,
+              "stats": {
+                "count_collected": 7826
+              },
+              "state": {
+                "blocked_by_me": false
+              },
+              "url_avatar": {
+                "uri": "tos-cn-v-2774c002/owxpXMs6ACAeAZ6YgEFgoqQD1fLPszqEBtBCiE",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "user": {
+                "id": "3131886323896989",
+                "nickname": "TheDeep-艾佳",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_007eb5bb0a54716306e7515e36daf896.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "artist_id": "7268233832690681858",
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "is_luna_user": false
+              },
+              "simple_display_name": "The Deep",
+              "full_display_name": "The Deep",
+              "user_artist_type": 2
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "artist",
+            "quick_play_info": {
+              "quick_play_deeplink_url": "luna://luna.com/play_source?queue_id=6803170060908103682&queue_type=artist&queue_name=Ghost%EF%BC%88%E7%8E%8B%E7%90%B3%E5%87%AF%EF%BC%89",
+              "landing_page_type": "artist"
+            }
+          },
+          "entity": {
+            "artist": {
+              "id": "6803170060908103682",
+              "name": "Ghost（王琳凯）",
+              "count_albums": 43,
+              "count_tracks": 152,
+              "stats": {
+                "count_collected": 6118811
+              },
+              "state": {
+                "blocked_by_me": false
+              },
+              "url_avatar": {
+                "uri": "tos-cn-v-2774c002/okiyDp0iAVdNJjarEUCYW7vKwAEBAzAcRjWjA",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "user": {
+                "id": "56252078401",
+                "nickname": "小鬼-王琳凯😈",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_ea4408ba1b13aa9013d7d3a0c4868bbd.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "artist_id": "6803170060908103682",
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "is_luna_user": true
+              },
+              "simple_display_name": "Ghost（王琳凯）",
+              "full_display_name": "Ghost（王琳凯）",
+              "user_artist_type": 2
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "artist",
+            "quick_play_info": {
+              "quick_play_deeplink_url": "luna://luna.com/play_source?queue_id=6806187135108909057&queue_type=artist&queue_name=%E5%88%98%E6%9F%8F%E8%BE%9BLexie",
+              "landing_page_type": "artist"
+            }
+          },
+          "entity": {
+            "artist": {
+              "id": "6806187135108909057",
+              "name": "刘柏辛Lexie",
+              "count_albums": 26,
+              "count_tracks": 105,
+              "stats": {
+                "count_collected": 1004159
+              },
+              "state": {
+                "blocked_by_me": false
+              },
+              "url_avatar": {
+                "uri": "tos-cn-v-2774c002/o0a1PAAIiEYPnBU8TuirGiDAEWx2rJDAXy1OA",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "user": {
+                "id": "58901944887",
+                "nickname": "刘柏辛Lexie",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_5acd3de572c7eabebed7beec769702ea.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "artist_id": "6806187135108909057",
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "is_luna_user": true
+              },
+              "simple_display_name": "刘柏辛Lexie",
+              "full_display_name": "刘柏辛Lexie",
+              "user_artist_type": 2
+            }
+          }
+        }
+      ],
+      "display_view_all": true,
+      "display_title": "音乐人",
+      "description": "",
+      "bottom_desc": "",
+      "display_type": ""
+    }
+  ],
+  "extra": {
+    "background_color": "#584234",
+    "log_extra": "{\"query_intention_type\":\"music_related\"}",
+    "search_related_info": "{\"textnets\":[]}"
+  }
+}

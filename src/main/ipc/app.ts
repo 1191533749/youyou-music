@@ -140,6 +140,11 @@ export function registerAppHandlers(context: AppContext): void {
   // --- lyrics ---
 
   defineHandler('lyrics:get', async ({ trackID }) => {
+    // 站外曲目用负数 ID（汽水/酷狗/酷我 搜索来的歌）：网易云没有它们的歌词，
+    // 直接返回空结果，不去打接口、也不刷日志。
+    if (trackID <= 0) {
+      return { trackID, lines: [], isInstrumental: false, empty: true }
+    }
     const parsed = await context.lyrics.get(trackID)
     return toLyricsDTO(trackID, parsed)
   })

@@ -8,8 +8,9 @@
  */
 import { defineHandler } from './registry.js'
 import { mappingContextFrom, toTracksDTO } from './mappers.js'
+import { resolveExternalAudio, toSyntheticTrack } from '../external/search.js'
 import type { AppContext } from '../context.js'
-import type { QualityLevel } from '@shared/types'
+import type { QualityLevel, AudioDeviceDTO } from '@shared/types'
 import type { Track } from '../netease/models.js'
 
 const VALID_QUALITIES: QualityLevel[] = [
@@ -79,6 +80,21 @@ export function registerPlayerHandlers(context: AppContext): void {
 
     const privilegeMap = privileges ? new Map(privileges.map((item) => [item.id, item])) : undefined
     await context.player.setQueue(hydrated, startIndex ?? 0, privilegeMap, { randomStart: randomStart === true })
+    return context.player.snapshot()
+  })
+
+  /**
+   * 播放站外曲目：主进程负责严格匹配到完整音频（酷狗/酷我），再把 URL 交给播放器。
+   * 匹配不到就明确报错，绝不播翻唱或半截。
+   */
+  defineHandler('player:playExternal', async ({ item }) => {
+    const resolved = await resolveExternalAudio(item)
+    if (!resolved) {
+      throw new Error('没有找到这首歌的完整音源，已跳过（不会播放翻唱或片段）')
+    }
+    const track = toSyntheticTrack(item)
+    context.log(`播放站外曲目：${item.name} - ${item.artists}（来自 ${resolved.sourceName}）`)
+    await context.player.playExternal(track, resolved)
     return context.player.snapshot()
   })
 
@@ -194,16 +210,12 @@ export function registerPlayerHandlers(context: AppContext): void {
   defineHandler('player:audioDevices', async () => {
     // mpv enumerates devices itself; the renderer only needs the list, and the
     // "auto" entry stands for the system default.
-    const devices = [{ id: 'auto', name: '系统默认输出设备', isDefault: true }]
+    const devices: AudioDeviceDTO[] = [{ id: 'auto', name: '系统默认输出设备', isDefault: true }]
     try {
       const listed = await context.mpv.listAudioDevices()
       for (const device of listed) {
-        if (device === 'auto') continue
-        devices.push({
-          id: device,
-          name: prettyDeviceName(device),
-          isDefault: false
-        })
+        if (device.id === 'auto') continue
+        devices.push({ id: device.id, name: device.label, isDefault: false })
       }
     } catch (cause) {
       context.log(`枚举音频设备失败: ${String(cause)}`)
@@ -214,14 +226,4 @@ export function registerPlayerHandlers(context: AppContext): void {
   void mappingContext
   void toTracksDTO
   void mappingContextFrom
-}
-
-/** `wasapi/{0.0.0.00000000}.{guid}` → a name the user can recognise. */
-function prettyDeviceName(device: string): string {
-  const match = /^wasapi\/(.+)$/.exec(device)
-  if (!match) return device
-  const label = match[1].trim()
-  // Windows device ids are GUIDs; the UI cannot resolve friendly names without
-  // another API, so show a shortened id rather than pretending.
-  return label.length > 40 ? `${label.slice(0, 37)}…` : label
 }

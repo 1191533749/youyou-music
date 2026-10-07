@@ -1,0 +1,42 @@
+/**
+ * 搜索页的站外音源（汽水音乐 / 酷狗音乐 / 酷我音乐）。
+ *
+ * 只补两处：顶部音源切换那一行，以及站外曲目行多出来的封面列 —— 行的其它部分
+ * 复用 .song-row 的样式（悬浮、当前曲高亮、列排版），所以这里不重复定义行本身。
+ * 颜色全部走 tokens，没有写死的色值。
+ */
+
+.search__sources {
+  justify-content: space-between;
+}
+
+/* 站外行比歌曲行多一个 40px 封面列，行高因此比默认略高一点、内边距略收。 */
+.song-row--external {
+  padding: 6px 12px;
+}
+
+.ext-row__cover {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text-tertiary);
+}
+
+.ext-row__cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ext-row__cover-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}

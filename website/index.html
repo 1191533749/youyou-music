@@ -10,9 +10,88 @@
     />
     <link rel="icon" href="assets/icon.png" />
     <link rel="stylesheet" href="styles.css" />
+    <style>
+      .btn--green {
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        color: #ffffff;
+        box-shadow: 0 8px 20px rgba(34, 197, 94, 0.25);
+        border: none;
+      }
+      .btn--green:hover {
+        background: linear-gradient(135deg, #16a34a, #15803d);
+        box-shadow: 0 10px 24px rgba(34, 197, 94, 0.35);
+      }
+
+      .dropdown {
+        position: relative;
+        display: inline-block;
+        /* 悬停缓冲区，解决鼠标移动时菜单消失的问题 */
+        padding-bottom: 8px;
+        margin-bottom: -8px;
+      }
+      .dropdown-content {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        min-width: 100%;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        padding: 8px;
+        z-index: 100;
+        animation: fadeInDown 0.2s ease;
+        white-space: nowrap;
+      }
+      .dropdown:hover .dropdown-content {
+        display: block;
+      }
+      .dropdown-content a {
+        color: #333333;
+        padding: 12px 16px;
+        text-decoration: none;
+        display: block;
+        border-radius: 10px;
+        font-size: 14px;
+        transition: all 0.2s;
+        line-height: 1.5;
+      }
+      .dropdown-content a small {
+        display: block;
+        font-size: 12px;
+        color: #666666;
+        margin-top: 4px;
+        transition: all 0.2s;
+      }
+
+      /* ===== GitHub 下载菜单：橙色悬停效果（匹配 btn--primary） ===== */
+      .dropdown--github .dropdown-content a:hover {
+        background: rgba(255, 90, 31, 0.1);
+        color: #ff5a1f;
+      }
+      .dropdown--github .dropdown-content a:hover small {
+        color: #ff5a1f;
+      }
+
+      /* ===== 本站官网下载菜单：绿色悬停效果（匹配 btn--green） ===== */
+      .dropdown--site .dropdown-content a:hover {
+        background: rgba(34, 197, 94, 0.1);
+        color: #16a34a;
+      }
+      .dropdown--site .dropdown-content a:hover small {
+        color: #16a34a;
+      }
+
+      @keyframes fadeInDown {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
   </head>
   <body>
-    <!-- 背景光斑：与客户端的液态玻璃风格一致 -->
     <div class="backdrop" aria-hidden="true">
       <span class="blob blob--a"></span>
       <span class="blob blob--b"></span>
@@ -59,16 +138,43 @@
             悠悠音乐是一款 Windows 桌面音乐客户端：扫码登录网易云账号，歌单、专辑、歌手、每日推荐、
             私人漫游一应俱全；拿不到完整音频的歌曲会自动匹配完整音源，绝不给你听半截。
           </p>
+          
           <div class="hero__actions">
-            <a class="btn btn--primary" id="download-installer" href="#download">
-              下载安装版
-              <small id="installer-meta">Windows 10/11 · 64 位</small>
-            </a>
-            <a class="btn" id="download-portable" href="#download">
-              下载便携版
-              <small>免安装 · 单文件</small>
-            </a>
+            <!-- GitHub 下载（增加了 dropdown--github 类） -->
+            <div class="dropdown dropdown--github">
+              <a class="btn btn--primary" href="javascript:void(0)">
+                GitHub 下载
+              </a>
+              <div class="dropdown-content">
+                <a href="https://github.com/1191533749/youyou-music/releases" target="_blank" rel="noreferrer">
+                  完整版
+                  <small>Windows 10/11 · 64 位</small>
+                </a>
+                <a href="https://github.com/1191533749/youyou-music/releases" target="_blank" rel="noreferrer">
+                  便携版
+                  <small>免安装 · 单文件</small>
+                </a>
+              </div>
+            </div>
+
+            <!-- 本站官网下载（增加了 dropdown--site 类） -->
+            <div class="dropdown dropdown--site">
+              <a class="btn btn--green" href="javascript:void(0)">
+                本站官网下载
+              </a>
+              <div class="dropdown-content">
+                <a href="https://ytw.asia/ZZZ.php?f=Eqw3QJw1ODMM.exe">
+                  完整版
+                  <small>Windows 10/11 · 64 位</small>
+                </a>
+                <a href="https://ytw.asia/ZZZ.php?f=PW4UWbzfvwuI.exe">
+                  便携版
+                  <small>免安装 · 单文件</small>
+                </a>
+              </div>
+            </div>
           </div>
+
           <p class="hero__note">
             当前版本 <strong id="current-version">—</strong>
             <span id="version-note"></span>
@@ -185,7 +291,6 @@
 
       <section id="screens" class="section">
         <h2 class="section__title">界面</h2>
-        <p class="section__sub">把截图放进 <code>assets/</code> 目录即可替换（文件名见下方说明）。</p>
         <div class="shots">
           <figure class="shot glass">
             <img src="assets/shot-home.png" alt="首页" onerror="this.classList.add('is-missing')" />
@@ -199,22 +304,6 @@
             <img src="assets/shot-together.png" alt="一起听" onerror="this.classList.add('is-missing')" />
             <figcaption>一起听 · 雷达找听友</figcaption>
           </figure>
-        </div>
-      </section>
-
-      <section id="download" class="section section--download">
-        <div class="download glass">
-          <h2 class="section__title">下载悠悠音乐</h2>
-          <p class="section__sub">Windows 10 / 11 · 64 位。安装版会创建桌面与开始菜单快捷方式；便携版是单文件，放在哪都能直接运行。</p>
-          <div class="download__buttons">
-            <a class="btn btn--primary btn--wide" id="download-installer-2" href="#">下载安装版<small id="installer-meta-2">—</small></a>
-            <a class="btn btn--wide" id="download-portable-2" href="#">下载便携版<small id="portable-meta-2">—</small></a>
-          </div>
-          <p class="download__note">
-            下载的是最新版本；如果你习惯用 GitHub，也可以到
-            <a id="github-link" href="https://github.com/1191533749/youyou-music" target="_blank" rel="noreferrer">项目发布页</a>
-            自行选择版本。
-          </p>
         </div>
       </section>
 
@@ -261,7 +350,7 @@
         <a id="github-link-2" href="https://github.com/1191533749/youyou-music" target="_blank" rel="noreferrer">GitHub</a>
         <a id="qq-link" href="https://qm.qq.com/q/L2I1RApP0o" target="_blank" rel="noreferrer">加入 QQ 群</a>
       </div>
-      <p class="footer__note">非官方客户端，与网易云音乐无任何关联。本页为悠悠音乐官方网站。</p>
+      <p class="footer__note">本项目由 优淘网 提供</p>
     </footer>
 
     <script src="app.js"></script>

@@ -177,7 +177,14 @@ export class RelayClient {
       }
       this.options.onMessage?.(message)
     })
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event) => {
+      // 4000 = 服务端判定「同一账号已有更新的连接」：这是主动顶掉旧连接，
+      // 不是网络故障，不能自动重连，否则两个连接会互相顶、无限循环。
+      if (event.code === 4000) {
+        this.closedByUser = true
+        this.options.onStatus?.('closed', '连接被同一账号的新连接取代')
+        return
+      }
       this.options.onStatus?.(this.closedByUser ? 'closed' : 'error')
       if (!this.closedByUser) this.scheduleReconnect()
     })

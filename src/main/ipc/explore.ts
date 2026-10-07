@@ -4,6 +4,7 @@
  * list row can navigate to.
  */
 import { defineHandler } from './registry.js'
+import { searchExternal } from '../external/search.js'
 import {
   mappingContextFrom,
   toAlbumDTO,
@@ -148,6 +149,12 @@ export function registerExploreHandlers(context: AppContext): void {
   })
 
   // --- search ---
+
+  /** 站外音源搜索：网易云没有的歌（抖音热歌等）在这里找得到。 */
+  defineHandler('search:external', async ({ source, keywords, limit }) => {
+    if (!keywords.trim()) return []
+    return searchExternal(source, keywords.trim(), limit ?? 30)
+  })
 
   defineHandler('search:query', async ({ keywords, type, limit, offset }) => {
     const searchType =

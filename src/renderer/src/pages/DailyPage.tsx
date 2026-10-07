@@ -254,9 +254,6 @@ export default function DailyPage(): JSX.Element {
       ) : tracks.length === 0 ? (
         <div className="placeholder">
           <div className="placeholder__title">{isToday ? '今天还没有推荐' : '这一天没有每日推荐记录'}</div>
-          <button type="button" className="button glass-btn" onClick={retry}>
-            重新加载
-          </button>
         </div>
       ) : (
         <div className="daily__panel">

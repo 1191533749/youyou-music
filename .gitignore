@@ -19,3 +19,9 @@ Thumbs.db
 
 # 一起听中继的运行时数据与密钥：余额/订单状态、支付宝应用私钥，绝不入库
 server/data/
+
+# 官网上放的安装包镜像（体积 200MB+，只存在服务器上，不进仓库）
+website/xz/
+website/downloads/
+# 宝塔在站点目录里生成的环境文件（含服务器路径，属服务器侧配置）
+website/.user.ini

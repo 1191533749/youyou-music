@@ -84,12 +84,41 @@ interface Page {
 interface InfiniteList {
   items: PlaylistSummaryDTO[]
   loading: boolean
+  /** 有旧内容、正在后台静默刷新：界面压暗 + 细提示条，不出骨架。 */
+  refreshing: boolean
   loadingMore: boolean
   error?: string
   more: boolean
   loadMore: () => void
   reload: () => void
 }
+
+/**
+ * 页内切换（页签 / 分类 / 排序）的内存缓存。
+ *
+ * 换分类时先用这里的内容顶上、再后台静默刷新，用户看不到「清空再重来」；
+ * 页面被卸载（例如点了歌单详情）再回来时，这里也是同一条捷径。
+ */
+const LIST_CACHE = new Map<string, { items: PlaylistSummaryDTO[]; more: boolean }>()
+const LIST_CACHE_LIMIT = 24
+
+function readCache(signature: string): { items: PlaylistSummaryDTO[]; more: boolean } | undefined {
+  return LIST_CACHE.get(signature)
+}
+
+function writeCache(signature: string, items: PlaylistSummaryDTO[], more: boolean): void {
+  // 重新插入到末尾，淘汰时先丢最久没用的。
+  LIST_CACHE.delete(signature)
+  LIST_CACHE.set(signature, { items, more })
+  while (LIST_CACHE.size > LIST_CACHE_LIMIT) {
+    const oldest = LIST_CACHE.keys().next()
+    if (oldest.done) break
+    LIST_CACHE.delete(oldest.value)
+  }
+}
+
+/** 热门歌手也缓存一份，切回该页签时先出人再刷新。 */
+let ARTISTS_CACHE: ArtistSummaryDTO[] | undefined
 
 export default function Explore(): JSX.Element {
   const navigation = useNavigation()
@@ -119,6 +148,12 @@ export default function Explore(): JSX.Element {
     () => (tab === 'artists' ? call('explore:topArtists', { limit: 60 }) : Promise.resolve([])),
     [tab]
   )
+
+  // 拿到新数据就更新缓存；缓存命中时先用旧的顶上，不出现骨架。
+  if (artists.data && artists.data.length > 0) ARTISTS_CACHE = artists.data
+  const artistList = artists.data ?? ARTISTS_CACHE ?? []
+  const artistsLoading = artists.loading && artistList.length === 0
+  const artistsRefreshing = artists.loading && artistList.length > 0
 
   const list = tab === 'top' ? top : high
 
@@ -186,8 +221,9 @@ export default function Explore(): JSX.Element {
         <AudiobookSection keywords={audio.keywords} hint={audio.hint} />
       ) : tab === 'artists' ? (
         <ArtistsGrid
-          artists={artists.data ?? []}
-          loading={artists.loading}
+          artists={artistList}
+          loading={artistsLoading}
+          refreshing={artistsRefreshing}
           error={artists.error}
           onRetry={artists.reload}
           onOpen={(artist) => navigation.push({ name: 'artist', id: artist.id, title: artist.name })}
@@ -220,12 +256,15 @@ function AudiobookSection({ keywords, hint }: { keywords: string; hint: string }
   const player = usePlayerStore()
   const [tracks, setTracks] = useState<TrackDTO[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [more, setMore] = useState(false)
 
   const offsetRef = useRef(0)
   const generationRef = useRef(0)
+  const tracksRef = useRef(tracks)
+  tracksRef.current = tracks
 
   const load = useCallback(
     async (mode: 'reset' | 'more'): Promise<void> => {
@@ -233,10 +272,15 @@ function AudiobookSection({ keywords, hint }: { keywords: string; hint: string }
       if (mode === 'reset') {
         generationRef.current += 1
         offsetRef.current = 0
-        setTracks([])
-        setMore(false)
         setError(undefined)
-        setLoading(true)
+        if (tracksRef.current.length > 0) {
+          // 换听书/儿童分类时旧列表先留着，只亮一条细提示，别闪空。
+          setRefreshing(true)
+        } else {
+          setTracks([])
+          setMore(false)
+          setLoading(true)
+        }
       } else {
         setLoadingMore(true)
       }
@@ -262,6 +306,7 @@ function AudiobookSection({ keywords, hint }: { keywords: string; hint: string }
         if (generation === generationRef.current) {
           setLoading(false)
           setLoadingMore(false)
+          setRefreshing(false)
         }
       }
     },
@@ -306,13 +351,17 @@ function AudiobookSection({ keywords, hint }: { keywords: string; hint: string }
         </div>
       ) : null}
 
+      <RefreshBar active={refreshing} />
+
       {tracks.length > 0 ? (
-        <SongList
-          tracks={tracks}
-          currentTrackID={player.current?.id}
-          onPlay={(index) => void player.playTracks(tracks, index)}
-          onReachEnd={() => void load('more')}
-        />
+        <div className={refreshing ? 'is-refreshing' : undefined}>
+          <SongList
+            tracks={tracks}
+            currentTrackID={player.current?.id}
+            onPlay={(index) => void player.playTracks(tracks, index)}
+            onReachEnd={() => void load('more')}
+          />
+        </div>
       ) : null}
 
       {!loading && more ? (
@@ -364,6 +413,9 @@ function PlaylistGrid({
         </div>
       ) : null}
 
+      {/* 静默刷新：细提示条 + 列表压暗，旧内容一直留在屏幕上。 */}
+      <RefreshBar active={list.refreshing} />
+
       {!list.loading && list.items.length === 0 && !list.error ? (
         <div className="placeholder">
           <div className="placeholder__title">{emptyMessage}</div>
@@ -372,7 +424,7 @@ function PlaylistGrid({
       ) : null}
 
       {list.items.length > 0 ? (
-        <div className="grid grid--playlists">
+        <div className={`grid grid--playlists${list.refreshing ? ' is-refreshing' : ''}`}>
           {list.items.map((playlist) => (
             <ArtCard
               key={playlist.id}
@@ -441,12 +493,14 @@ function InfiniteFooter({ list }: { list: InfiniteList }): JSX.Element | null {
 function ArtistsGrid({
   artists,
   loading,
+  refreshing,
   error,
   onRetry,
   onOpen
 }: {
   artists: ArtistSummaryDTO[]
   loading: boolean
+  refreshing?: boolean
   error?: string
   onRetry: () => void
   onOpen: (artist: ArtistSummaryDTO) => void
@@ -483,19 +537,31 @@ function ArtistsGrid({
   }
 
   return (
-    <div className="grid grid--artists">
-      {artists.map((artist) => (
-        <ArtCard
-          key={artist.id}
-          title={artist.name}
-          subtitle={`${artist.musicSize} 首歌曲，${artist.albumSize} 张专辑`}
-          imageUrl={coverUrl(artist.picUrl, 240)}
-          round
-          onClick={() => onOpen(artist)}
-        />
-      ))}
-    </div>
+    <>
+      <RefreshBar active={refreshing === true} />
+      <div className={`grid grid--artists${refreshing ? ' is-refreshing' : ''}`}>
+        {artists.map((artist) => (
+          <ArtCard
+            key={artist.id}
+            title={artist.name}
+            subtitle={`${artist.musicSize} 首歌曲，${artist.albumSize} 张专辑`}
+            imageUrl={coverUrl(artist.picUrl, 240)}
+            round
+            onClick={() => onOpen(artist)}
+          />
+        ))}
+      </div>
+    </>
   )
+}
+
+/**
+ * 静默刷新提示：一条 2px 的流动细条。
+ * 页内切换（分类/页签/音源）时用它 + 列表压暗代替整块骨架，避免「重新加载」的闪烁。
+ */
+function RefreshBar({ active }: { active: boolean }): JSX.Element | null {
+  if (!active) return null
+  return <div className="refresh-bar" role="status" aria-label="正在刷新" />
 }
 
 /**
@@ -510,16 +576,21 @@ function useInfinitePlaylists(
   enabled: boolean,
   fetchPage: (cursor: number) => Promise<Page>
 ): InfiniteList {
-  const [items, setItems] = useState<PlaylistSummaryDTO[]>([])
-  const [loading, setLoading] = useState(enabled)
+  const cached = enabled ? readCache(signature) : undefined
+  const [items, setItems] = useState<PlaylistSummaryDTO[]>(cached?.items ?? [])
+  const [loading, setLoading] = useState(enabled && !cached)
+  const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | undefined>()
-  const [more, setMore] = useState(true)
+  const [more, setMore] = useState(cached?.more ?? true)
 
   const cursorRef = useRef(0)
   const generationRef = useRef(0)
   const seenRef = useRef(new Set<number>())
   const signatureRef = useRef<string | undefined>(undefined)
+  // load() 会被 effect 和事件回调调用，闭包里的 items 可能过期，统一读这个 ref。
+  const itemsRef = useRef(items)
+  itemsRef.current = items
 
   // fetchPage 每次渲染都是新闭包，放进 ref；下面的 effect 先于取数 effect 执行，
   // 所以切分类时用到的永远是当次渲染的那份。
@@ -528,16 +599,21 @@ function useInfinitePlaylists(
     fetchRef.current = fetchPage
   })
 
-  async function load(mode: 'reset' | 'more'): Promise<void> {
+  async function load(mode: 'reset' | 'more', silent = false): Promise<void> {
     if (mode === 'more' && (!more || loadingMore || loading)) return
     if (mode === 'reset') {
       generationRef.current += 1
       cursorRef.current = 0
       seenRef.current = new Set()
-      setItems([])
-      setMore(true)
       setError(undefined)
-      setLoading(true)
+      if (silent) {
+        // 静默刷新：旧内容留在屏幕上，只亮一条细提示。
+        setRefreshing(true)
+      } else {
+        setItems([])
+        setMore(true)
+        setLoading(true)
+      }
     } else {
       setLoadingMore(true)
     }
@@ -551,12 +627,16 @@ function useInfinitePlaylists(
         seenRef.current = new Set(page.items.map((item) => item.id))
         setItems(page.items)
         setMore(page.more ?? page.items.length >= PAGE_SIZE)
+        writeCache(signature, page.items, page.more ?? page.items.length >= PAGE_SIZE)
       } else {
         const fresh = page.items.filter((item) => !seenRef.current.has(item.id))
         for (const item of fresh) seenRef.current.add(item.id)
-        setItems((existing) => [...existing, ...fresh])
         // 返回的全是重复项说明游标没前进（接口不再给新数据），到此为止。
-        setMore(fresh.length > 0 ? (page.more ?? true) : false)
+        const nextMore = fresh.length > 0 ? (page.more ?? true) : false
+        const merged = [...itemsRef.current, ...fresh]
+        setItems(merged)
+        setMore(nextMore)
+        writeCache(signature, merged, nextMore)
       }
     } catch (cause) {
       if (generation !== generationRef.current) return
@@ -567,16 +647,30 @@ function useInfinitePlaylists(
       if (generation === generationRef.current) {
         setLoading(false)
         setLoadingMore(false)
+        setRefreshing(false)
       }
     }
   }
 
-  // 换分类/排序（signature 变化）或首次进入该标签时才取第一页；切回来用缓存。
+  /**
+   * 换分类/排序（signature 变化）或首次进入该标签时取第一页。
+   *
+   * 只要屏幕上还有内容（不管是这个组合的缓存，还是上一个分类的结果），就一边
+   * 留着它一边后台刷新，绝不把列表清成空白；只有真正「什么都没有」的首次进入
+   * 才显示骨架。
+   */
   useEffect(() => {
     if (!enabled) return
     if (signatureRef.current === signature) return
     signatureRef.current = signature
-    void load('reset')
+    const hit = readCache(signature)
+    if (hit && hit.items.length > 0) {
+      setItems(hit.items)
+      setMore(hit.more)
+      setError(undefined)
+      setLoading(false)
+    }
+    void load('reset', (hit?.items.length ?? 0) > 0 || itemsRef.current.length > 0)
     // load 的闭包只对 'more' 分支敏感，而 reset 分支不读那些状态；把它放进 deps
     // 会让每次取数完成后立刻再取一次。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -584,8 +678,9 @@ function useInfinitePlaylists(
 
   const reload = (): void => {
     signatureRef.current = signature
-    void load('reset')
+    // 重试时如果屏幕上已经有内容，也按静默刷新走。
+    void load('reset', itemsRef.current.length > 0)
   }
 
-  return { items, loading, loadingMore, error, more, loadMore: () => void load('more'), reload }
+  return { items, loading, refreshing, loadingMore, error, more, loadMore: () => void load('more'), reload }
 }

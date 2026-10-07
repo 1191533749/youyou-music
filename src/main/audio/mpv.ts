@@ -444,14 +444,21 @@ export class MpvController extends EventEmitter {
   /**
    * The audio devices mpv will accept, as `wasapi/{...}` specifiers. The first
    * entry mpv reports as `auto` is the system default.
+   *
+   * 显示名用 `description`（例如「扬声器 (Realtek(R) Audio)」）而不是 `name`：
+   * mpv 的 name 是 `wasapi/{guid}` 这种内部键，直接展示就像乱码。
    */
-  async listAudioDevices(): Promise<string[]> {
+  async listAudioDevices(): Promise<Array<{ id: string; label: string }>> {
     const raw = await this.command(['get_property', 'audio-device-list'])
-    if (!Array.isArray(raw)) return ['auto']
-    const names = raw
-      .map((entry: any) => (typeof entry?.name === 'string' ? entry.name : undefined))
-      .filter((name: string | undefined): name is string => !!name)
-    return ['auto', ...names]
+    if (!Array.isArray(raw)) return [{ id: 'auto', label: 'auto' }]
+    const devices: Array<{ id: string; label: string }> = []
+    for (const entry of raw) {
+      const id = typeof entry?.name === 'string' ? entry.name : undefined
+      if (!id) continue
+      const description = typeof entry?.description === 'string' ? entry.description : ''
+      devices.push({ id, label: description || id })
+    }
+    return devices
   }
 }
 
