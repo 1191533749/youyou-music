@@ -6,6 +6,13 @@ Windows 桌面音乐客户端：**Electron + React + TypeScript** 实现，音�
 账号体系对接网易云音乐（扫码登录），支持在线播放、歌单/专辑/歌手、每日推荐、私人漫游、云盘、
 桌面歌词、全屏播放页与「一起听」。
 
+## 预览
+
+<img width="1919" height="1139" alt="1" src="https://github.com/user-attachments/assets/82ffdf0d-0ae7-4402-b62c-ffa9dca49e4e" />
+<img width="1919" height="1199" alt="2" src="https://github.com/user-attachments/assets/0f3ba612-d4d5-4ee2-80c5-a82ac0a2ef0e" />
+<img width="1919" height="1139" alt="3" src="https://github.com/user-attachments/assets/9106b4fe-02fd-452e-9096-e959317bde83" />
+<img width="1919" height="1141" alt="4" src="https://github.com/user-attachments/assets/4b61aecb-4448-4509-8ea0-421b126b5296" />
+
 ## 当前状态
 
 | 模块 | 状态 | 说明 |
