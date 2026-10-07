@@ -68,94 +68,22 @@ const NAV_ITEMS = [
 ] as const
 
 /**
- * 顶部行：只在搜索页显示搜索框，其余页面不显示（用户明确反馈：
- * 每个页面顶部都挂一个搜索框是「多出来的」，只有搜索页需要它）。
- * 详情页的可返回时，这里只保留「返回」按钮。
+ * 内容区顶部行：**只在可以从当前页面返回时出现，且只有一个「返回」按钮**。
+ *
+ * 两个用户明确的要求都体现在这里：
+ *  1. 一级页面（首页/发现/搜索/我的音乐/每日推荐/私人漫游/一起听/云盘/设置）之间通过
+ *     侧边栏 `reset` 切换，栈里只有当前页 → 这里什么都不渲染，不会出现「返回」；
+ *  2. 全局搜索框不再放在这一行（那样每个页面都会多一个搜索框，搜索页还会变成两个）——
+ *     搜索框是搜索页自己的东西。
  */
-function TopSearch(): JSX.Element {
+function TopRow(): JSX.Element {
   const navigation = useNavigation()
-  const [keywords, setKeywords] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-  const route = navigation.route
-  const onSearchPage = route.name === 'search'
-  const routeKeywords = route.name === 'search' ? route.keywords : undefined
-
-  // 进到搜索页时把当前搜索词显示出来，否则看起来像是空的。
-  useEffect(() => {
-    if (routeKeywords !== undefined) setKeywords(routeKeywords)
-  }, [routeKeywords])
-
-  // 从侧边栏进来（没有关键词）时自动聚焦，用户可以直接输入。
-  useEffect(() => {
-    if (route.name === 'search' && route.keywords === undefined) {
-      inputRef.current?.focus()
-    }
-  }, [route])
-
-  const submit = (): void => {
-    const trimmed = keywords.trim()
-    if (!trimmed) return
-    // 已经在搜索页就替换当前搜索（避免返回栈里堆一串搜索历史）。
-    if (navigation.route.name === 'search') {
-      navigation.replace({ name: 'search', keywords: trimmed })
-      return
-    }
-    navigation.push({ name: 'search', keywords: trimmed })
-  }
-
-  if (!onSearchPage) {
-    // 非搜索页：不显示搜索框；只在可返回时给「返回」按钮。
-    if (!navigation.canGoBack) return <></>
-    return (
-      <div className="top-row">
-        <button
-          type="button"
-          className="top-row__back"
-          onClick={() => navigation.back()}
-          aria-label="返回"
-        >
-          返回
-        </button>
-      </div>
-    )
-  }
-
+  if (!navigation.canGoBack) return <></>
   return (
     <div className="top-row">
-      <button
-        type="button"
-        className={`top-row__back${navigation.canGoBack ? '' : ' is-hidden'}`}
-        onClick={() => navigation.back()}
-        aria-label="返回"
-        disabled={!navigation.canGoBack}
-      >
+      <button type="button" className="top-row__back" onClick={() => navigation.back()} aria-label="返回">
         返回
       </button>
-      <div className="top-search">
-        <IconSearch size={16} />
-        <input
-          ref={inputRef}
-          type="text"
-          className="top-search__input"
-          placeholder="搜索音乐、歌手、专辑、歌单"
-          value={keywords}
-          aria-label="搜索"
-          onChange={(event) => setKeywords(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') submit()
-          }}
-        />
-        {keywords ? (
-          <button
-            type="button"
-            className="top-search__clear"
-            aria-label="清空搜索词"
-            onClick={() => setKeywords('')}
-          >
-            <IconClose size={14} />
-          </button>
-        ) : null}
-      </div>
     </div>
   )
 }
@@ -225,7 +153,9 @@ function Shell(): JSX.Element {
                     key={name}
                     type="button"
                     className={`sidebar__link${navigation.route.name === name ? ' is-active' : ''}`}
-                    onClick={() => navigation.push({ name } as never)}
+                    // 一级页面之间切换用 reset：栈里只有当前页，所以不会显示「返回」，
+                    // 也不会出现「返回退回上一个类目」的情况。
+                    onClick={() => navigation.reset({ name } as never)}
                   >
                     <Icon size={18} />
                     <span>{label}</span>
@@ -237,7 +167,7 @@ function Shell(): JSX.Element {
                 <button
                   type="button"
                   className={`sidebar__link${navigation.route.name === 'settings' ? ' is-active' : ''}`}
-                onClick={() => navigation.push({ name: 'settings' })}
+                onClick={() => navigation.reset({ name: 'settings' })}
               >
                 <IconSettings size={18} />
                 <span>设置</span>
@@ -246,7 +176,7 @@ function Shell(): JSX.Element {
                 <button
                   type="button"
                   className="sidebar__account"
-                  onClick={() => navigation.push({ name: 'settings' })}
+                  onClick={() => navigation.reset({ name: 'settings' })}
                 >
                   {auth.profile?.avatarUrl ? (
                     <img src={auth.profile.avatarUrl} alt="" />
@@ -272,7 +202,7 @@ function Shell(): JSX.Element {
               </button>
             </div>
           ) : null}
-          {navigation.route.name !== 'settings' ? <TopSearch /> : null}
+          {navigation.route.name !== 'settings' ? <TopRow /> : null}
           <PageRouter authLoggedIn={auth.loggedIn} />
         </main>
 

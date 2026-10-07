@@ -28,6 +28,7 @@ export interface NavigationStore {
   stack: Route[]
   push: (route: Route) => void
   replace: (route: Route) => void
+  reset: (route: Route) => void
   back: () => void
   canGoBack: boolean
 }
@@ -45,6 +46,15 @@ export function NavigationProvider({ children }: { children: ReactNode }): JSX.E
     setStack((current) => [...current.slice(0, -1), route])
   }, [])
 
+  /**
+   * 重置成单页栈：侧边栏一级页面之间切换用这个。
+   * 这样「返回」只服务于「从内容页回到进入它的那个页面」，
+   * 不会一层层退回之前的其它类目。
+   */
+  const reset = useCallback((route: Route) => {
+    setStack([route])
+  }, [])
+
   const back = useCallback(() => {
     setStack((current) => (current.length > 1 ? current.slice(0, -1) : current))
   }, [])
@@ -55,10 +65,11 @@ export function NavigationProvider({ children }: { children: ReactNode }): JSX.E
       stack,
       push,
       replace,
+      reset,
       back,
       canGoBack: stack.length > 1
     }),
-    [stack, push, replace, back]
+    [stack, push, replace, reset, back]
   )
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>

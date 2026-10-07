@@ -442,6 +442,22 @@ export class MpvController extends EventEmitter {
   }
 
   /**
+   * 当前音频的真实码率（kbps）。
+   *
+   * 用途：第三方音源（换源播放）拿不到接口声明的档位，界面就会退回去显示用户的
+   * 首选音质（例如「母带」），这属于虚报。mpv 的 track-list 里有
+   * `demux-bitrate`（bit/s），用它换算真实档位才诚实。
+   */
+  async audioBitrate(): Promise<number | undefined> {
+    const tracks = await this.command(['get_property', 'track-list'])
+    if (!Array.isArray(tracks)) return undefined
+    const audio = tracks.find((entry: any) => entry?.type === 'audio')
+    const raw = Number(audio?.['demux-bitrate'] ?? 0)
+    if (!Number.isFinite(raw) || raw <= 0) return undefined
+    return Math.round(raw / 1000)
+  }
+
+  /**
    * The audio devices mpv will accept, as `wasapi/{...}` specifiers. The first
    * entry mpv reports as `auto` is the system default.
    *

@@ -100,18 +100,21 @@ async function main() {
     const onSearch = await cdp(`(() => {
       const inputs = [...document.querySelectorAll('input')].filter((el) => el.type === 'text' || el.type === 'search')
       const visibleInputs = inputs.filter((el) => el.offsetParent !== null)
+      const focusedClass = String(document.activeElement?.className ?? '')
       return {
         total: inputs.length,
         visible: visibleInputs.length,
-        focused: document.activeElement?.className === 'top-search__input'
+        focused: focusedClass.includes('search-hero__input') || focusedClass.includes('search-bar__input'),
+        focusedClass
       }
     })()`)
     record('搜索页只有一个输入框', onSearch?.visible === 1, `可见=${onSearch?.visible} 总数=${onSearch?.total}`)
-    record('进入搜索页输入框自动聚焦', onSearch?.focused === true)
+    record('进入搜索页输入框自动聚焦', onSearch?.focused === true, `聚焦元素：${onSearch?.focusedClass}`)
 
-    // 4) 输入回车能出结果
+    // 4) 输入回车能出结果（搜索页自己的输入框）
     await cdp(`(() => {
-      const input = document.querySelector('.top-search__input')
+      const input = document.querySelector('.search-hero__input, .search-bar__input')
+      if (!input) return false
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
       setter.call(input, '孤勇者')
       input.dispatchEvent(new Event('input', { bubbles: true }))

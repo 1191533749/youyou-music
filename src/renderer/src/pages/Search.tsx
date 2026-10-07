@@ -24,10 +24,11 @@ import {
   useToast
 } from '../lib/contract'
 import { isSearchRelevant } from '../lib/relevance'
-import { IconDisc, IconLayers, IconMusic, IconPlay, IconPlus, IconUser } from '../components/Icons'
-import type { SearchResultDTO, SearchSuggestDTO } from '@shared/ipc'
+import { IconClose, IconDisc, IconLayers, IconMusic, IconPlay, IconPlus, IconSearch, IconUser } from '../components/Icons'
+import type { SearchResultDTO } from '@shared/ipc'
 import {
   EXTERNAL_SOURCES,
+  type ArtistSummaryDTO,
   type ExternalSource,
   type ExternalTrackDTO
 } from '@shared/types'
@@ -52,6 +53,11 @@ const OVERVIEW_LIMIT = 8
 const PAGE_SIZE = 30
 /** 站外曲库一次取多少条。 */
 const EXTERNAL_LIMIT = 30
+
+/** 空态头像墙：取一批热门歌手，够铺满背景（接口对 limit 不敏感，一般会给 60~100 位）。 */
+const WALL_ARTISTS = 60
+/** 头像墙的行数；相邻行方向相反，看起来更有流动感。 */
+const WALL_ROWS = 5
 
 /** 站外行：序号 | 封面 | 歌名 | 歌手 | 专辑 | 时长（比 SongList 多一列封面）。 */
 const EXTERNAL_COLUMNS = '34px 40px minmax(0, 1fr) minmax(110px, 200px) minmax(120px, 220px) 60px'
@@ -118,6 +124,11 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   const [error, setError] = useState<string | undefined>()
   const [more, setMore] = useState(false)
 
+  /** 页面自己那个输入框（顶部全局搜索框已取消，这里是唯一入口）。 */
+  const [input, setInput] = useState(initialKeywords ?? '')
+  /** 空态背景的歌手头像。 */
+  const [wallArtists, setWallArtists] = useState<ArtistSummaryDTO[]>([])
+
   // 静默兜底：网易云 0 条或结果不相关时找到的站外结果。界面不出现任何来源/条数文案，
   // 只把它当普通歌曲列表渲染；点播放失败用普通 toast 报错。
   const [external, setExternal] = useState<ExternalTrackDTO[] | undefined>()
@@ -139,16 +150,47 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 
   const keywords = query?.keywords ?? ''
   const nonce = query?.nonce ?? 0
+  /** 空态：没有搜索词时显示居中的大搜索框 + 头像墙。 */
+  const hero = keywords.length === 0
+
+  const submit = useCallback((value: string): void => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    setInput(trimmed)
+    setQuery((current) => ({ keywords: trimmed, nonce: (current?.nonce ?? 0) + 1 }))
+  }, [])
+
+  /** 清空输入（手动删光或点清空按钮）→ 立刻回到空态。 */
+  const clear = useCallback((): void => {
+    setInput('')
+    setQuery(undefined)
+  }, [])
 
   /**
-   * 搜索页没有自己的输入框（搜索词只由顶部搜索框写入路由），这里只负责：
-   * 路由关键词变化时发起一次搜索 —— 从别处跳进来时也走这条，行为与以前一致。
+   * 关键词变化时发起一次搜索：从别处跳进来（带 initialKeywords）也走这条，
+   * 行为与以前保持一致。
    */
   useEffect(() => {
     const trimmed = initialKeywords?.trim()
     if (!trimmed) return
     setQuery((current) => ({ keywords: trimmed, nonce: (current?.nonce ?? 0) + 1 }))
+    setInput(trimmed)
   }, [initialKeywords])
+
+  // 空态才需要头像墙；拿到一批就够铺满（接口对 limit 不敏感，一般会给 60~100 位）。
+  useEffect(() => {
+    if (!hero || wallArtists.length > 0) return
+    let cancelled = false
+    void call('explore:topArtists', { limit: WALL_ARTISTS })
+      .then((list) => {
+        if (!cancelled) setWallArtists(list)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hero, wallArtists.length])
 
   // --- 搜索（网易云）----------------------------------------------------
   useEffect(() => {
@@ -357,12 +399,49 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   const loaded = songs.length + artists.length + albums.length + playlists.length
 
   return (
-    <div className="page search">
-      <header className="page__header">
-        <div>
-          <h1 className="page__title">搜索</h1>
+    <div className={`page search${hero ? ' search--hero' : ''}`}>
+      {hero ? null : (
+        <header className="page__header">
+          <div>
+            <h1 className="page__title">搜索</h1>
+          </div>
+        </header>
+      )}
+
+      {/* 空态：居中的大搜索框 + 背景流动的歌手头像；有词之后输入框回到顶部常规位置。 */}
+      {hero ? (
+        <HeroSearch
+          value={input}
+          artists={wallArtists}
+          onChange={(value) => setInput(value)}
+          onSubmit={() => submit(input)}
+        />
+      ) : (
+        <div className="search-bar">
+          <span className="search-bar__icon">
+            <IconSearch size={16} />
+          </span>
+          <input
+            className="search-bar__input"
+            value={input}
+            autoFocus
+            onChange={(event) => {
+              const value = event.target.value
+              setInput(value)
+              // 手动删空 → 立刻回到空态。
+              if (!value.trim()) clear()
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') submit(input)
+            }}
+          />
+          {input ? (
+            <button type="button" className="search-bar__clear" onClick={clear} aria-label="清空">
+              <IconClose size={15} />
+            </button>
+          ) : null}
         </div>
-      </header>
+      )}
 
       {keywords ? (
         <div className="toolbar search__tabs">
@@ -396,13 +475,6 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 
       {/* 静默刷新：细条 + 内容压暗，切页签/兜底找歌时不出现空白帧。 */}
       <RefreshBar active={refreshing || fallbackLoading} />
-
-      {/* 关键词只由顶部搜索框写入路由，正常进来一定有词；这里只防「空词」这种边界。 */}
-      {!loading && !keywords ? (
-        <div className="placeholder">
-          <div className="placeholder__title">没有搜索词</div>
-        </div>
-      ) : null}
 
       {external && external.length > 0 ? (
         <section className="page__section">
@@ -582,6 +654,90 @@ function ExternalCover({ url }: { url?: string }): JSX.Element {
     )
   }
   return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
+}
+
+/**
+ * 空态：居中的大搜索框 + 背景里流动的歌手头像。
+ *
+ * 头像层是纯装饰：`aria-hidden` + `pointer-events: none`，不参与点击，也不写说明文字。
+ */
+function HeroSearch({
+  value,
+  artists,
+  onChange,
+  onSubmit
+}: {
+  value: string
+  artists: ArtistSummaryDTO[]
+  onChange: (value: string) => void
+  onSubmit: () => void
+}): JSX.Element {
+  return (
+    <div className="search-hero">
+      <AvatarWall artists={artists} />
+      <div className="search-hero__box">
+        <span className="search-hero__icon">
+          <IconSearch size={22} />
+        </span>
+        <input
+          className="search-hero__input"
+          value={value}
+          autoFocus
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') onSubmit()
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** 头像：第三方图挂了就退回线性图标，不留破图。 */
+function WallAvatar({ url }: { url?: string }): JSX.Element {
+  const [broken, setBroken] = useState(false)
+  const src = url?.replace(/^http:\/\//, 'https://')
+  if (!src || broken) {
+    return (
+      <span className="avatar-wall__fallback">
+        <IconUser size={22} />
+      </span>
+    )
+  }
+  return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
+}
+
+/**
+ * 背景头像墙：多行横向慢速滚动，相邻行方向相反。
+ *
+ * 每行渲染两份同样的头像（无缝循环靠 translateX(-50%)），数量不够就把同一批轮着用，
+ * 保证任何屏幕宽度下都铺得满。
+ */
+function AvatarWall({ artists }: { artists: ArtistSummaryDTO[] }): JSX.Element {
+  const rows = [...Array(WALL_ROWS).keys()].map((rowIndex) => {
+    const row: ArtistSummaryDTO[] = []
+    if (artists.length === 0) return row
+    // 每行至少 14 个头像，交叉取，保证各行内容不完全一样。
+    const need = Math.max(14, Math.ceil(artists.length / WALL_ROWS) + 4)
+    for (let index = 0; index < need; index++) {
+      row.push(artists[(index * WALL_ROWS + rowIndex) % artists.length])
+    }
+    return row
+  })
+
+  return (
+    <div className="avatar-wall" aria-hidden="true">
+      {rows.map((row, index) => (
+        <div key={index} className={`avatar-wall__row${index % 2 === 1 ? ' avatar-wall__row--reverse' : ''}`}>
+          {[...row, ...row].map((artist, itemIndex) => (
+            <span key={`${artist.id}-${itemIndex}`} className="avatar-wall__item">
+              <WallAvatar url={coverUrl(artist.picUrl, 160)} />
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function SectionHeader({

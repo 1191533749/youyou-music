@@ -335,6 +335,199 @@
   justify-content: space-between;
 }
 
+/* --- 搜索：结果态的顶部输入框 ------------------------------------------- */
+
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(170%);
+  box-shadow: var(--glass-shadow-soft);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.search-bar:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.search-bar__icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.search-bar__input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.search-bar__input:focus {
+  outline: none;
+}
+
+.search-bar__clear {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.search-bar__clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* --- 搜索：空态（居中大搜索框 + 流动头像墙） ---------------------------- */
+
+.search--hero .page__header {
+  display: none;
+}
+
+.search-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: min(62vh, 520px);
+  padding: 40px 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.search-hero__box {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, 82%);
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  box-shadow: var(--glass-shadow);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.search-hero__box:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--glass-shadow), 0 0 0 4px var(--accent-soft);
+}
+
+.search-hero__icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.search-hero__input {
+  flex: 1;
+  min-width: 0;
+  height: 58px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.search-hero__input:focus {
+  outline: none;
+}
+
+/*
+ * 背景头像墙：多行慢速横向滚动，相邻行反向。
+ * 纯装饰层：不可点、不拦事件，整体压低不透明度，四周用渐隐遮罩收边。
+ */
+.avatar-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  opacity: 0.26;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.avatar-wall__row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: max-content;
+  animation: avatar-wall-scroll 72s linear infinite;
+  will-change: transform;
+}
+
+/* 相邻行反着走，看起来不像一整块在平移。 */
+.avatar-wall__row--reverse {
+  animation-direction: reverse;
+  animation-duration: 86s;
+}
+
+@keyframes avatar-wall-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    /* 每行渲染了两份，走一半就是无缝循环。 */
+    transform: translateX(-50%);
+  }
+}
+
+.avatar-wall__item {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text-tertiary);
+}
+
+.avatar-wall__item img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-wall__fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* 尊重「减少动态效果」偏好：不滚，只留一层静态头像。 */
+@media (prefers-reduced-motion: reduce) {
+  .avatar-wall__row {
+    animation: none;
+  }
+}
+
 /*
  * 页内切换（分类 / 页签 / 音源）时的静默刷新提示。
  *

@@ -246,27 +246,42 @@ export default function PlayerBar(): JSX.Element {
 
 function QualityMenu({ player }: { player: PlayerStore }): JSX.Element {
   const { state } = player
-  // 站外曲目（汽水/酷狗/酷我 搜索来的歌）不存在「首选音质」这个概念，
-  // 显示偏好档位会让人以为播到了那个档位。这里如实显示实际档位（不知道就是标准），
-  // 并且不允许切换。
+  // 站外曲目（汽水/酷狗/酷我 搜索来的歌）没有「首选音质」这一说：不允许切换，
+  // 只如实显示音源给到的档位。
   const external = typeof state.track?.id === 'number' && state.track.id < 0
+  /*
+   * 显示规则（用户要求）：**设置里的首选音质达不到时，这里直接显示真实音质**。
+   * servedQuality 是主进程解析出的实际档位（例如设置选母带、音源只给到无损，
+   * 这里就显示「无损」）。
+   * 换源播放（servedFrom 有值）时接口没声明档位，主进程会读 mpv 的真实码率补上；
+   * 万一还没读到，就先保守显示「标准」，绝不上抬成用户的「母带」这类首选值。
+   */
+  const served = state.servedQuality
+  const display = (served ?? (state.servedFrom ? 'standard' : state.quality)) as keyof typeof QUALITY_LABELS
+
   if (external) {
-    const served = state.servedQuality ?? 'standard'
     return (
       <label className="quality-select" title="站外曲目，音质以音源提供为准">
-        <select value={served} disabled aria-label="实际音质">
-          <option value={served}>{QUALITY_LABELS[served] ?? '标准'}</option>
+        <select value={display} disabled aria-label="实际音质">
+          <option value={display}>{QUALITY_LABELS[display] ?? '标准'}</option>
         </select>
       </label>
     )
   }
-  // 音质策略：达不到所选音质时自动降档（主进程保证），
-  // 界面不提示、不虚报、不说来源——只保留用户的首选档位控件。
+
+  const belowPreference = served !== undefined && served !== state.quality
   return (
-    <label className="quality-select" title="首选音质；达不到时自动降至可播放的最高音质">
+    <label
+      className="quality-select"
+      title={
+        belowPreference
+          ? `实际音质：${QUALITY_LABELS[display] ?? display}（首选 ${QUALITY_LABELS[state.quality] ?? state.quality}，音源给不到自动降档）`
+          : '首选音质；达不到时自动降至可播放的最高音质并如实显示'
+      }
+    >
       <select
-        value={state.quality}
-        aria-label="首选音质"
+        value={display}
+        aria-label="音质"
         onChange={(event) => void player.setQuality(event.target.value)}
       >
         {Object.entries(QUALITY_LABELS).map(([value, label]) => (

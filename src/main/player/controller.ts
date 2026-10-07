@@ -341,6 +341,8 @@ export class PlayerController extends EventEmitter {
       this.consecutiveFailures = 0
       this.startPositionTimer()
       this.scrobbleStart()
+      // 真实码率要等 mpv 把文件载入后才能读到：异步补一次，用来诚实显示音质。
+      void this.refreshRealBitrate(generation)
     } catch (cause) {
       if (generation !== this.resolveGeneration) return
       const message = describeError(cause)
@@ -365,6 +367,35 @@ export class PlayerController extends EventEmitter {
       }
     }
     void options
+  }
+
+  /**
+   * 读取 mpv 报出的真实码率，用来诚实显示音质。
+   *
+   * 第三方音源（换源播放）没有接口声明的档位，过去就退回显示用户的「首选音质」，
+   * 例如实际只有 320kbps 却显示「母带」。这里在文件载入后按真实码率定档：
+   * 只用于「未知档位」的补齐，绝不把已知档位往上抬。
+   */
+  private async refreshRealBitrate(generation: number): Promise<void> {
+    // 载入需要时间，隔一会儿重试几次；拿到就停。
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      if (generation !== this.resolveGeneration) return
+      let bitrate: number | undefined
+      try {
+        bitrate = await this.deps.mpv.audioBitrate()
+      } catch {
+        continue
+      }
+      if (!bitrate) continue
+      if (generation !== this.resolveGeneration) return
+      this.servedBitrate = this.servedBitrate ?? bitrate
+      if (!this.servedQuality) {
+        this.servedQuality = qualityFromBitrate(bitrate)
+      }
+      this.emitSnapshot()
+      return
+    }
   }
 
   /**
@@ -786,6 +817,20 @@ function httpsURL(url: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * 码率（kbps）→ 音质档位。
+ *
+ * 阈值按各档位的常见码率取下界：128 以下算标准、192 以上算较高、256 以上算极高、
+ * 900 以上按无损对待（第三方 flac 常见 900~1100kbps）。
+ * 只用来给「接口没声明档位」的第三方音源兜底，不会把已知档位抬高。
+ */
+function qualityFromBitrate(kbps: number): QualityLevel {
+  if (kbps >= 900) return 'lossless'
+  if (kbps >= 256) return 'exhigh'
+  if (kbps >= 160) return 'higher'
+  return 'standard'
 }
 
 export function describeError(cause: unknown): string {
