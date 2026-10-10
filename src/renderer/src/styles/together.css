@@ -616,16 +616,6 @@
   color: var(--text-on-accent);
 }
 
-.together__msg-name {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.together__msg.is-mine .together__msg-name {
-  color: var(--text-on-accent);
-  opacity: 0.82;
-}
-
 .together__msg-text {
   font-size: 13px;
   line-height: 1.55;

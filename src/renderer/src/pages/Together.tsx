@@ -449,7 +449,6 @@ export default function Together(): JSX.Element {
                           key={`${message.at}-${index}`}
                           className={`together__msg${message.from === state.room?.you ? ' is-mine' : ''}`}
                         >
-                          <span className="together__msg-name">{message.from === state.room?.you ? '我' : (message.nickname ?? '听友')}</span>
                           <span className="together__msg-text">
                             {message.text}
                             {message.emoji ? <em className="together__msg-emoji">{message.emoji}</em> : null}

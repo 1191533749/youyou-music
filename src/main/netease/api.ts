@@ -913,25 +913,40 @@ export class NeteaseAPI {
   // MARK: - Search
 
   async search(keywords: string, type: SearchType, limit = 30, offset = 0): Promise<SearchResult> {
-    return this.eapi(
-      '/cloudsearch/pc',
-      { s: keywords, type: type as number, limit, offset, total: true },
-      {
-        decode: (j) => {
-          const r = j.result ?? {}
-          return {
-            songs: r.songs ? toTracks(r.songs) : undefined,
-            albums: r.albums ? toSummaryList(r.albums, toAlbumSummary) : undefined,
-            artists: r.artists ? toSummaryList(r.artists, toArtistSummary) : undefined,
-            playlists: r.playlists ? toSummaryList(r.playlists, toPlaylistSummary) : undefined,
-            songCount: typeof r.songCount === 'number' ? r.songCount : undefined,
-            albumCount: typeof r.albumCount === 'number' ? r.albumCount : undefined,
-            artistCount: typeof r.artistCount === 'number' ? r.artistCount : undefined,
-            playlistCount: typeof r.playlistCount === 'number' ? r.playlistCount : undefined
-          }
-        }
+    const payload = { s: keywords, type: type as number, limit, offset, total: true }
+    const decode = (j: any): SearchResult => {
+      const r = j.result ?? {}
+      return {
+        songs: r.songs ? toTracks(r.songs) : undefined,
+        albums: r.albums ? toSummaryList(r.albums, toAlbumSummary) : undefined,
+        artists: r.artists ? toSummaryList(r.artists, toArtistSummary) : undefined,
+        playlists: r.playlists ? toSummaryList(r.playlists, toPlaylistSummary) : undefined,
+        songCount: typeof r.songCount === 'number' ? r.songCount : undefined,
+        albumCount: typeof r.albumCount === 'number' ? r.albumCount : undefined,
+        artistCount: typeof r.artistCount === 'number' ? r.artistCount : undefined,
+        playlistCount: typeof r.playlistCount === 'number' ? r.playlistCount : undefined
       }
-    )
+    }
+    /*
+     * 风控回落：搜索是高频 eapi，偶发被风控返回「检测到您的网络环境存在风险」
+     * （business 错误）。先延时重试同一请求，再换 weapi 通道（/cloudsearch/get/web
+     * 与 /cloudsearch/pc 同响应结构、共用同一 decode）各试一次；网络类错误由
+     * client 传输层自行重试，这里只兜 business 错误。
+     */
+    try {
+      return await this.eapi('/cloudsearch/pc', payload, { decode })
+    } catch (first) {
+      if (!(first instanceof NeteaseAPIError) || first.kind !== 'business') throw first
+      console.warn(`[netease] /cloudsearch/pc 业务错误 ${first.code}（${first.message}），600ms 后重试`)
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      try {
+        return await this.eapi('/cloudsearch/pc', payload, { decode })
+      } catch (second) {
+        if (!(second instanceof NeteaseAPIError) || second.kind !== 'business') throw second
+        console.warn(`[netease] /cloudsearch/pc 重试仍业务错误 ${second.code}，改用 weapi /cloudsearch/get/web`)
+        return this.weapi('/cloudsearch/get/web', payload, { decode })
+      }
+    }
   }
 
   async searchSuggest(keywords: string): Promise<SearchSuggestResult | undefined> {

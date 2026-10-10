@@ -362,10 +362,10 @@ export default function Library(): JSX.Element {
       <div className="library__grid">
         {/*
           喜欢的音乐 —— 一行歌单封面 + 播放按钮，需要时展开完整列表。
-          展开时这张卡拉满整行：半宽卡里 SongList 的六列会把歌名那一列挤到只剩
-          几像素，看起来就像被圆形播放键盖住。
+          恒定通栏一行一张（展开/收起只影响内部列表，不再影响卡宽）：半宽卡里
+          SongList 的六列会把歌名那一列挤到只剩几像素，看起来就像被圆形播放键盖住。
         */}
-        <section className={`library__card${expanded.liked ? ' library__card--wide' : ''}`}>
+        <section className="library__card library__card--wide">
           <header className="library__card-head">
             <span className="library__card-icon">
               <IconHeartFilled size={18} />
@@ -447,8 +447,96 @@ export default function Library(): JSX.Element {
           ) : null}
         </section>
 
-        {/* 我的歌单 —— 卡头「+」直接开新建歌单对话框。 */}
-        <section className="library__card">
+        {/* 收藏专辑 —— 通栏一行一张 */}
+        <section className="library__card library__card--wide">
+          <header className="library__card-head">
+            <span className="library__card-icon">
+              <IconDisc size={18} />
+            </span>
+            <h2 className="library__card-title">收藏专辑</h2>
+            {albums.length > 0 ? <span className="library__card-count">{albums.length} 张</span> : null}
+          </header>
+          {albums.length === 0 ? (
+            <div className="library__empty">
+              <div className="library__empty-title">还没有收藏专辑</div>
+              <div>在专辑页点「收藏」后会出现在这里</div>
+            </div>
+          ) : (
+            <div className="library__mini-grid">
+              {albums.map((album) => (
+                <div
+                  className="library-tile"
+                  key={album.id}
+                  onContextMenu={(event) => openTileMenu(event, albumMenu(album))}
+                >
+                  <ArtCard
+                    title={album.name}
+                    subtitle={album.artistName}
+                    imageUrl={coverUrl(album.picUrl, 320)}
+                    badge={album.size > 0 ? `${album.size} 首` : undefined}
+                    onClick={() => navigation.push({ name: 'album', id: album.id, title: album.name })}
+                  />
+                  <button
+                    type="button"
+                    className="icon-button library-tile__more"
+                    title="更多操作"
+                    aria-label="更多操作"
+                    onClick={(event) => openTileMenu(event, albumMenu(album))}
+                  >
+                    <IconMore size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* 关注歌手 —— 通栏一行一张 */}
+        <section className="library__card library__card--wide">
+          <header className="library__card-head">
+            <span className="library__card-icon">
+              <IconMic size={18} />
+            </span>
+            <h2 className="library__card-title">关注歌手</h2>
+            {artists.length > 0 ? <span className="library__card-count">{artists.length} 位</span> : null}
+          </header>
+          {artists.length === 0 ? (
+            <div className="library__empty">
+              <div className="library__empty-title">还没有关注歌手</div>
+              <div>在歌手页点「关注」后会出现在这里</div>
+            </div>
+          ) : (
+            <div className="library__mini-grid library__mini-grid--round">
+              {artists.map((artist) => (
+                <div
+                  className="library-tile"
+                  key={artist.id}
+                  onContextMenu={(event) => openTileMenu(event, artistMenu(artist))}
+                >
+                  <ArtCard
+                    title={artist.name}
+                    subtitle={artist.musicSize > 0 ? `${artist.musicSize} 首单曲` : undefined}
+                    imageUrl={coverUrl(artist.picUrl, 300)}
+                    round
+                    onClick={() => navigation.push({ name: 'artist', id: artist.id, title: artist.name })}
+                  />
+                  <button
+                    type="button"
+                    className="icon-button library-tile__more"
+                    title="更多操作"
+                    aria-label="更多操作"
+                    onClick={(event) => openTileMenu(event, artistMenu(artist))}
+                  >
+                    <IconMore size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* 我的歌单 —— 通栏一行一张；卡头「+」直接开新建歌单对话框。 */}
+        <section className="library__card library__card--wide">
           <header className="library__card-head">
             <span className="library__card-icon">
               <IconQueue size={18} />
@@ -545,94 +633,6 @@ export default function Library(): JSX.Element {
                 </div>
               ) : null}
             </>
-          )}
-        </section>
-
-        {/* 收藏专辑 */}
-        <section className="library__card">
-          <header className="library__card-head">
-            <span className="library__card-icon">
-              <IconDisc size={18} />
-            </span>
-            <h2 className="library__card-title">收藏专辑</h2>
-            {albums.length > 0 ? <span className="library__card-count">{albums.length} 张</span> : null}
-          </header>
-          {albums.length === 0 ? (
-            <div className="library__empty">
-              <div className="library__empty-title">还没有收藏专辑</div>
-              <div>在专辑页点「收藏」后会出现在这里</div>
-            </div>
-          ) : (
-            <div className="library__mini-grid">
-              {albums.map((album) => (
-                <div
-                  className="library-tile"
-                  key={album.id}
-                  onContextMenu={(event) => openTileMenu(event, albumMenu(album))}
-                >
-                  <ArtCard
-                    title={album.name}
-                    subtitle={album.artistName}
-                    imageUrl={coverUrl(album.picUrl, 320)}
-                    badge={album.size > 0 ? `${album.size} 首` : undefined}
-                    onClick={() => navigation.push({ name: 'album', id: album.id, title: album.name })}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button library-tile__more"
-                    title="更多操作"
-                    aria-label="更多操作"
-                    onClick={(event) => openTileMenu(event, albumMenu(album))}
-                  >
-                    <IconMore size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 关注歌手 */}
-        <section className="library__card">
-          <header className="library__card-head">
-            <span className="library__card-icon">
-              <IconMic size={18} />
-            </span>
-            <h2 className="library__card-title">关注歌手</h2>
-            {artists.length > 0 ? <span className="library__card-count">{artists.length} 位</span> : null}
-          </header>
-          {artists.length === 0 ? (
-            <div className="library__empty">
-              <div className="library__empty-title">还没有关注歌手</div>
-              <div>在歌手页点「关注」后会出现在这里</div>
-            </div>
-          ) : (
-            <div className="library__mini-grid library__mini-grid--round">
-              {artists.map((artist) => (
-                <div
-                  className="library-tile"
-                  key={artist.id}
-                  onContextMenu={(event) => openTileMenu(event, artistMenu(artist))}
-                >
-                  <ArtCard
-                    title={artist.name}
-                    subtitle={artist.musicSize > 0 ? `${artist.musicSize} 首单曲` : undefined}
-                    imageUrl={coverUrl(artist.picUrl, 300)}
-                    round
-                    onClick={() => navigation.push({ name: 'artist', id: artist.id, title: artist.name })}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button library-tile__more"
-                    title="更多操作"
-                    aria-label="更多操作"
-                    onClick={(event) => openTileMenu(event, artistMenu(artist))}
-                  >
-                    <IconMore size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
           )}
         </section>
 

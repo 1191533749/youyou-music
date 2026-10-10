@@ -217,6 +217,11 @@ export function registerExploreHandlers(context: AppContext): void {
     if (process.env.YOYOU_FORCE_EXTERNAL === '1' && type === 'songs') {
       return { songs: [], songCount: 0, albums: undefined, artists: undefined, playlists: undefined }
     }
+    /* 测试钩子：设 YOYOU_FAIL_SEARCH=1 让搜索整条链路直接 reject（模拟风控报错），
+     * 用于真机复现渲染层的「出错静默兜底」catch 支路。 */
+    if (process.env.YOYOU_FAIL_SEARCH === '1') {
+      throw new Error('检测到您的网络环境存在风险，请稍后再试')
+    }
     const searchType =
       type === 'songs'
         ? SearchType.songs

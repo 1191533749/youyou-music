@@ -5,10 +5,10 @@
  * 反复跳动；回车或点击联想才真正搜索。综合标签把四类结果各取一小批并排
  * 展示（用 allSettled，某一类失败不影响其它类），单类标签才做分页。
  *
- * 顶部可以切音源：默认网易云（行为与以前完全一致），另外三个是站外曲库
- * （汽水 / 酷狗 / 酷我），用来找网易云曲库里没有的歌（例如抖音热歌）。
- * 站外结果走独立的取数与播放通道，且没有「喜欢」概念，所以不复用 SongList 组件，
- * 只复用它的样式类。
+ * 音源对用户不可见：默认网易云（行为与以前完全一致），当网易云没搜到、或者搜到的
+ * 那批结果跟关键词根本不相干时，后台静默按 汽水 → 酷狗 → 酷我 依次找，第一个有结果
+ * 的源胜出，以普通歌曲列表呈现，界面里不标注来源。站外结果走独立的取数与播放通道，
+ * 且没有「喜欢」概念，所以不复用 SongList 组件，只复用它的样式类。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
@@ -310,9 +310,12 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           setMore(nextMore)
           writeSearchCache(cacheKey, { result: page, more: nextMore, offset })
         }
-      } catch (cause) {
+      } catch {
         if (generation !== generationRef.current) return
-        setError(cause instanceof Error ? cause.message : String(cause))
+        // 网易云搜不动（例如「检测到您的网络环境存在风险」）不弹横幅：按「没搜到」处理，
+        // 交给下面那个静默兜底 effect 去找站外音源；只有分页失败（loadMore）才出横幅。
+        resultForRef.current = keywords
+        setResult({ songs: [], artists: [], albums: [], playlists: [] })
       } finally {
         if (generation === generationRef.current) {
           setLoading(false)
@@ -599,15 +602,31 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
               <SectionHeader
                 icon={IconMusic}
                 title="单曲"
-                // 整表播放入口：随机起播；点具体某一行仍然从那一行开始。
+                // 整块播放入口：随机起播；点具体某一首仍然从那一首开始。
                 onPlayAll={() => void player.playTracks(songs, 0, { randomStart: true })}
                 action={overview ? { label: '查看全部', onClick: () => setTab('songs') } : undefined}
               />
-              <SongList
-                tracks={songs}
-                currentTrackID={player.current?.id}
-                onPlay={(index) => void player.playTracks(songs, index)}
-              />
+              {/* 综合页这里只是四类结果各取一小批的预览，用卡片网格与下面「歌手/专辑」两栏一致；
+                  单曲页要看完整列表（时长、专辑列），继续用行列表。 */}
+              {overview ? (
+                <div className="grid grid--albums">
+                  {songs.map((track, index) => (
+                    <ArtCard
+                      key={track.id}
+                      title={track.name}
+                      subtitle={artistLine(track)}
+                      imageUrl={coverUrl(track.album?.picUrl, 320)}
+                      onClick={() => void player.playTracks(songs, index)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <SongList
+                  tracks={songs}
+                  currentTrackID={player.current?.id}
+                  onPlay={(index) => void player.playTracks(songs, index)}
+                />
+              )}
             </section>
           ) : null}
 

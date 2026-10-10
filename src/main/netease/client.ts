@@ -280,7 +280,9 @@ export class NeteaseClient {
     let last: AttemptOutcome | undefined
 
     for (let attempt = 0; attempt <= NETWORK_RETRY_DELAYS_MS.length; attempt += 1) {
-      last = await this.performOnce(url, body, auth, cookieHeader, absorbResponseCookies, anonymous)
+      // eapi 重试时在 interface / interface3 之间交替换 host（见 rotateEapiHost）。
+      const attemptUrl = rotateEapiHost(url, attempt)
+      last = await this.performOnce(attemptUrl, body, auth, cookieHeader, absorbResponseCookies, anonymous)
       if (last.kind === 'ok') return last.text
 
       const delay = NETWORK_RETRY_DELAYS_MS[attempt]
@@ -289,7 +291,7 @@ export class NeteaseClient {
 
       const reason = last.kind === 'empty' ? '响应体为空' : last.reason
       this.logNetwork(
-        `${url} ${reason}，${delay}ms 后重试（第 ${attempt + 1}/${NETWORK_RETRY_DELAYS_MS.length} 次）`
+        `${attemptUrl} ${reason}，${delay}ms 后重试（第 ${attempt + 1}/${NETWORK_RETRY_DELAYS_MS.length} 次）`
       )
       await sleep(jitter(delay))
     }
@@ -496,6 +498,18 @@ function sleep(ms: number): Promise<void> {
 /** ±20% 抖动：多个请求同时失败时错开重试时刻，别一起再撞上去。 */
 function jitter(ms: number): number {
   return Math.round(ms * (0.8 + Math.random() * 0.4))
+}
+
+/**
+ * eapi 重试换 host：interface.music.163.com 偶发 ECONNRESET / 被限流，换到
+ * interface3.music.163.com 往往可解，所以每次重试在两台之间交替。weapi
+ * （music.163.com）与 eapi 之外的请求不动。
+ */
+function rotateEapiHost(url: string, attempt: number): string {
+  if (attempt <= 0 || !url.includes('/eapi')) return url
+  return url.includes('interface3.music.163.com')
+    ? url.replace('interface3.music.163.com', 'interface.music.163.com')
+    : url.replace('interface.music.163.com', 'interface3.music.163.com')
 }
 
 /**
