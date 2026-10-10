@@ -378,6 +378,13 @@ button.source-track:hover {
   gap: 7px;
 }
 
+/* 用户点名要保留的说明：为什么要在这里登录 QQ音乐。 */
+.source-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
 .source-playlist {
   display: flex;
   align-items: center;

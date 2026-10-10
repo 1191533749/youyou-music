@@ -127,6 +127,7 @@ export default function SourceAccount(): JSX.Element {
           )}
         </div>
       </div>
+      <p className="source-note">如有会员可登录</p>
 
       {binding && !bound ? (
         <div className="source-bind">

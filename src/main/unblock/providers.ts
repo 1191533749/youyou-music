@@ -51,14 +51,20 @@ const VERSION_MARKERS = ['live', 'remix', '伴奏', 'dj', 'cover', '翻唱', 'in
 
 /**
  * 候选是否就是同一首歌。四个条件同时成立才算：
- * 双方时长已知且相差 ≤ 5 秒、标题归一化后相等、版本标记一致、歌手名命中。
+ * 双方时长已知且相差 ≤ `durationToleranceMS`（默认 5 秒）、标题归一化后相等、
+ * 版本标记一致、歌手名命中。
+ *
+ * 跨平台匹配一律用默认的 5 秒（不同平台的时长常有几秒出入，放宽会放进别的版本）；
+ * 只有「同一个平台里找替代条目」才放宽——见 controller 的 findSubstitute。
  */
 export function matchesTrack(
   track: Track,
-  candidate: { title: string; artist: string; durationMS: number }
+  candidate: { title: string; artist: string; durationMS: number },
+  options: { durationToleranceMS?: number } = {}
 ): boolean {
   if (!(track.durationMS > 0 && candidate.durationMS > 0)) return false
-  if (Math.abs(candidate.durationMS - track.durationMS) > 5_000) return false
+  const tolerance = options.durationToleranceMS ?? 5_000
+  if (Math.abs(candidate.durationMS - track.durationMS) > tolerance) return false
   if (normalize(candidate.title) !== normalize(track.name)) return false
   if (hasVersionConflict(track.name, candidate.title)) return false
 

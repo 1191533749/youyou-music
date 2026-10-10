@@ -64,6 +64,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 /** 单次音源解析（含全部回退链）的最长等待时间。 */
 const RESOLVE_TIMEOUT_MS = 20_000
 /**
+ * 换音质的解析预算：用户是「播到一半」去切档位的，等太久比失败更糟——
+ * 超过这个时间就当这次换档没成，旧档位继续放（不打断、不弹字）。
+ */
+const QUALITY_RELOAD_TIMEOUT_MS = 12_000
+/**
  * 站外曲目（平台歌单）的解析预算：它要按顺序连撞几个音源，每个源自己就有 12 秒
  * 超时，用 20 秒会把「慢一点但能放」的歌提前判死。
  */
@@ -232,6 +237,19 @@ export class PlayerController extends EventEmitter {
   private prefetchInflight = new Map<number, Promise<ResolvedPlayback | undefined>>()
   /** 后台整首缓存的串行队列：同一时刻只下载一首，避免多路抢带宽。 */
   private cacheQueue: Promise<void> = Promise.resolve()
+  /**
+   * 等待缓存的曲目：只有在「这一首已经不在播」时才真正下载。
+   * 边播边下会跟 mpv 抢同一条 CDN 连接，用户听到的就是「一卡一卡」。
+   */
+  private pendingCache?: {
+    track: Track
+    level: QualityLevel
+    url: string
+    format?: string
+    variant: string
+  }
+  /** 延迟/重试下载的定时器（见 scheduleCacheInBackground）。 */
+  private cacheTimer?: NodeJS.Timeout
   /** mpv 当前载入的曲目 id：切歌时若不同则先 unload 旧音频，避免「歌名变了歌没换」。 */
   private loadedTrackId?: number
   /** 随机模式下预先 roll 好的下一首下标，供 lookahead 预解析、pickNext 消费。 */
@@ -925,8 +943,12 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
-   * 站内替代版本：按「歌名 + 首位歌手」搜索，要求时长相差 ≤ 5 秒、
-   * 标题归一化一致、版本标记一致，且该条目自身有播放权限。
+   * 站内替代版本：按「歌名 + 首位歌手」搜索，要求标题归一化一致、版本标记一致、
+   * 该条目自身有播放权限。
+   *
+   * 时长窗口比跨平台匹配（±5 秒）宽到 ±20 秒：同一个平台里同名同歌手的两个条目
+   * 常常是不同专辑/母带（用户手动「到单曲里找别的相同歌曲」找的就是它们），
+   * 卡在 5 秒会把唯一能播的那条也判掉。版本标记仍然严格一致——不会拿伴奏/remix 顶替。
    */
   private async findSubstitute(track: Track): Promise<Track | undefined> {
     const keyword = `${track.name} ${track.artists[0]?.name ?? ''}`.trim()
@@ -935,11 +957,17 @@ export class PlayerController extends EventEmitter {
     const candidates = result.songs ?? []
     for (const candidate of candidates) {
       if (candidate.id === track.id) continue
-      if (!matchesTrack(track, {
-        title: candidate.name,
-        artist: candidate.artists[0]?.name ?? '',
-        durationMS: candidate.durationMS
-      })) {
+      if (
+        !matchesTrack(
+          track,
+          {
+            title: candidate.name,
+            artist: candidate.artists[0]?.name ?? '',
+            durationMS: candidate.durationMS
+          },
+          { durationToleranceMS: 20_000 }
+        )
+      ) {
         continue
       }
       // pl > 0 或 cs 表示这条记录对当前账号可播（含可用的付费/会员判定）。
@@ -985,11 +1013,12 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
-   * 起播后延迟 `CACHE_START_DELAY_MS` 再排队做整首缓存。
-   * 刚出声的那十几秒是缓冲最脆弱的时候，mpv 还要建连、填 demuxer 缓存，
-   * 这时再开一条全速下载会直接抢带宽（源站限速时尤其明显，表现为起播卡
-   * 或中途 underrun）；延迟一下、并且串行化（同一时刻只下载一首），
-   * 既保住听感，缓存也照样能攒起来。
+   * 排队做整首缓存。**只有在这一首已经不在播的时候才真的下载**：
+   * 边播边下会跟 mpv 抢同一条 CDN 连接（源站限速时尤其明显），用户听到的就是
+   * 「一卡一卡」——缓存是为了下次听得更顺，不能反过来毁掉这一次。
+   *
+   * 触发时机：切到下一首时补上一首、暂停时补当前这一首；如果一直在播同一首，
+   * 就每隔 CACHE_START_DELAY_MS 再等一轮（宁可不缓存，也不抢播放的带宽）。
    */
   private scheduleCacheInBackground(
     track: Track,
@@ -999,12 +1028,34 @@ export class PlayerController extends EventEmitter {
     variant: string
   ): void {
     if (!this.deps.cache) return
+    const previous = this.pendingCache
+    this.pendingCache = { track, level, url, format, variant }
+    // 上一首已经不在播了：趁现在把它的整首下载补上（这时不抢 mpv 的带宽）。
+    if (previous && previous.track.id !== track.id) void this.flushPendingCache(previous)
+    this.armCacheTimer()
+  }
+
+  private armCacheTimer(): void {
+    if (this.cacheTimer) return
     const timer = setTimeout(() => {
-      this.cacheQueue = this.cacheQueue
-        .then(() => this.cacheInBackground(track, level, url, format, variant))
-        .catch(() => undefined)
+      this.cacheTimer = undefined
+      void this.flushPendingCache()
     }, CACHE_START_DELAY_MS)
+    this.cacheTimer = timer
     timer.unref?.()
+  }
+
+  /** 下载 `target`（默认取待缓存的那一首）；还在播同一首就再等一轮。 */
+  private async flushPendingCache(target = this.pendingCache): Promise<void> {
+    if (!target) return
+    if (this.playing && this.loadedTrackId === target.track.id) {
+      this.armCacheTimer()
+      return
+    }
+    if (this.pendingCache === target) this.pendingCache = undefined
+    this.cacheQueue = this.cacheQueue
+      .then(() => this.cacheInBackground(target.track, target.level, target.url, target.format, target.variant))
+      .catch(() => undefined)
   }
 
   private async cacheInBackground(
@@ -1035,6 +1086,8 @@ export class PlayerController extends EventEmitter {
     this.playing = false
     this.stopPositionTimer()
     this.emitSnapshot()
+    // 暂停是难得的空窗：这时候把待缓存的整首下回来，不跟播放抢带宽。
+    void this.flushPendingCache()
   }
 
   async toggle(): Promise<void> {
@@ -1103,21 +1156,22 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
-   * 换音质：拿当前这首歌按新档位重新解析一次，从原来的位置接着播。
+   * 换音质：**先把新档位的地址解析好，再动 mpv**。
    *
-   * 必须先把「上一次解析好的音源」丢掉：`entry.preResolved*` 与 `prefetchedSources`
-   * 都是按 track.id 缓存的、跟音质无关 —— 不清掉就会原样复用旧档位的地址，
-   * 用户看到的就是「切到标准音质又自己弹回极高」（snapshot 里的 servedQuality 没变，
-   * 底部那个音质下拉框是受控的，于是一起弹回去）。
+   * 顺序是这里的关键（用户反馈「播到一半切音质就半天加载不出来、不播放」）：
+   * 解析这几秒里旧档位照常出声、进度条不归零；解析失败就完全无感——连
+   * servedQuality 都不动，更不会跳下一首。成功后用 `mpv.play(source, position)`
+   * 带位置一次到位，中途不经过 playIndex，所以 position 不会被清零、也不会重发
+   * onTrackChanged（歌名闪一下、进度条弹回 0 都是这么来的）。
    *
-   * 位置：playIndex 会先把 position 归零，所以解析成功后要 seek 回原处；
-   * 同一首歌 id 不变，`playIndex` 不会 unload，mpv 只是换一个文件接着放，
-   * 不会从头重新开始。换档失败时退回原来那一档，绝不顺手跳下一首。
+   * 为什么必须清预解析缓存：`entry.preResolved*` 与 `prefetchedSources` 都是按
+   * track.id 缓存的、跟音质无关，不清就会原样复用旧档位的地址（表现为「切到标准
+   * 音质又自己弹回极高」，底部那个受控的音质下拉框跟着弹回去）。
    */
   async reloadCurrentTrack(): Promise<void> {
     if (this.index < 0) return
     const entry = this.queue[this.index]
-    // 站外曲目（汽水/酷狗/酷我搜来的歌）的音质由音源决定，换档没有意义，
+    // 站外曲目（汽水/酷狗/酷我/QQ 搜来的歌）的音质由音源决定，换档没有意义，
     // 而且它的地址只存在于 preResolved 里，清了就播不了。
     if (entry.track.id < 0) return
     const position = this.position
@@ -1125,7 +1179,8 @@ export class PlayerController extends EventEmitter {
     const previous = {
       servedQuality: this.servedQuality,
       servedBitrate: this.servedBitrate,
-      servedFrom: this.servedFrom
+      servedFrom: this.servedFrom,
+      source: this.source
     }
     entry.preResolved = undefined
     entry.preResolvedFull = undefined
@@ -1137,18 +1192,71 @@ export class PlayerController extends EventEmitter {
     }
     this.prefetchedSources.delete(entry.track.id)
     this.prefetchInflight.delete(entry.track.id)
+
+    let resolved: ResolvedPlayback
     try {
-      await this.playIndex(this.index, { qualityReload: true })
-      if (position > 0) await this.seek(position)
-      if (wasPlaying && !this.playing) await this.play()
+      resolved = await withTimeout(
+        this.resolveSource(entry.track, entry),
+        QUALITY_RELOAD_TIMEOUT_MS,
+        `切换音质《${entry.track.name}》`
+      )
+      // 解析期间用户可能已经切歌：这次换档作废，绝不动新歌的播放。
+      if (this.queue[this.index] !== entry) return
+      const remote = !resolved.cached && resolved.remoteURL ? resolved.remoteURL : undefined
+      if (remote && resolved.servedFrom) {
+        const probe = await this.probeRemote(remote, PROBE_TIMEOUT_MS)
+        if (!probe.ok || looksLikeNoticeBySize(probe.totalBytes, entry.track.durationMS / 1000)) {
+          throw new Error(probe.error ?? '音源探测未通过')
+        }
+      }
+      if (this.queue[this.index] !== entry) return
     } catch (cause) {
-      // 失败就静默退回原来那一档：不给用户弹任何提示文字。
-      this.deps.log?.(`切换音质失败，保留原音质: ${String(cause)}`)
+      // 失败静默：不弹提示文字、不打断当前播放，档位显示维持原样。
+      this.deps.log?.(`切换音质失败，保留原音质: ${describeError(cause)}`)
       this.servedQuality = previous.servedQuality
       this.servedBitrate = previous.servedBitrate
       this.servedFrom = previous.servedFrom
-      if (position > 0) await this.seek(position).catch(() => undefined)
-      if (wasPlaying) await this.play().catch(() => undefined)
+      this.source = previous.source
+      this.emitSnapshot()
+      return
+    }
+
+    try {
+      await this.deps.mpv.play(resolved.source, position)
+      this.servedQuality = resolved.servedFrom
+        ? resolved.claimedLevel
+        : (resolved.claimedLevel ?? resolved.level)
+      this.servedBitrate = resolved.bitrate
+      this.servedFrom = resolved.servedFrom ?? resolved.servedNote
+      this.source = resolved.source
+      this.position = position
+      this.duration = entry.track.durationMS / 1000
+      this.loading = false
+      this.error = undefined
+      this.playing = wasPlaying
+      if (wasPlaying) {
+        this.startPositionTimer()
+      } else {
+        await this.deps.mpv.setPaused(true).catch(() => undefined)
+        this.stopPositionTimer()
+      }
+      if (!resolved.cached && resolved.remoteURL) {
+        this.scheduleCacheInBackground(
+          entry.track,
+          resolved.level,
+          resolved.remoteURL,
+          resolved.format,
+          resolved.cacheVariant
+        )
+      }
+      this.emitSnapshot()
+    } catch (cause) {
+      this.deps.log?.(`切换音质失败（新地址没接住）: ${describeError(cause)}`)
+      this.servedQuality = previous.servedQuality
+      this.servedBitrate = previous.servedBitrate
+      this.servedFrom = previous.servedFrom
+      this.source = previous.source
+      this.loading = false
       this.emitSnapshot()
     }
   }
