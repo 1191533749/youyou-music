@@ -157,51 +157,6 @@
   gap: 12px;
 }
 
-/* 日期条：最近七天，只有今天可点（日推只提供当天一份）。 */
-.home-dates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.home-date {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background: var(--glass-weak);
-  color: var(--text-tertiary);
-  font-family: inherit;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
-}
-
-/* 日期是每日推荐历史的入口：hover 提亮一档，键盘聚焦给可见描边。 */
-.home-date:hover {
-  background: var(--glass-strong);
-  color: var(--text-secondary);
-}
-
-.home-date:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.home-date.is-today {
-  background: var(--accent-gradient);
-  /* 同 .chip.is-active：不让渐变平铺进 1px 边框圈，否则左弧会露出深红那头。 */
-  background-origin: border-box;
-  border-color: transparent;
-  color: var(--text-on-accent);
-  font-weight: 600;
-}
-
-.home-date.is-today:hover {
-  color: var(--text-on-accent);
-}
-
 /* 单块板块的加载 / 空态：比整页 placeholder 轻，四块各自独立。 */
 .home-state {
   display: inline-flex;

@@ -805,6 +805,17 @@
   color: inherit;
 }
 
+/* --- 真全屏歌词：不出现滚动条 ---------------------------------------------
+   歌词靠 JS 自动跟随滚动（NowPlaying 自己算 scrollTop），滚动条在沉浸式全屏里
+   只是噪点，上下与左右都不要；滚轮、拖拽滚动本身照常工作。 */
+.np-fullscreen .np-lyrics__list {
+  scrollbar-width: none;
+}
+
+.np-fullscreen .np-lyrics__list::-webkit-scrollbar {
+  display: none;
+}
+
 /* --- 真全屏空闲：把控件收起来 ---------------------------------------------
    类名由 lib/fullscreenIdle.ts 挂在 <html> 上。过渡始终写在元素上，进出都顺滑；
    收起后关掉 pointer-events，空白处不再挡点击。

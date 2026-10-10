@@ -165,19 +165,26 @@ export default function Together(): JSX.Element {
   const [useCustom, setUseCustom] = useState(false)
   const [customAmount, setCustomAmount] = useState('')
 
-  // 登录后自动连中继：用户不需要点任何按钮，也没有断开入口（断线由 relay 客户端
-  // 自己重连）。退出登录会重置标记，重新登录时再次自动连接。
+  // 登录**且账号资料就绪**（auth.profile.userId 到手）后才自动连中继：连得太早时 hello
+  // 里还没有 uid 与头像，服务器会按「听友N」把本人登记成一个无头像的陌生听友——雷达上
+  // 那个幽灵听友其实就是自己。connect 时把 uid/昵称/头像直接灌进第一条 hello，保证
+  // 服务器从第一刻起就按真实账号登记。用户不需要点任何按钮，也没有断开入口（断线由
+  // relay 客户端自己重连）。退出登录会重置标记，重新登录时再次自动连接。
   const autoConnected = useRef(false)
+  const profileUserId = auth.profile?.userId
   useEffect(() => {
-    if (!auth.loggedIn) {
+    if (!auth.loggedIn || profileUserId == null) {
       autoConnected.current = false
       return
     }
     if (autoConnected.current) return
     autoConnected.current = true
-    together.connect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.loggedIn])
+    together.connect({
+      uid: String(profileUserId),
+      nickname: auth.profile?.nickname,
+      avatar: auth.profile?.avatarUrl
+    })
+  }, [auth.loggedIn, profileUserId, together])
 
   // 登录后拉一次账号资料（性别 / 年龄 / 地区 / 签名），灌进 profile 供找听友使用。
   const detailLoaded = useRef(false)

@@ -68,10 +68,19 @@ export function useAuthStore(): AuthStore {
         if (state.status === 'confirmed') {
           stopPolling()
           setLoggedIn(true)
-          if (state.profile) setProfile(state.profile)
-          else {
-            const fresh = await call('auth:profile').catch(() => undefined)
-            if (fresh) setProfile(fresh)
+          if (state.profile) {
+            setProfile(state.profile)
+          } else {
+            // 主进程 803 已重试过账户接口；这里再兜一轮，别把
+            // 「已登录但没头像」留到下次重启（用户明确反馈过）。
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+              const fresh = await call('auth:profile').catch(() => undefined)
+              if (fresh) {
+                setProfile(fresh)
+                break
+              }
+              await new Promise((resolve) => setTimeout(resolve, 600))
+            }
           }
           return
         }

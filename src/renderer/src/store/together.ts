@@ -108,7 +108,8 @@ export interface TogetherStore {
   setUrl: (url: string) => void
   setToken: (token: string) => void
   setProfile: (profile: RelayProfile) => void
-  connect: () => void
+  /** 连接中继；withProfile 会合并进第一条 hello（保证首个 hello 就带 uid/头像，不留幽灵）。 */
+  connect: (withProfile?: RelayProfile) => void
   disconnect: () => void
   listRooms: () => void
   listListeners: (filter?: { gender?: string; region?: string; minAge?: number; maxAge?: number }) => void
@@ -350,7 +351,7 @@ export function useTogetherStore(): TogetherStore {
       setUrl: setUrlState,
       setToken: setTokenState,
       setProfile: (patch) => setProfileState((previous) => ({ ...previous, ...patch })),
-      connect: () => client.connect(profile),
+      connect: (withProfile) => client.connect(withProfile ?? profile),
       disconnect: () => client.close(),
       listRooms: () => client.listRooms(),
       listListeners: (filter) => client.listListeners(filter),

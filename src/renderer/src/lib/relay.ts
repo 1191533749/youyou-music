@@ -163,7 +163,21 @@ export class RelayClient {
     }
     this.socket = socket
 
+    // CONNECTING 状态挂死（TLS/网络僵住时不触发 error/close）会导致永远连不上：
+    // 12 秒还没 open 就主动关掉，close 事件会走 scheduleReconnect 重试。
+    let connectTimer: number | undefined
+    const clearConnectTimer = (): void => {
+      if (connectTimer !== undefined) {
+        globalThis.clearTimeout(connectTimer)
+        connectTimer = undefined
+      }
+    }
+    connectTimer = globalThis.setTimeout(() => {
+      if (socket.readyState === 0) socket.close()
+    }, 12000) as unknown as number
+
     socket.addEventListener('open', () => {
+      clearConnectTimer()
       this.reconnectDelay = 1000
       this.options.onStatus?.('connected')
       this.send({ type: 'hello', profile: this.profile })
@@ -178,6 +192,7 @@ export class RelayClient {
       this.options.onMessage?.(message)
     })
     socket.addEventListener('close', (event) => {
+      clearConnectTimer()
       // 4000 = 服务端判定「同一账号已有更新的连接」：这是主动顶掉旧连接，
       // 不是网络故障，不能自动重连，否则两个连接会互相顶、无限循环。
       if (event.code === 4000) {
@@ -189,6 +204,7 @@ export class RelayClient {
       if (!this.closedByUser) this.scheduleReconnect()
     })
     socket.addEventListener('error', () => {
+      clearConnectTimer()
       this.options.onStatus?.('error')
     })
   }

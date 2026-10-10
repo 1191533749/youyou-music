@@ -1,7 +1,7 @@
 /**
  * 首页（内容首页排布）。
  *
- * 从上到下依次是：问候语、今日热歌（日期条 + 播放全部 + 封面网格）、
+ * 从上到下依次是：问候语、今日热歌（播放全部 + 封面网格）、
  * 猜你喜欢或推荐歌单、排行榜（横滑卡片，带前三预览）、热门歌手（圆形头像横滑）、
  * 精品歌单。
  *
@@ -14,7 +14,6 @@ import {
   ArtCard,
   call,
   coverUrl,
-  formatDate,
   formatDuration,
   formatPlayCount,
   useAuthStore,
@@ -86,9 +85,7 @@ export default function Home(): JSX.Element {
         <div>
           <h1 className="page__title">{title}</h1>
           <div className="page__subtitle">
-            {auth.loggedIn
-              ? `推荐每天更新，今天是 ${formatDate(Date.now())}`
-              : '登录后可以拿到属于你的每日推荐'}
+            {auth.loggedIn ? '推荐每天更新' : '登录后可以拿到属于你的每日推荐'}
           </div>
         </div>
       </header>
@@ -97,7 +94,7 @@ export default function Home(): JSX.Element {
         <SectionHeader
           icon={IconCalendar}
           title="今日热歌"
-          hint={`今天 ${formatDate(Date.now())}`}
+          hint="为你随机挑选的今日热歌"
           action={
             hotSongs.length > 0 ? (
               <button
@@ -111,7 +108,6 @@ export default function Home(): JSX.Element {
             ) : null
           }
         />
-        <DateStrip />
         {!auth.loggedIn && !auth.loading ? (
           <div className="home-hint">
             <div className="home-hint__title">登录后就能看到每日推荐</div>
@@ -129,7 +125,7 @@ export default function Home(): JSX.Element {
             error={hot.error}
             onRetry={hot.reload}
             isEmpty={hotSongs.length === 0}
-            emptyMessage="今天的每日推荐还没生成，过一会儿再来看看"
+            emptyMessage="每日推荐还没生成，过一会儿再来看看"
           >
             <div className="grid grid--playlists">
               {hotSongs.map((track, index) => (
@@ -311,45 +307,6 @@ function SectionShell({
     return <div className="home-empty">{emptyMessage}</div>
   }
   return <>{children}</>
-}
-
-/**
- * 日期条：最近七天，点任意一天进「每日推荐」页看那天的日推。
- *
- * 历史日期在主进程是按天落盘的（userData/daily-history/<日期>.json），所以过去几天
- * 也点得动、看得到；当天高亮，和侧栏入口一样走 reset（daily 是一级页面）。
- */
-function DateStrip(): JSX.Element {
-  const navigation = useNavigation()
-  const days = useMemo(() => {
-    const list: Array<{ key: string; label: string; today: boolean }> = []
-    for (let back = 6; back >= 0; back -= 1) {
-      const date = new Date()
-      date.setDate(date.getDate() - back)
-      list.push({
-        key: formatDate(date.getTime()),
-        label: back === 0 ? '今天' : back === 1 ? '昨天' : `${date.getMonth() + 1}/${date.getDate()}`,
-        today: back === 0
-      })
-    }
-    return list
-  }, [])
-
-  return (
-    <div className="home-dates">
-      {days.map((day) => (
-        <button
-          key={day.key}
-          type="button"
-          className={`home-date${day.today ? ' is-today' : ''}`}
-          title={`${day.key} 的每日推荐`}
-          onClick={() => navigation.reset({ name: 'daily', date: day.key })}
-        >
-          {day.label}
-        </button>
-      ))}
-    </div>
-  )
 }
 
 function PlaylistCard({

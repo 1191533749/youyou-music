@@ -144,14 +144,18 @@ function addBalance(uid, delta) {
 async function handleMessage(client, message) {
   switch (message.type) {
     case 'hello': {
+      // 合并而非整体替换：旧客户端会先发一条不带 uid 的 hello、再补发昵称/头像，
+      // 若整体替换，后面那条不带 uid 的 hello 会把已登记的真实 uid 又抹回 client.id。
+      // 合并后，只有真正提供了新值的字段才更新，uid 一旦登记就稳定。
+      const previous = client.profile
       client.profile = {
-        uid: String(message.profile?.uid ?? client.id),
-        nickname: String(message.profile?.nickname ?? `听友${client.id}`),
-        avatar: message.profile?.avatar,
-        gender: message.profile?.gender,
-        age: message.profile?.age,
-        region: message.profile?.region,
-        signature: message.profile?.signature
+        uid: String(message.profile?.uid ?? previous?.uid ?? client.id),
+        nickname: String(message.profile?.nickname ?? previous?.nickname ?? `听友${client.id}`),
+        avatar: message.profile?.avatar ?? previous?.avatar,
+        gender: message.profile?.gender ?? previous?.gender,
+        age: message.profile?.age ?? previous?.age,
+        region: message.profile?.region ?? previous?.region,
+        signature: message.profile?.signature ?? previous?.signature
       }
       state.users[client.profile.uid] = client.profile
       // 同一账号只保留最新一条连接：把更早的连接顶掉（close code 4000，

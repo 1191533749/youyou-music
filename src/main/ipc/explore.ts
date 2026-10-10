@@ -330,8 +330,29 @@ export function registerExploreHandlers(context: AppContext): void {
     return tracks(context, await context.api.similarSongs(id, limit ?? 30))
   })
 
+  /**
+   * 私人漫游一次接口只给 3 首左右，用户要的是「按口味推荐的长队列」，
+   * 所以这里连取多批：按 id 去重凑到目标数量，接口没货（空响应/全是重
+   * 复）就提前收手，绝不无限打接口。
+   */
   defineHandler('track:fm', async () => {
-    return tracks(context, await context.api.personalFM())
+    const FM_TARGET = 30
+    const FM_MAX_ROUNDS = 12
+    const seen = new Set<number>()
+    const pool: Track[] = []
+    for (let round = 0; round < FM_MAX_ROUNDS; round += 1) {
+      const batch = await context.api.personalFM()
+      const fresh = batch.filter((track) => !seen.has(track.id))
+      if (fresh.length === 0) break
+      for (const track of fresh) {
+        seen.add(track.id)
+        pool.push(track)
+      }
+      if (pool.length >= FM_TARGET) break
+      // 批次之间留一小口气，别把限流窗口顶穿。
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+    return tracks(context, pool)
   })
 
   defineHandler('track:fmTrash', async ({ id }) => {

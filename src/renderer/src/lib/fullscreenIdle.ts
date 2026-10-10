@@ -9,6 +9,9 @@
  * 订阅仍然包在 try/catch 里 —— 万一事件名还没登记进 preload 白名单
  * （`src/preload/index.ts:39` 对未登记事件直接返回空操作），就按 false 处理，
  * 再由下面的窗口尺寸兜底判断，功能不会因为事件缺失而整体失效。
+ *
+ * 只要是真全屏，超时后一定隐藏：不看鼠标停在哪、也不看上一秒点过哪个按钮
+ * （焦点仍留在按钮上也不例外），任何鼠标 / 键盘 / 滚轮操作都会立刻唤醒控件。
  */
 import { useEffect } from 'react'
 
@@ -18,8 +21,6 @@ export const IDLE_CLASS = 'fullscreen-idle'
 const IDLE_DELAY_MS = 3000
 /** mousemove 节流：够跟手，又不会每像素都清一次定时器。 */
 const MOVE_THROTTLE_MS = 120
-/** 焦点还留在控件上时不隐藏，否则键盘用户会对着看不见的按钮操作。 */
-const CONTROL_SELECTOR = '.np-fs__bar, .np-fs__dock, .player-bar'
 
 interface FullscreenEvent {
   fullscreen?: boolean
@@ -54,18 +55,9 @@ export function useFullscreenIdle(): void {
       timer = undefined
     }
 
-    const focusInControls = (): boolean => {
-      const active = document.activeElement
-      return active instanceof HTMLElement && active !== document.body && active.closest(CONTROL_SELECTOR) !== null
-    }
-
     const hide = (): void => {
       timer = undefined
-      // 用户正把焦点放在控件里（例如键盘调音量）：先不藏，下个周期再说。
-      if (focusInControls()) {
-        timer = window.setTimeout(hide, IDLE_DELAY_MS)
-        return
-      }
+      // 无条件收起：用户要求真全屏下 3 秒无操作必隐藏，不因焦点停在按钮上而推迟。
       root.classList.add(IDLE_CLASS)
     }
 

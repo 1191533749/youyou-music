@@ -97,16 +97,25 @@ export function registerAuthHandlers(context: AppContext): void {
         }
         session = undefined
         // Fetch the profile and VIP tier right away: the tier decides whether
-        // 无损 and Hi-Res are playable.
+        // 无损 and Hi-Res are playable. 刚种下 cookie 的这一两秒正是限流高发
+        // 窗口（接口偶发空响应），重试几次，别让「已登录但没头像」拖到重启。
         let profile: UserProfileDTO | undefined
-        try {
-          const account = await context.api.userAccount()
-          if (account) {
-            setKnownUID(account.userId)
-            profile = profileDTO(context, account)
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const account = await context.api.userAccount()
+            if (account) {
+              setKnownUID(account.userId)
+              profile = profileDTO(context, account)
+              break
+            }
+          } catch (cause) {
+            context.log(`登录后获取账户信息失败(第 ${attempt + 1} 次): ${String(cause)}`)
           }
-        } catch (cause) {
-          context.log(`登录后获取账户信息失败: ${String(cause)}`)
+          await new Promise((resolve) => setTimeout(resolve, 400))
+        }
+        // 广播一次：侧边栏头像等 auth 订阅方当场刷新，不用等下次事件。
+        if (profile) {
+          context.emit('auth:changed', { loggedIn: true, profile })
         }
         return { status: 'confirmed', nickname: profile?.nickname ?? response.nickname, profile }
       }
