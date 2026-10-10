@@ -11,6 +11,7 @@ import { defineHandler } from './registry.js'
 import { toLyricsDTO } from '../lyrics/service.js'
 import { resolveMpvBinary } from '../audio/mpv.js'
 import { encodeQR } from '../qrcode.js'
+import { setLogCollectorEnabled } from '../logCollector.js'
 import { QUALITY_OPTIONS, type SettingsDTO } from '@shared/types'
 import type { AppContext } from '../context.js'
 
@@ -42,8 +43,17 @@ export function registerAppHandlers(context: AppContext): void {
   })
 
   defineHandler('settings:update', async (patch: Partial<SettingsDTO>) => {
+    const previousQuality = context.settings.current.quality
     const next = await context.settings.update(patch)
     if (patch.volume !== undefined) await context.player.setVolume(next.volume)
+    /*
+     * 改「默认音质」要立刻作用到正在播的那首歌：用户要的是「设置里改成标准，
+     * 底下这首也马上切过来，状态栏文字一起变」，而不是等下一首才生效。
+     */
+    if (patch.quality !== undefined && next.quality !== previousQuality) {
+      await context.player.reloadCurrentTrack()
+    }
+    if (patch.collectLogs !== undefined) setLogCollectorEnabled(next.collectLogs)
     if (patch.audioDevice !== undefined) {
       await context.mpv.setAudioDevice(patch.audioDevice || 'auto').catch((cause) => {
         context.log(`切换音频设备失败: ${String(cause)}`)

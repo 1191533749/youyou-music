@@ -18,6 +18,11 @@ import { NeteaseClient } from '../src/main/netease/client.js'
 import { NeteaseAPI } from '../src/main/netease/api.js'
 import { UnblockService } from '../src/main/unblock/service.js'
 import { PlayerController } from '../src/main/player/controller.js'
+import {
+  looksLikeNoticeBySize,
+  probeStream,
+  type StreamProbeResult
+} from '../src/main/player/streamProbe.js'
 import type { Track } from '../src/main/netease/models.js'
 
 /** 只实现 PlayerController 会用到的那几个方法。 */
@@ -77,13 +82,17 @@ const VIP_TRACK: Track = {
   isCloud: false
 }
 
-function buildPlayer(options: { unblock: boolean }) {
+function buildPlayer(options: {
+  unblock: boolean
+  /** 注入假的音源探测：不注入就走真实探测（默认行为）。 */
+  probe?: (url: string, timeoutMS: number) => Promise<StreamProbeResult>
+}) {
   const client = new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'youyou-unblock-')) })
   const api = new NeteaseAPI(client)
   const mpv = new FakeMpv()
   const unblock = new UnblockService({
     isEnabled: () => options.unblock,
-    enabledSources: () => ['pyncmd', 'kugou', 'kuwo'],
+    enabledSources: () => ['qishui', 'kugou', 'kuwo'],
     log: () => undefined
   })
   const player = new PlayerController({
@@ -91,20 +100,30 @@ function buildPlayer(options: { unblock: boolean }) {
     mpv: mpv as never,
     unblock,
     isUnblockEnabled: () => options.unblock,
-    unblockSourceIds: () => ['pyncmd', 'kugou', 'kuwo'],
+    unblockSourceIds: () => ['qishui', 'kugou', 'kuwo'],
     getQuality: () => 'exhigh',
     autoDowngrade: () => true,
     getScrobble: () => false,
     getLoggedIn: () => false,
     getVipType: () => 0,
-    log: () => undefined
+    log: () => undefined,
+    probe: options.probe
   })
   return { player, mpv }
 }
 
 describe('受限歌曲换源播放', () => {
   it('开启换源后，VIP 单曲能拿到可播放地址并标记来源', async () => {
-    const { player, mpv } = buildPlayer({ unblock: true })
+    // 注入「体积合格」的探测结果：这里只验证解析链路的接线（拿到第三方地址、
+    // 标记来源、不再进静音校验），探测本身由下面的真实网络用例覆盖。
+    const probed: string[] = []
+    const { player, mpv } = buildPlayer({
+      unblock: true,
+      probe: async (url) => {
+        probed.push(url)
+        return { ok: true, status: 206, totalBytes: 12_000_000, elapsedMS: 5 }
+      }
+    })
     await player.setQueue([VIP_TRACK], 0)
 
     const snapshot = player.snapshot()
@@ -113,11 +132,37 @@ describe('受限歌曲换源播放', () => {
         `error=${snapshot.error ?? '-'}\n     地址=${mpv.opened[0]?.slice(0, 78) ?? '(未打开任何地址)'}`
     )
 
+    expect(probed.length).toBeGreaterThan(0)
     expect(mpv.opened.length).toBe(1)
     expect(mpv.opened[0]).toMatch(/^https?:\/\//)
     expect(snapshot.error).toBeUndefined()
     // 官方地址不可能拿到，所以来源必须是第三方音源之一。
     expect(snapshot.servedFrom).toBeTruthy()
+    await player.shutdown()
+  }, 120_000)
+
+  it('真实探测下，交给 mpv 的第三方地址必须是体积合格的真歌', async () => {
+    // 不注入探测：走真实的 Range 探测。晴天在第三方音源上只拿得到提示音
+    // 占位文件（实测酷我 181,521 字节 / 269 秒 ≈ 5.4kbps），必须被当场拦下，
+    // 而不是先播 2.5 秒让用户听见提示音。
+    const { player, mpv } = buildPlayer({ unblock: true })
+    await player.setQueue([VIP_TRACK], 0).catch(() => undefined)
+
+    const snapshot = player.snapshot()
+    console.log(
+      `结果：error=${snapshot.error ?? '-'} 打开地址=${JSON.stringify(mpv.opened)}`
+    )
+    if (mpv.opened.length === 0) {
+      // 拦下了就必须给出中性错误，不能静默什么都不做。
+      expect(snapshot.error).toBeTruthy()
+    } else {
+      // 只要播了，就一定是体积合格的流（不是十几秒的提示音占位文件）。
+      for (const url of mpv.opened) {
+        const probe = await probeStream(url, 5_000)
+        expect(probe.ok).toBe(true)
+        expect(looksLikeNoticeBySize(probe.totalBytes, VIP_TRACK.durationMS / 1000)).toBe(false)
+      }
+    }
     await player.shutdown()
   }, 120_000)
 
@@ -203,7 +248,9 @@ describe('受限歌曲换源播放', () => {
       getScrobble: () => false,
       getLoggedIn: () => false,
       getVipType: () => 0,
-      log: () => undefined
+      log: () => undefined,
+      // 探测拿不到体积（分块传输）：退回「静音播放 + 读时长」的兜底校验。
+      probe: async () => ({ ok: true, elapsedMS: 4 })
     })
     await player.setQueue([VIP_TRACK], 0)
 
@@ -283,7 +330,9 @@ describe('受限歌曲换源播放', () => {
       getScrobble: () => false,
       getLoggedIn: () => false,
       getVipType: () => 0,
-      log: () => undefined
+      log: () => undefined,
+      // 同上：体积未知 → 走静音 + 时长的兜底校验，这条用例才覆盖得到静音恢复。
+      probe: async () => ({ ok: true, elapsedMS: 4 })
     })
     await player.setQueue([VIP_TRACK], 0).catch(() => undefined)
 
@@ -299,6 +348,69 @@ describe('受限歌曲换源播放', () => {
     expect(snapshot.muted).toBe(false)
     expect(mpv.muteCalls[0]).toBe(true)
     expect(mpv.muteCalls[mpv.muteCalls.length - 1]).toBe(false)
+    await player.shutdown()
+  }, 60_000)
+
+  it('预解析成功后顺手预热音源，切歌直接复用探测结果（不再联网）', async () => {
+    const SECOND: Track = { ...VIP_TRACK, id: 186017, name: '以父之名' }
+    const logs: string[] = []
+    const probed: string[] = []
+    const mpv = new FakeMpv()
+    const api = new Proxy(
+      {},
+      {
+        get: () => () => Promise.reject(new Error('stub: no netease'))
+      }
+    ) as never
+    const unblock = {
+      enabled: true,
+      // 每首歌给一条独立地址，方便看清「预热的是下一条」。
+      resolve: async (track: Track) => ({
+        source: {
+          id: 'kuwo',
+          url: `https://stub/${track.id}.mp3`,
+          displayName: '酷我音乐',
+          bitrate: 320
+        },
+        attempted: new Set<string>(['kuwo'])
+      })
+    }
+    const player = new PlayerController({
+      api,
+      mpv: mpv as never,
+      unblock: unblock as never,
+      isUnblockEnabled: () => true,
+      unblockSourceIds: () => ['kuwo'],
+      getQuality: () => 'exhigh',
+      autoDowngrade: () => true,
+      getScrobble: () => false,
+      getLoggedIn: () => false,
+      getVipType: () => 0,
+      log: (message) => logs.push(message),
+      probe: async (url) => {
+        probed.push(url)
+        return { ok: true, status: 206, totalBytes: 12_000_000, elapsedMS: 6 }
+      }
+    })
+    await player.setQueue([VIP_TRACK, SECOND], 0)
+    // 预解析是后台任务：等它跑完（注入的探测立即返回，几十毫秒足够）。
+    await new Promise((resolve) => setTimeout(resolve, 60))
+
+    const secondUrl = 'https://stub/186017.mp3'
+    console.log(
+      `结果：预解析=${logs.filter((line) => line.startsWith('已预解析')).join('|')} ` +
+        `预热=${logs.filter((line) => line.startsWith('已预热')).join('|')} ` +
+        `探测=${JSON.stringify(probed)}`
+    )
+    expect(logs.some((line) => line.startsWith('已预解析下一首：以父之名'))).toBe(true)
+    expect(logs.some((line) => line.startsWith('已预热音源：以父之名'))).toBe(true)
+    // 预热探的是下一条的地址，而且只探一次。
+    expect(probed.filter((url) => url === secondUrl).length).toBe(1)
+
+    await player.next()
+    expect(mpv.opened[mpv.opened.length - 1]).toBe(secondUrl)
+    // 切歌复用预热结果：同一条地址没有被重复探测（这就是切歌不再等联网的原因）。
+    expect(probed.filter((url) => url === secondUrl).length).toBe(1)
     await player.shutdown()
   }, 60_000)
 })

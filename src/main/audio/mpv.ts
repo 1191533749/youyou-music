@@ -116,11 +116,14 @@ export class MpvController extends EventEmitter {
       '--volume-max=150',
       '--cache=yes',
       '--demuxer-max-bytes=64MiB',
-      '--demuxer-readahead-secs=30',
+      // 预读 120 秒：灰色曲走第三方 CDN 时快时慢，慢的时候靠这 120 秒缓冲
+      // 撑过去，避免播放中途缓冲耗尽（paused-for-cache）「咔一下」。
+      '--demuxer-readahead-secs=120',
       // NetEase serves FLAC/MP3 over https; let mpv verify but not block on
-      // slow CDNs for too long.
-      '--network-timeout=15',
-      '--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_delay_max=5',
+      // slow CDNs for too long. 9 秒足够正常 CDN 建连+首包；遇到已经死掉的
+      // 源，早点失败、早点重连，比让用户盯着 20 秒无声的「正在缓冲」强。
+      '--network-timeout=9',
+      '--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_delay_max=2',
       ...(this.options.audioDevice ? [`--audio-device=${this.options.audioDevice}`] : []),
       ...(this.options.extraArgs ?? [])
     ]

@@ -819,12 +819,15 @@ html[data-wallpaper='1'] .backdrop__grain {
   margin-bottom: 20px;
 }
 
-/* 圆形图标钮：只用箭头，不再是一枚写着「返回」的文字胶囊（用户嫌它别扭）。 */
-.top-row__back {
+/* 全站统一的返回按钮：圆形透明毛玻璃 + 只用箭头。
+   原先有三种形态（顶部圆钮、全屏文字胶囊、列表内文字胶囊），
+   按用户要求全部收敛成这一种（见 components/BackButton.tsx）。 */
+.back-button {
   justify-self: start;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
   width: 34px;
   height: 34px;
   padding: 0;
@@ -844,11 +847,11 @@ html[data-wallpaper='1'] .backdrop__grain {
     transform 0.18s ease;
 }
 
-.top-row__back svg {
+.back-button svg {
   display: block;
 }
 
-.top-row__back:hover:not(:disabled) {
+.back-button:hover:not(:disabled) {
   color: var(--accent);
   background: var(--glass-strong);
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
@@ -856,17 +859,13 @@ html[data-wallpaper='1'] .backdrop__grain {
   box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
-.top-row__back:active:not(:disabled) {
+.back-button:active:not(:disabled) {
   transform: translateX(-2px) scale(0.94);
 }
 
-.top-row__back:focus-visible {
+.back-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-.top-row__back.is-hidden {
-  visibility: hidden;
 }
 
 /* 居中的胶囊搜索条：小巧精致，不占满整行。 */

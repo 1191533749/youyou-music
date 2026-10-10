@@ -340,7 +340,7 @@ export class NeteaseClient {
         kind: 'failed',
         reason,
         error: new NeteaseAPIError('network', {
-          message: '网络请求失败：无法连接网易云，请检查网络后重试'
+          message: '服务器连接失败，请检查网络后重试'
         })
       }
     }

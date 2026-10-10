@@ -29,6 +29,61 @@ function tracks(context: AppContext, list: Track[]) {
   return toTracksDTO(list, ctx(context))
 }
 
+/** 一次想攒多少首漫游曲；攒满就不再打接口。 */
+const FM_TARGET = 30
+/** 单次填充最多打几轮接口（轮与轮之间留一口气，别把限流窗口顶穿）。 */
+const FM_MAX_ROUNDS = 12
+/** 去重表超过这个规模就清空，免得听得久了再也攒不到「新」歌。 */
+const FM_SEEN_LIMIT = 200
+
+/**
+ * 私人漫游曲池。
+ *
+ * 漫游接口一次只给 2~3 首、单次要 1 秒以上，现场连打十来次凑 30 首要二十秒
+ * （用户反馈「半天了还是 正在为你挑选漫游曲目」，要求最迟 1.5 秒出声）。
+ * 所以改成后台慢慢攒：进页面直接取现成的，取完立刻在后台接着攒下一批。
+ */
+const fmPool = {
+  tracks: [] as Track[],
+  seen: new Set<number>(),
+  filling: undefined as Promise<void> | undefined
+}
+
+/** 攒池子；同一时刻只跑一条填充链，重复调用复用进行中的那条。 */
+function fillFMPool(context: AppContext, rounds: number): Promise<void> {
+  const ongoing = fmPool.filling
+  if (ongoing) return ongoing
+  const task = (async () => {
+    for (let round = 0; round < rounds; round += 1) {
+      if (fmPool.tracks.length >= FM_TARGET) break
+      const batch = await context.api.personalFM()
+      const fresh = batch.filter((track) => !fmPool.seen.has(track.id))
+      if (fresh.length === 0) break
+      for (const track of fresh) {
+        if (fmPool.seen.size >= FM_SEEN_LIMIT) fmPool.seen.clear()
+        fmPool.seen.add(track.id)
+        fmPool.tracks.push(track)
+      }
+      if (fmPool.tracks.length >= FM_TARGET) break
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+  })()
+    .catch((cause) => {
+      // 攒池失败不算错误路径：下次进页面或补货会再试。
+      context.log(`私人漫游攒池失败: ${String(cause)}`)
+    })
+    .finally(() => {
+      fmPool.filling = undefined
+    })
+  fmPool.filling = task
+  return task
+}
+
+/** 启动后预热漫游曲池：用户真正进页面时 `track:fm` 才能秒回。 */
+export function warmFMPool(context: AppContext): void {
+  void fillFMPool(context, FM_MAX_ROUNDS)
+}
+
 export function registerExploreHandlers(context: AppContext): void {
   // --- home ---
 
@@ -231,6 +286,15 @@ export function registerExploreHandlers(context: AppContext): void {
             ? SearchType.artists
             : SearchType.playlists
     const result = await context.api.search(keywords, searchType, limit ?? 30, offset ?? 0)
+
+    // 后台预解析顶部曲目的第三方直链：用户点第一首歌时不必再等第三方解析那几秒。
+    // 只对单曲搜索生效（type 缺省也是歌曲），失败静默、不影响返回。
+    if ((type === undefined || type === 'songs') && result.songs?.length) {
+      for (const song of result.songs.slice(0, 3)) {
+        void context.player.prefetchSource(song)
+      }
+    }
+
     return {
       songs: result.songs ? tracks(context, result.songs) : undefined,
       albums: result.albums?.map(toAlbumDTO),
@@ -336,28 +400,15 @@ export function registerExploreHandlers(context: AppContext): void {
   })
 
   /**
-   * 私人漫游一次接口只给 3 首左右，用户要的是「按口味推荐的长队列」，
-   * 所以这里连取多批：按 id 去重凑到目标数量，接口没货（空响应/全是重
-   * 复）就提前收手，绝不无限打接口。
+   * 私人漫游：从预热好的曲池里取一批就走，不在请求里等十来轮接口。
+   * 池子空了才现场等一轮（约 1 秒多），取完立刻在后台把池子补回来，
+   * 供「队列快见底时补货」和下次进入使用。
    */
   defineHandler('track:fm', async () => {
-    const FM_TARGET = 30
-    const FM_MAX_ROUNDS = 12
-    const seen = new Set<number>()
-    const pool: Track[] = []
-    for (let round = 0; round < FM_MAX_ROUNDS; round += 1) {
-      const batch = await context.api.personalFM()
-      const fresh = batch.filter((track) => !seen.has(track.id))
-      if (fresh.length === 0) break
-      for (const track of fresh) {
-        seen.add(track.id)
-        pool.push(track)
-      }
-      if (pool.length >= FM_TARGET) break
-      // 批次之间留一小口气，别把限流窗口顶穿。
-      await new Promise((resolve) => setTimeout(resolve, 150))
-    }
-    return tracks(context, pool)
+    if (fmPool.tracks.length === 0) await fillFMPool(context, 1)
+    const take = fmPool.tracks.splice(0, fmPool.tracks.length)
+    void fillFMPool(context, FM_MAX_ROUNDS)
+    return tracks(context, take)
   })
 
   defineHandler('track:fmTrash', async ({ id }) => {

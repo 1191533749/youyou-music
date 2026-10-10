@@ -9,7 +9,7 @@
  * `explore:highQuality`），各自带 loading、错误重试与空态 —— 一条挂了不会让整页
  * 跟着白掉。调用一律走 contract 里的 call()，渲染进程不碰网络。
  */
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ArtCard,
   call,
@@ -210,6 +210,7 @@ export default function Home(): JSX.Element {
                 subtitle={`${artist.musicSize} 首`}
                 imageUrl={coverUrl(artist.picUrl, 240)}
                 round
+                eager
                 onClick={() => navigation.push({ name: 'artist', id: artist.id, title: artist.name })}
               />
             ))}
@@ -332,11 +333,15 @@ function PlaylistCard({
  * 就知道榜单是不是自己想听的。
  */
 function ToplistCard({ toplist, onOpen }: { toplist: ToplistDTO; onOpen: () => void }): JSX.Element {
+  const [broken, setBroken] = useState(false)
+  const cover = coverUrl(toplist.coverImgUrl, 320)
+  // 封面加载失败退回占位：榜单封面图偶尔加载不到，不能露出浏览器的破图图标。
+  useEffect(() => setBroken(false), [cover])
   return (
     <button type="button" className="card home-toplist" onClick={onOpen} title={toplist.name}>
       <div className="card__art">
-        {coverUrl(toplist.coverImgUrl, 320) ? (
-          <img src={coverUrl(toplist.coverImgUrl, 320)} alt="" loading="lazy" />
+        {cover && !broken ? (
+          <img src={cover} alt="" loading="eager" onError={() => setBroken(true)} />
         ) : (
           <span className="card__placeholder">
             <IconLayers size={26} />

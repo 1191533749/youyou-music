@@ -34,10 +34,11 @@ import {
 import { useToast } from '../components/Toast'
 
 /** 音源开关的展示信息；与主进程 `AUDIO_SOURCE_NAMES` 保持一致。 */
-const SOURCES: Array<{ id: 'pyncmd' | 'kugou' | 'kuwo'; name: string; hint: string }> = [
-  { id: 'pyncmd', name: 'pyncmd', hint: '按网易云歌曲 ID 直取，命中率不高但最精确' },
+const SOURCES: Array<{ id: 'qishui' | 'kugou' | 'kuwo' | 'qq'; name: string; hint: string }> = [
+  { id: 'qishui', name: '汽水音乐', hint: '抖音曲库，免登录直连，解析最快' },
   { id: 'kugou', name: '酷狗音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' },
-  { id: 'kuwo', name: '酷我音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' }
+  { id: 'kuwo', name: '酷我音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' },
+  { id: 'qq', name: 'QQ音乐', hint: '未登录只能覆盖部分免费歌，登录后更全' }
 ]
 
 /** 桌面歌词特效的显示名，与桌面歌词窗口共用同一套枚举。 */
@@ -263,7 +264,7 @@ export default function Settings(): JSX.Element {
     }
   }
 
-  const toggleSource = async (id: 'pyncmd' | 'kugou' | 'kuwo', enabled: boolean): Promise<void> => {
+  const toggleSource = async (id: 'qishui' | 'kugou' | 'kuwo' | 'qq', enabled: boolean): Promise<void> => {
     const current = settings.unblockSources ?? []
     const next = enabled ? [...current, id] : current.filter((item) => item !== id)
     // 保持固定优先级顺序，避免用户勾选顺序影响尝试次序。
@@ -552,6 +553,17 @@ export default function Settings(): JSX.Element {
           hint="使用显卡加速界面渲染；关闭后改用软件渲染，重启后生效。"
           checked={settings.hardwareAcceleration}
           onChange={(value) => void patch({ hardwareAcceleration: value })}
+        />
+      </section>
+
+      {/* 隐私与诊断：日志只上报程序自身的异常，不包含歌曲与账号数据。 */}
+      <section className="settings__group">
+        <h2>隐私与诊断</h2>
+        <SettingSwitch
+          label="收集日志"
+          hint="收集程序异常日志并上传服务器，用于定位问题、改进稳定性（不含歌曲与账号信息）。"
+          checked={settings.collectLogs}
+          onChange={(value) => void patch({ collectLogs: value })}
         />
       </section>
 

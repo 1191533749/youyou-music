@@ -344,31 +344,13 @@
 
 /*
  * 展开列表上方的返回条：展开是页面内状态，顶部导航的返回按钮管不到它，所以
- * 这里给一个同款玻璃胶囊（取值与 .top-row__back 一致）。
+ * 这里给一个同款的圆形返回按钮（.back-button）。
  */
 .library__list-bar {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 12px 0 10px;
-}
-
-.library__collapse {
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--glass-border);
-  background: var(--glass-weak);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-  box-shadow: var(--glass-shadow-soft);
-  font-size: 13px;
-  color: var(--text-secondary);
-  transition: color 0.16s ease, background 0.16s ease;
-}
-
-.library__collapse:hover {
-  color: var(--accent);
-  background: var(--glass-strong);
 }
 
 .library__list-count {
@@ -714,8 +696,10 @@
   /* 槽位撑满内容区时铺满，撑不满也留足 460px（不用 max()：父高不定时百分比会让整条声明失效）。 */
   flex: 1 1 auto;
   min-height: 460px;
+  /* 深空是整块内容区的背景，不是内容区里的一张卡片：抵消 .content 的内边距
+     （global.css 的 22px 24px 30px），去掉卡片外壳的圆角/描边/投影，让星场铺到槽边。 */
+  margin: -22px -24px -30px;
   padding: 40px 28px;
-  border-radius: var(--radius-lg);
   color: var(--fm-ink);
   background: radial-gradient(
     130% 100% at 50% -14%,
@@ -723,8 +707,6 @@
     #120e2b 46%,
     var(--fm-deep) 100%
   );
-  border: 1px solid color-mix(in srgb, var(--fm-ink) 18%, transparent);
-  box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 
@@ -806,6 +788,68 @@
     radial-gradient(34% 30% at 78% 66%, color-mix(in srgb, var(--accent-3) 36%, transparent), transparent 72%),
     radial-gradient(30% 26% at 62% 12%, color-mix(in srgb, var(--accent-2) 32%, transparent), transparent 74%);
   animation: fm-nebula-move 24s ease-in-out infinite alternate;
+}
+
+/* 流星：四道带拖尾的斜线，起点、时长与延迟各自错开 —— 偶发感来自「各走各的」，
+   而不是四道齐刷刷一起划。压在三层星点与星云之上、内容（.fm__body z-index:3）之下。 */
+.fm__meteors {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fm__meteors i {
+  position: absolute;
+  top: var(--meteor-y, -8%);
+  left: var(--meteor-x, -12%);
+  width: 168px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  /* 尾迹：从全透明渐到亮白头 —— 头在前、尾在后，所以渐变亮端在 +X（运动方向）。 */
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--fm-ink) 42%, transparent) 62%,
+    #ffffff 100%
+  );
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fm-ink) 60%, transparent));
+  opacity: 0;
+  transform: rotate(24deg) translate3d(0, 0, 0);
+  will-change: transform, opacity;
+  animation: fm-meteor 8.2s linear infinite;
+  animation-delay: var(--meteor-delay, 0s);
+  animation-duration: var(--meteor-duration, 8.2s);
+}
+
+/* 四道各自从不同高度、不同横向位置出发，周期也都不一样，才不会排队出现。 */
+.fm__meteors i:nth-child(1) {
+  --meteor-x: -16%;
+  --meteor-y: 6%;
+  --meteor-delay: 0.8s;
+  --meteor-duration: 7.4s;
+}
+
+.fm__meteors i:nth-child(2) {
+  --meteor-x: 12%;
+  --meteor-y: -10%;
+  --meteor-delay: 3.4s;
+  --meteor-duration: 9.6s;
+}
+
+.fm__meteors i:nth-child(3) {
+  --meteor-x: 40%;
+  --meteor-y: -16%;
+  --meteor-delay: 5.6s;
+  --meteor-duration: 8.4s;
+}
+
+.fm__meteors i:nth-child(4) {
+  --meteor-x: 64%;
+  --meteor-y: -6%;
+  --meteor-delay: 7.8s;
+  --meteor-duration: 10.6s;
 }
 
 /* 封面放大后模糊成一层色雾，压在最底下给整屏染上当前歌曲的颜色，并缓慢呼吸。 */
@@ -986,13 +1030,34 @@
   }
 }
 
-/* 动效敏感的用户：星空、星云与色雾都静止（场景还在，只是不再动）。 */
+/* 流星：可见窗口只占一个周期的一小段（划过去就消失），其余时间隐形等待。 */
+@keyframes fm-meteor {
+  0% {
+    opacity: 0;
+    transform: rotate(24deg) translate3d(0, 0, 0);
+  }
+  5% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 1;
+    transform: rotate(24deg) translate3d(130vw, 0, 0);
+  }
+  40%,
+  100% {
+    opacity: 0;
+    transform: rotate(24deg) translate3d(130vw, 0, 0);
+  }
+}
+
+/* 动效敏感的用户：星空、星云、色雾与流星都静止（场景还在，只是不再动）。 */
 @media (prefers-reduced-motion: reduce) {
   .fm::before,
   .fm::after,
   .fm__stars,
   .fm__nebula,
-  .fm__backdrop {
+  .fm__backdrop,
+  .fm__meteors i {
     animation: none;
   }
 }

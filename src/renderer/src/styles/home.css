@@ -46,8 +46,7 @@
  * 用 :is() 收拢页面根，避免把选择器写成四份。
  */
 :is(.home, .explore, .search, .np-fullscreen) .button:not(.button--primary),
-:is(.home, .explore, .search, .np-fullscreen) .icon-button:not(.icon-button--primary),
-.np-fullscreen .np-fs__back {
+:is(.home, .explore, .search, .np-fullscreen) .icon-button:not(.icon-button--primary) {
   background: var(--glass-weak);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(var(--blur-md)) saturate(170%);
@@ -58,8 +57,7 @@
 }
 
 :is(.home, .explore, .search, .np-fullscreen) .button:not(.button--primary):hover,
-:is(.home, .explore, .search, .np-fullscreen) .icon-button:not(.icon-button--primary):hover,
-.np-fullscreen .np-fs__back:hover {
+:is(.home, .explore, .search, .np-fullscreen) .icon-button:not(.icon-button--primary):hover {
   background: var(--glass-strong);
   border-color: var(--glass-border);
   box-shadow: var(--glass-shadow);
@@ -655,18 +653,7 @@
   padding: 16px 24px;
 }
 
-/* 返回入口：按需求只留文字，不带任何箭头符号；材质由上面的玻璃按钮组统一给。 */
-.np-fs__back {
-  padding: 8px 18px;
-  border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.np-fs__back:hover {
-  color: var(--accent);
-}
+/* 全屏层的返回入口用全站统一的 .back-button（见 components/BackButton.tsx）。 */
 
 .np-fs__heading {
   display: flex;

@@ -4,12 +4,19 @@
  * 为什么需要：网易云曲库里没有的歌（大量抖音热歌、翻唱、remix）在网易云搜不到。
  * 这里把搜索打到曲库更大的几个平台，点播时再**严格匹配**同一首歌拿到完整音频。
  *
- * 关于「抖音原生音频」：汽水的播放地址接口需要签名与登录态（实测 30 种接口组合
- * 全部不可用），所以这里只把汽水当作**发现层**（它的搜索接口免签名可用），
+ * 关于「抖音原生音频」：汽水的**搜索**接口免签名可用；播放地址则走 h5 分享页的
+ * SEO 接口（`/luna/h5/seo_track`，同样免签名免登录，返回明文 M4A），
+ * 见 `unblock/providers.ts` 的 `resolveQishui`。这里仍把汽水当发现层，
  * 播放统一走下面 resolveExternalAudio 的严格匹配链路。
  */
 import type { Track } from '../netease/models.js'
-import { resolveKugou, resolveKuwo } from '../unblock/providers.js'
+import {
+  resolveQishui,
+  resolveKugou,
+  resolveKuwo,
+  resolveQq,
+  type ResolvedAudioSource
+} from '../unblock/providers.js'
 import {
   EXTERNAL_SOURCES as SOURCES,
   EXTERNAL_SOURCE_NAMES as SOURCE_NAMES,
@@ -232,22 +239,25 @@ export interface ResolvedExternalAudio {
 }
 
 /**
- * 解析站外曲目的可播放地址：依次走酷狗 → 酷我（两个现有实现都会做
- * 「时长 ±5 秒 + 歌名归一化 + 版本标记 + 歌手」严格匹配，宁可不播也不放错歌）。
+ * 解析站外曲目的可播放地址：依次走 汽水 → 酷狗 → 酷我 → QQ
+ * （四个实现都会做「时长 ±5 秒 + 歌名归一化 + 版本标记 + 歌手」严格匹配，
+ * 宁可不播也不放错歌）。
  */
 export async function resolveExternalAudio(item: ExternalTrack): Promise<ResolvedExternalAudio | null> {
   const synthetic = toSyntheticTrack(item)
-  try {
-    const kugou = await resolveKugou(synthetic)
-    if (kugou) return { url: kugou.url, sourceName: kugou.displayName }
-  } catch {
-    // 酷狗不可用时继续试酷我
-  }
-  try {
-    const kuwo = await resolveKuwo(synthetic)
-    if (kuwo) return { url: kuwo.url, sourceName: kuwo.displayName }
-  } catch {
-    // 两个源都失败：上层给用户明确提示
+  const attempts: Array<() => Promise<ResolvedAudioSource | null>> = [
+    () => resolveQishui(synthetic),
+    () => resolveKugou(synthetic),
+    () => resolveKuwo(synthetic),
+    () => resolveQq(synthetic)
+  ]
+  for (const attempt of attempts) {
+    try {
+      const source = await attempt()
+      if (source) return { url: source.url, sourceName: source.displayName }
+    } catch {
+      // 某个源不可用时继续试下一个；全失败由上层给用户明确提示
+    }
   }
   return null
 }

@@ -22,15 +22,17 @@ import { UnblockService } from './unblock/service.js'
 import type { AudioSourceID } from './unblock/providers.js'
 import { contextRef, sendEvent, assertAllChannelsRegistered } from './ipc/registry.js'
 import { registerAuthHandlers } from './ipc/auth.js'
+import { PlatformAccounts } from './accounts/platforms.js'
 import { registerPlayerHandlers } from './ipc/player.js'
 import { registerUpdateHandlers } from './ipc/update.js'
 import { cleanUpdateCache } from './update/service.js'
 import { registerLibraryHandlers } from './ipc/library.js'
-import { registerExploreHandlers } from './ipc/explore.js'
+import { registerExploreHandlers, warmFMPool } from './ipc/explore.js'
 import { registerAppHandlers } from './ipc/app.js'
 import type { AppContext } from './context.js'
 import type { PlayerSnapshot } from './player/controller.js'
 import { bootLog } from './diagnostics.js'
+import { initLogCollector, recordLog } from './logCollector.js'
 import { DEFAULT_SETTINGS } from '@shared/types'
 
 // The self-check runs against a throwaway profile so it neither reads the
@@ -332,6 +334,9 @@ async function bootstrap(): Promise<void> {
   await settings.load()
   const current = settings.current
 
+  // 日志收集器：先于各服务初始化，才能在启动早期捕获到异常。
+  initLogCollector({ userData, enabled: current.collectLogs })
+
   // 音频缓存的目录名不能叫 `cache`：Windows 文件系统不分大小写，Chromium 会把它
   // 当成自己的 HTTP 磁盘缓存目录（`Cache`），每次启动清理时把我们的音频缓存一起
   // 删光——这就是用户「缓存一直显示已用 0B」的真凶。改用 `audio-cache` 并迁移旧文件。
@@ -381,7 +386,10 @@ async function bootstrap(): Promise<void> {
   const mpv = new MpvController({
     binary: mpvPath ?? 'mpv',
     audioDevice: current.audioDevice || undefined,
-    onLog: (level, message) => log(`[mpv:${level}] ${message}`)
+    onLog: (level, message) => {
+      log(`[mpv:${level}] ${message}`)
+      if (level === 'error') recordLog('mpv', message)
+    }
   })
 
   let profileVipType = 0
@@ -437,6 +445,7 @@ async function bootstrap(): Promise<void> {
   const context: AppContext = {
     settings,
     dailyHistory: new DailyHistoryStore(path.join(userData, 'daily-history')),
+    accounts: new PlatformAccounts(userData),
     client,
     api,
     player,
@@ -456,6 +465,7 @@ async function bootstrap(): Promise<void> {
     log
   }
   contextRef.value = context
+  await context.accounts.load()
 
   // Refresh the profile (and with it the VIP tier that decides playability)
   // once the cookie jar has been read.
@@ -475,6 +485,8 @@ async function bootstrap(): Promise<void> {
   registerPlayerHandlers(context)
   registerLibraryHandlers(context)
   registerExploreHandlers(context)
+  // 私人漫游要「进页面就出声」：曲池得提前攒好，否则现场连打十来轮接口要二十秒。
+  if (client.isLoggedIn) warmFMPool(context)
   registerAppHandlers(context)
   registerUpdateHandlers()
   // 上次更新可能留下下载缓存；启动时顺手清掉（失败也无所谓）。

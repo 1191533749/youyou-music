@@ -19,6 +19,7 @@ import { acceptKey, decodeFrames, encodeClose, encodeFrame } from './ws.mjs'
 import { GIFTS, findGift } from './gifts.mjs'
 import { Alipay, loadPrivateKey } from './alipay.mjs'
 import { getDaily, sanitiseTracks, saveDaily, validDate, validUid } from './daily.mjs'
+import { clientIp, sanitiseLogs, saveLogs } from './logs.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.join(root, 'data')
@@ -509,6 +510,51 @@ async function handleHttp(request, response) {
     } catch (cause) {
       console.error('[daily] 读取失败', cause)
       respond(response, 500, { ok: false, message: '读取失败' })
+    }
+    return
+  }
+
+  // 诊断日志上报（悠悠音乐客户端异常/崩溃收集）。
+  const isLogs = parsed.pathname === '/logs' || parsed.pathname === '/relay/logs'
+  if (isLogs) {
+    if (!tokenOk(parsed.searchParams, request.headers)) {
+      respond(response, 401, { ok: false, message: '未授权' })
+      return
+    }
+    if (request.method !== 'POST') {
+      respond(response, 405, { ok: false, message: '仅支持 POST' })
+      return
+    }
+    let body = ''
+    try {
+      for await (const chunk of request) body += chunk
+    } catch {
+      respond(response, 400, { ok: false, message: '请求体读取失败' })
+      return
+    }
+    if (body.length > 1_000_000) {
+      respond(response, 413, { ok: false, message: '请求体过大' })
+      return
+    }
+    let payload
+    try {
+      payload = JSON.parse(body || '{}')
+    } catch {
+      respond(response, 400, { ok: false, message: 'JSON 解析失败' })
+      return
+    }
+    const logs = sanitiseLogs(payload.logs)
+    if (!logs) {
+      respond(response, 400, { ok: false, message: 'logs 非法（需要非空数组）' })
+      return
+    }
+    try {
+      const stored = saveLogs(logs, clientIp(request))
+      console.log(`[logs] 收到 ${logs.length} 条，落盘 ${stored} 条`)
+      respond(response, 200, { ok: true, stored })
+    } catch (cause) {
+      console.error('[logs] 保存失败', cause)
+      respond(response, 500, { ok: false, message: '保存失败' })
     }
     return
   }

@@ -11,6 +11,10 @@ import { NavigationProvider, useNavigation, type Route } from './store/navigatio
 import { useAuthStore } from './store/auth'
 import { usePlayerStore } from './store/player'
 import PlayerBar from './components/PlayerBar'
+import { BackButton } from './components/BackButton'
+import { useImageReady } from './components/FishAvatar'
+import { usePrefetchArtistPic } from './lib/artistPic'
+import { coverUrl } from './lib/format'
 import { AppToastStack } from './components/Toast'
 import Login from './pages/Login'
 import Home from './pages/Home'
@@ -28,7 +32,6 @@ import Cloud from './pages/Cloud'
 import Settings from './pages/Settings'
 import NowPlaying from './pages/NowPlaying'
 import {
-  IconBack,
   IconCalendar,
   IconClose,
   IconCloud,
@@ -82,15 +85,7 @@ function TopRow(): JSX.Element {
   if (!navigation.canGoBack) return <></>
   return (
     <div className="top-row">
-      <button
-        type="button"
-        className="top-row__back"
-        onClick={() => navigation.back()}
-        aria-label="返回"
-        title="返回"
-      >
-        <IconBack size={16} />
-      </button>
+      <BackButton onClick={() => navigation.back()} />
     </div>
   )
 }
@@ -101,6 +96,21 @@ function Shell(): JSX.Element {
   const player = usePlayerStore()
   const [error, setError] = useState<string | undefined>()
   const [info, setInfo] = useState<AppInfoDTO | undefined>()
+  /**
+   * 侧栏账号头像：只在预加载真的成功后才挂 <img>，失败/被拦截时退回 .sidebar__account-fallback。
+   * 不能用 <img onError> —— 请求被网络层直接拦掉时 error 事件不保证派发，会留下破图图标。
+   * 走 CDN 缩图：原图是 1024×1024，实测要 5.7 秒才回来，而这个圆圈只有 30px。
+   */
+  const avatarURL = coverUrl(auth.profile?.avatarUrl, 160)
+  const avatarReady = useImageReady(avatarURL)
+
+  /**
+   * 切歌时预取歌手头像：底部播放条用的是专辑封面（曲目里就有，立刻出图），
+   * 播放详情页要的是歌手头像，只能按 id 再打一次 artist:detail ——
+   * 不提前取，用户点进详情页就得干等这个网络请求（用户反馈「半天才出来」）。
+   */
+  const currentArtist = player.state.track?.artists[0]
+  usePrefetchArtistPic(currentArtist?.id, currentArtist?.picUrl)
 
   /**
    * 滚动位置记忆：进入歌单/专辑后返回，要回到刚才浏览的位置，
@@ -185,8 +195,8 @@ function Shell(): JSX.Element {
                   className="sidebar__account"
                   onClick={() => navigation.reset({ name: 'settings' })}
                 >
-                  {auth.profile?.avatarUrl ? (
-                    <img src={auth.profile.avatarUrl} alt="" />
+                  {avatarURL && avatarReady ? (
+                    <img src={avatarURL} alt="" />
                   ) : (
                     <span className="sidebar__account-fallback">
                       <IconUser size={16} />

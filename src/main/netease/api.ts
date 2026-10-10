@@ -221,7 +221,7 @@ export class NeteaseAPI {
     if (body === undefined) {
       throw new NeteaseAPIError('business', {
         code: -1,
-        message: `${path} 无响应：网易云可能正在限流，请稍后重试`
+        message: '服务器连接失败，请稍后重试'
       })
     }
 
@@ -370,7 +370,7 @@ export class NeteaseAPI {
             : '登录失败，请重试'
       // 风控文案统一给更明确的指引。
       if (/安全风险|risk/i.test(message)) {
-        message = '手机号登录触发网易云风控，请稍后重试，或改用扫码登录'
+        message = '手机号登录失败，请稍后重试，或改用扫码登录'
       }
       throw new NeteaseAPIError('business', { code, message })
     }

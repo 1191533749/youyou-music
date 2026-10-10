@@ -9,8 +9,16 @@
 import { defineHandler } from './registry.js'
 import { NeteaseAPIError } from '../netease/client.js'
 import { setKnownUID } from '../storage/remoteDaily.js'
+import {
+  kugouPlaylists,
+  pollKugouQR,
+  pollQqQR,
+  qqPlaylists,
+  startKugouQR,
+  startQqQR
+} from '../accounts/platforms.js'
 import type { AppContext } from '../context.js'
-import type { QRLoginStateDTO, UserProfileDTO } from '@shared/types'
+import type { PlatformAccountDTO, QRLoginStateDTO, UserProfileDTO } from '@shared/types'
 
 /** QR codes are valid for roughly two minutes; the UI shows a countdown. */
 const QR_TTL_MS = 120_000
@@ -64,7 +72,10 @@ export function registerAuthHandlers(context: AppContext): void {
     }
   })
 
-  defineHandler('auth:qrPoll', async ({ unikey }): Promise<QRLoginStateDTO> => {
+  defineHandler('auth:qrPoll', ({ unikey }) => neteasePoll(unikey))
+
+  /** 网易云扫码轮询的主体；第三方平台的轮询走各自的实现。 */
+  const neteasePoll = async (unikey: string): Promise<QRLoginStateDTO> => {
     if (!session || session.unikey !== unikey) {
       return { status: 'expired', message: '二维码已失效，请刷新' }
     }
@@ -126,7 +137,7 @@ export function registerAuthHandlers(context: AppContext): void {
           url: context.api.qrLoginURL(unikey)
         }
     }
-  })
+  }
 
   defineHandler('auth:qrCancel', () => {
     session = undefined
@@ -162,6 +173,65 @@ export function registerAuthHandlers(context: AppContext): void {
     } catch (cause) {
       context.log(`手机号登录后获取账户信息失败: ${String(cause)}`)
       context.emit('auth:changed', { loggedIn: true })
+    }
+  })
+
+  // --- 多平台登录（网易云 / 酷狗 / QQ音乐）---
+
+  defineHandler('auth:platforms', async (): Promise<PlatformAccountDTO[]> => [
+    { platform: 'netease', loggedIn: context.client.isLoggedIn },
+    ...context.accounts.list()
+  ])
+
+  defineHandler('auth:platformQRStart', async ({ platform }) => {
+    switch (platform) {
+      case 'netease': {
+        const unikey = await context.api.qrKey()
+        session = { unikey, startedAt: Date.now(), scanned: false }
+        return { token: unikey, url: context.api.qrLoginURL(unikey) }
+      }
+      case 'kugou':
+        return startKugouQR()
+      case 'qq':
+        return startQqQR()
+    }
+  })
+
+  defineHandler('auth:platformQRPoll', async ({ platform, token }): Promise<QRLoginStateDTO> => {
+    if (platform === 'netease') return neteasePoll(token)
+    const result = platform === 'kugou' ? await pollKugouQR(token) : await pollQqQR(token)
+    if (result.session) {
+      await context.accounts.put(result.session)
+      context.log(`${platform} 登录成功: ${result.nickname ?? ''}`)
+    }
+    return {
+      status: result.status,
+      message: result.message,
+      nickname: result.nickname,
+      avatarUrl: result.avatarUrl
+    }
+  })
+
+  defineHandler('auth:platformLogout', async ({ platform }) => {
+    if (platform === 'netease') {
+      session = undefined
+      await context.api.logout()
+      context.lyrics.clear()
+      await context.player.clearQueue()
+      return
+    }
+    await context.accounts.remove(platform)
+  })
+
+  defineHandler('auth:platformPlaylists', async ({ platform }) => {
+    if (platform === 'netease') return []
+    const stored = context.accounts.get(platform)
+    if (!stored) return []
+    try {
+      return platform === 'kugou' ? await kugouPlaylists(stored) : await qqPlaylists(stored)
+    } catch (cause) {
+      context.log(`读取 ${platform} 歌单失败: ${String(cause)}`)
+      return []
     }
   })
 }

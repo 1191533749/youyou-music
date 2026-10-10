@@ -171,6 +171,7 @@ export function ArtCard({
   imageUrl,
   badge,
   round,
+  eager,
   onClick
 }: {
   title: string
@@ -178,6 +179,13 @@ export function ArtCard({
   imageUrl?: string
   badge?: string
   round?: boolean
+  /**
+   * 横向 rail（首页热门歌手、排行榜）里的卡必须 eager：lazy 对「滚出视口」的判定
+   * 只看视口交集，横向溢出到 1250px 之外的卡永远不开始加载（实测 14 张只出 11 张，
+   * 滚动也不补）。纵向网格保持 lazy —— 一次性拉起 70 张图会互相抢 6 条连接，
+   * 反而让首屏的图更慢（实测过）。
+   */
+  eager?: boolean
   onClick?: () => void
 }): JSX.Element {
   const [broken, setBroken] = useState(false)
@@ -193,7 +201,7 @@ export function ArtCard({
             <IconMusic size={26} />
           </span>
         ) : (
-          <img src={url} alt="" loading="lazy" onError={() => setBroken(true)} />
+          <img src={url} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" onError={() => setBroken(true)} />
         )}
         {badge ? <span className="card__badge">{badge}</span> : null}
       </div>

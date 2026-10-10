@@ -153,15 +153,20 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
       }
       case 'unblockSources': {
         // 只接受已知音源，且去重；顺序保留用户配置（即优先级）。
-        const known = new Set(['pyncmd', 'kugou', 'kuwo'])
+        // 'pyncmd' 是上一版音源，已被「汽水音乐」取代，老配置里的它按汽水迁移过来。
+        const known = new Set(['qishui', 'kugou', 'kuwo', 'qq'])
+        const legacy: Record<string, string> = { pyncmd: 'qishui' }
         if (Array.isArray(value)) {
-          const list: Array<'pyncmd' | 'kugou' | 'kuwo'> = []
-          for (const item of value) {
-            if (typeof item === 'string' && known.has(item) && !list.includes(item as never)) {
-              list.push(item as 'pyncmd' | 'kugou' | 'kuwo')
+          const list: Array<'qishui' | 'kugou' | 'kuwo' | 'qq'> = []
+          for (const raw of value) {
+            if (typeof raw !== 'string') continue
+            const item = legacy[raw] ?? raw
+            if (known.has(item) && !list.includes(item as never)) {
+              list.push(item as 'qishui' | 'kugou' | 'kuwo' | 'qq')
             }
           }
-          out.unblockSources = list
+          // 老配置里全是已被移除的音源时，不能落成「一个都不启用」。
+          out.unblockSources = list.length > 0 ? list : [...DEFAULT_SETTINGS.unblockSources]
         }
         break
       }

@@ -152,17 +152,43 @@ export interface ExternalTrackDTO {
 }
 
 export type QRLoginStatus = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error'
-
 export interface QRLoginStateDTO {
   status: QRLoginStatus
   /** URL the QR code encodes; the renderer draws it. */
   url?: string
+  /** 有些平台直接给二维码图片（data URL 或图片地址），渲染层直接显示。 */
+  image?: string
   unikey?: string
   message?: string
   nickname?: string
   avatarUrl?: string
   /** Present once the scan is confirmed and the profile has been fetched. */
   profile?: UserProfileDTO
+}
+
+/**
+ * 可登录的平台。
+ * 汽水音乐与酷我音乐只作为音源使用，不做登录；酷狗的扫码接口当前对所有参数
+ * 组合都返回「参数错误 20006」，登录先搁置（它仍然是一个可用的音源）。
+ */
+export type AccountPlatform = 'netease' | 'kugou' | 'qq'
+
+/** 登录页上会出现图标的平台。 */
+export const ACCOUNT_PLATFORMS: AccountPlatform[] = ['netease', 'qq']
+
+export interface PlatformAccountDTO {
+  platform: AccountPlatform
+  loggedIn: boolean
+  nickname?: string
+  avatarUrl?: string
+}
+
+/** 平台账号的歌单（只用于展示与后续取歌，不参与网易云的曲库模型）。 */
+export interface PlatformPlaylistDTO {
+  id: string
+  name: string
+  trackCount: number
+  coverUrl?: string
 }
 
 export interface SettingsDTO {
@@ -207,12 +233,14 @@ export interface SettingsDTO {
   /** Unlock grey tracks from third-party sources. */
   unblockGreyTracks: boolean
   /**
-   * 启用的第三方音源，顺序即尝试优先级：pyncmd → kugou → kuwo。
+   * 启用的第三方音源，顺序即尝试优先级：汽水 → 酷狗 → 酷我 → QQ。
    * 任一为启用状态时，受限歌曲都会自动换源播放完整版本。
    */
-  unblockSources: Array<'pyncmd' | 'kugou' | 'kuwo'>
+  unblockSources: Array<'qishui' | 'kugou' | 'kuwo' | 'qq'>
   /** Keep a local copy of played tracks so they play offline. */
   offlineCacheEnabled: boolean
+  /** 收集本程序异常日志并上传服务器（设备/系统/版本/时间/IP/异常详情），可随时关闭。 */
+  collectLogs: boolean
   /** GPU 加速渲染；关闭后下次启动改用软件渲染（启动早期生效，需重启）。 */
   hardwareAcceleration: boolean
 }
@@ -240,8 +268,9 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   wallpaperSet: false,
   wallpaperVersion: 0,
   unblockGreyTracks: true,
-  unblockSources: ['pyncmd', 'kugou', 'kuwo'],
+  unblockSources: ['qishui', 'kugou', 'kuwo', 'qq'],
   offlineCacheEnabled: true,
+  collectLogs: true,
   hardwareAcceleration: true
 }
 

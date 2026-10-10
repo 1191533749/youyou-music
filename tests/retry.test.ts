@@ -96,7 +96,7 @@ describe('NeteaseClient 网络重试', () => {
 
     expect(failure).toBeInstanceOf(NeteaseAPIError)
     expect((failure as NeteaseAPIError).kind).toBe('network')
-    expect((failure as Error).message).toBe('网络请求失败：无法连接网易云，请检查网络后重试')
+    expect((failure as Error).message).toBe('服务器连接失败，请检查网络后重试')
     expect(calls.calls).toBe(3)
     expect(logs.some((line) => line.includes('ENOTFOUND'))).toBe(true)
     expect(logs.some((line) => line.includes('重试结束仍失败'))).toBe(true)

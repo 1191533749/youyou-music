@@ -52,10 +52,22 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
 }
 
+/**
+ * 网易云图片 CDN 的 p1~p4 是同一份内容的四个分片，但**分片落在哪个边缘节点并不一样**：
+ * 实测用户机器上 p1/p2/p4 解析到同一组 IP（36.142.5.x），p3 解析到另一组（111.20.x），
+ * 而渲染进程里 p3 上的图会一直卡在加载中（实测 10 张封面 10 秒都没 complete，
+ * 同一时刻 p1/p4 的图 60~500ms 就回来了）。
+ * 路径本身是通用的（实测同一路径在四个分片都返回 200），所以把 p3 统一换到 p4。
+ */
+const SLOW_IMAGE_HOST = 'p3.music.126.net'
+const FAST_IMAGE_HOST = 'p4.music.126.net'
+
 /** NetEase image CDN resize convention: `<url>?param=<W>y<H>`. */
 export function coverUrl(url: string | undefined, size: number): string | undefined {
   if (!url) return undefined
-  const https = url.replace(/^http:\/\//, 'https://')
+  const https = url
+    .replace(/^http:\/\//, 'https://')
+    .replace(`//${SLOW_IMAGE_HOST}/`, `//${FAST_IMAGE_HOST}/`)
   return `${https}${https.includes('?') ? '&' : '?'}param=${size}y${size}`
 }
 

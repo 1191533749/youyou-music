@@ -32,6 +32,11 @@ export interface PlayerStore {
     startIndex?: number,
     options?: { randomStart?: boolean }
   ) => Promise<void>
+  /**
+   * 私人漫游专用：直接把列表数据交给播放器，不再等 `/v3/song/detail` 那 1.5 秒。
+   * 漫游曲本来就来自接口自己的 Track，特权信息缺一点不影响起播与站外兜底。
+   */
+  playFMTracks: (tracks: TrackDTO[]) => Promise<void>
   toggle: () => Promise<void>
   play: () => Promise<void>
   pause: () => Promise<void>
@@ -73,6 +78,7 @@ export function usePlayerStore(): PlayerStore {
           randomStart: options?.randomStart === true
         })
       },
+      playFMTracks: (tracks) => command('player:playFMTracks', { tracks }),
       toggle: () => command('player:toggle'),
       play: () => command('player:play'),
       pause: () => command('player:pause'),

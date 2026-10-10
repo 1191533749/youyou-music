@@ -19,6 +19,9 @@ import type {
   PlaylistSummaryDTO,
   PlayerStateDTO,
   QRLoginStateDTO,
+  AccountPlatform,
+  PlatformAccountDTO,
+  PlatformPlaylistDTO,
   SettingsDTO,
   TrackDTO,
   UserProfileDTO
@@ -146,6 +149,21 @@ export interface IPCContract {
     request: void
     response: { gender?: 'female' | 'male'; age?: number; region?: string; signature?: string }
   }
+  // --- 多平台登录（网易云 / QQ音乐；酷狗登录接口不可用，先搁置）---
+  /** 三个平台的登录状态。 */
+  'auth:platforms': { request: void; response: PlatformAccountDTO[] }
+  /** 取某个平台的登录二维码（`url` 渲染成二维码，`image` 直接显示图片）。 */
+  'auth:platformQRStart': {
+    request: { platform: AccountPlatform }
+    response: { token: string; url?: string; image?: string }
+  }
+  'auth:platformQRPoll': {
+    request: { platform: AccountPlatform; token: string }
+    response: QRLoginStateDTO
+  }
+  'auth:platformLogout': { request: { platform: AccountPlatform }; response: void }
+  /** 该平台账号的歌单列表（登录后才有）。 */
+  'auth:platformPlaylists': { request: { platform: AccountPlatform }; response: PlatformPlaylistDTO[] }
 
   // --- home / discovery ---
   'home:feed': { request: void; response: HomeFeedDTO }
@@ -326,6 +344,11 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'auth:sendSMSCode',
   'auth:loginCellphone',
   'auth:userDetail',
+  'auth:platforms',
+  'auth:platformQRStart',
+  'auth:platformQRPoll',
+  'auth:platformLogout',
+  'auth:platformPlaylists',
   'home:feed',
   'home:dailySongs',
   'home:hotSongs',

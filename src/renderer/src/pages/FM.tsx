@@ -17,8 +17,12 @@ export default function FM(): JSX.Element {
   const player = usePlayerStore()
   const toast = useToast()
   const [starting, setStarting] = useState(true)
+  /** 接口确实一首都没给（区别于「还在起播」——那种也要继续显示挑选中的占位）。 */
+  const [empty, setEmpty] = useState(false)
   const [startError, setStartError] = useState<string | undefined>()
   const [trashing, setTrashing] = useState(false)
+  /** 漫游封面加载失败时退回 .fm__art--empty 音符占位，不露出浏览器的破图图标。 */
+  const [artBroken, setArtBroken] = useState(false)
 
   // StrictMode 下 effect 会跑两次：进入页面只能开始一次漫游。
   const started = useRef(false)
@@ -31,12 +35,23 @@ export default function FM(): JSX.Element {
     started.current = true
     ready.current = false
     setStarting(true)
+    setEmpty(false)
     setStartError(undefined)
     try {
       const tracks = await call('track:fm')
-      if (tracks.length === 0) return
-      await player.playTracks(tracks, 0)
-      ready.current = true
+      if (tracks.length === 0) {
+        setEmpty(true)
+        return
+      }
+      // 不等起播落定：队列一进主进程就会广播 player:state，页面随即切到曲目视图。
+      // 起播本身还要解析音源（1 秒上下），等它会让「正在为你挑选漫游曲目」白停一秒。
+      // 走 playFMTracks 而不是 playTracks：漫游曲不需要再打一次 song/detail。
+      void player
+        .playFMTracks(tracks)
+        .catch((cause) => setStartError(messageOf(cause)))
+        .finally(() => {
+          ready.current = true
+        })
     } catch (cause) {
       started.current = false
       setStartError(messageOf(cause))
@@ -91,6 +106,8 @@ export default function FM(): JSX.Element {
 
   const track = player.state.track
   const cover = coverUrl(track?.album.picUrl, 768)
+  // 换曲换了封面就重新尝试加载。
+  useEffect(() => setArtBroken(false), [cover])
 
   return (
     <div className="fm">
@@ -101,13 +118,21 @@ export default function FM(): JSX.Element {
         />
       ) : null}
 
-      {/* 纯 CSS 星空：三层星点（两层伪元素 + 这一层碎星）与一团星云，
+      {/* 纯 CSS 星空：三层星点（两层伪元素 + 这一层碎星）、一团星云与几道流星，
           不引图片、不用 canvas —— 深空需要纵深，但漫游页不该有加载项。 */}
       <div className="fm__stars" aria-hidden="true" />
       <div className="fm__nebula" aria-hidden="true" />
+      {/* 流星：四道带拖尾的光带斜着划过，起点、时长与延迟各自错开（见 .fm__meteors）。 */}
+      <div className="fm__meteors" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
 
       <div className="fm__body">
-        {starting ? (
+        {/* 「还在为主进程选曲/起播」都算挑选中：track 还没广播过来时不能闪一下空态。 */}
+        {starting || (!track && !startError && !empty) ? (
           <div className="placeholder">正在为你挑选漫游曲目</div>
         ) : startError ? (
           <div className="placeholder">
@@ -127,8 +152,8 @@ export default function FM(): JSX.Element {
           </div>
         ) : (
           <>
-            {cover ? (
-              <img className="fm__art" src={cover} alt="" />
+            {cover && !artBroken ? (
+              <img className="fm__art" src={cover} alt="" onError={() => setArtBroken(true)} />
             ) : (
               <div className="fm__art fm__art--empty">
                 <IconMusic size={54} />

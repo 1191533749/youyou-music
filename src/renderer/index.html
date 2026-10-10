@@ -8,6 +8,12 @@
       content="default-src 'self'; img-src 'self' data: https: youyou-wallpaper:; media-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' wss://yy.ytw.asia ws://127.0.0.1:* ws://localhost:*"
     />
     <title>悠悠音乐</title>
+    <!-- 封面/头像都在网易云图片 CDN 上：先把 DNS + TLS 建好，首屏图不用再等握手。
+         不加 crossorigin —— 页面里的 <img> 是普通（非 CORS）请求，加了会落到另一条连接上。
+         p3 不预热：它解析到另一个（会卡住的）边缘节点，封面 URL 已统一换走（见 lib/format.ts）。 -->
+    <link rel="preconnect" href="https://p1.music.126.net" />
+    <link rel="preconnect" href="https://p2.music.126.net" />
+    <link rel="preconnect" href="https://p4.music.126.net" />
   </head>
   <body>
     <div id="root"></div>

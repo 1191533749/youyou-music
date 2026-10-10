@@ -17,8 +17,22 @@ async function requireProfile(context: AppContext) {
   return profile
 }
 
+/*
+ * 测试钩子：设 YOYOU_FAIL_LIBRARY=<N> 时，library:overview 前 N 次调用直接失败，
+ * 用来在真机上复现「网络一过性抖动导致首个接口报错」，验证渲染层的静默重试
+ * （见 scripts/test-auto-retry.mjs）。不设环境变量时恒为 0，对正常使用无影响。
+ */
+let libraryFailBudget: number | undefined
+
 export function registerLibraryHandlers(context: AppContext): void {
   defineHandler('library:overview', async () => {
+    if (libraryFailBudget === undefined) {
+      libraryFailBudget = Math.max(0, Number(process.env.YOYOU_FAIL_LIBRARY ?? 0) || 0)
+    }
+    if (libraryFailBudget > 0) {
+      libraryFailBudget -= 1
+      throw new Error('服务器连接失败，请检查网络后重试')
+    }
     if (!context.client.isLoggedIn) {
       // Browsing without a login still works: the daily recommendations and
       // public playlists are served, but the personal lists are empty.

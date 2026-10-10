@@ -1,7 +1,7 @@
 /**
- * 我的音乐 —— 顶部用户卡 + 五个区段入口卡（手机端「我的」页的排版）。
+ * 我的音乐 —— 顶部用户卡 + 三个区段入口卡（手机端「我的」页的排版）。
  *
- * 五类数据来自同一次 `library:overview`，所以全部平铺在一个页面里：没有切换，
+ * 三类数据来自同一次 `library:overview`，所以全部平铺在一个页面里：没有切换，
  * 也就没有「切过去才发现数据没加载」的等待。喜欢的歌曲另有一步：接口只给 id，
  * 详情要按批另取，所以它自己维护加载/错误状态，不拖累其它卡片。
  */
@@ -29,11 +29,10 @@ import { useAsync } from '../lib/hooks'
 import { applyLikeOverrides, clearLikeOverride, markLike } from '../lib/likes'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
+import { BackButton } from '../components/BackButton'
 import {
   IconClock,
-  IconDisc,
   IconHeartFilled,
-  IconMic,
   IconMore,
   IconPause,
   IconPlay,
@@ -43,7 +42,7 @@ import {
 } from '../components/Icons'
 import { useToast } from '../components/Toast'
 import type { LibraryDTO, PlayRecordDTO } from '@shared/ipc'
-import type { AlbumSummaryDTO, ArtistSummaryDTO, PlaylistSummaryDTO, TrackDTO } from '@shared/types'
+import type { PlaylistSummaryDTO, TrackDTO } from '@shared/types'
 
 /**
  * 喜欢的歌曲接口只返回 id，详情要拿这批 id 去 song/detail 换。一次带太多 id
@@ -78,8 +77,6 @@ export default function Library(): JSX.Element {
   // 本地副本：删除歌单、取消收藏、喜欢一首歌之后只改这里，不为了一个写操作
   // 重新拉整个 overview。
   const [playlists, setPlaylists] = useState<PlaylistSummaryDTO[]>([])
-  const [albums, setAlbums] = useState<AlbumSummaryDTO[]>([])
-  const [artists, setArtists] = useState<ArtistSummaryDTO[]>([])
   const [recent, setRecent] = useState<PlayRecordDTO[]>([])
   // serverLikedIDs 是「服务器那份」，渲染统一走下面的 likedIDs（套了本地乐观覆盖）。
   const [serverLikedIDs, setServerLikedIDs] = useState<Set<number>>(new Set())
@@ -99,6 +96,9 @@ export default function Library(): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState<ConfirmRequest | undefined>()
   const [menu, setMenu] = useState<MenuState | undefined>()
+  /** 头像与「喜欢的音乐」封面加载失败时退回各自现有的占位图标，不露出浏览器的破图图标。 */
+  const [avatarBroken, setAvatarBroken] = useState(false)
+  const [likedCoverBroken, setLikedCoverBroken] = useState(false)
 
   // StrictMode 下 effect 会跑两次，详情只该取一轮。
   const likedRequested = useRef(false)
@@ -107,8 +107,6 @@ export default function Library(): JSX.Element {
     const data = overview.data
     if (!data) return
     setPlaylists(data.playlists)
-    setAlbums(data.albums)
-    setArtists(data.artists)
     setRecent(data.recent)
     setServerLikedIDs(new Set(data.likedTrackIDs))
   }, [overview.data])
@@ -209,26 +207,6 @@ export default function Library(): JSX.Element {
     }
   }
 
-  const unsubscribeAlbum = async (album: AlbumSummaryDTO): Promise<void> => {
-    try {
-      await call('library:subscribeAlbum', { id: album.id, subscribe: false })
-      setAlbums((current) => current.filter((item) => item.id !== album.id))
-      toast.show(`已取消收藏「${album.name}」`, 'success')
-    } catch (cause) {
-      toast.show(`取消收藏失败：${messageOf(cause)}`, 'error')
-    }
-  }
-
-  const unfollowArtist = async (artist: ArtistSummaryDTO): Promise<void> => {
-    try {
-      await call('library:subscribeArtist', { id: artist.id, subscribe: false })
-      setArtists((current) => current.filter((item) => item.id !== artist.id))
-      toast.show(`已取消关注「${artist.name}」`, 'success')
-    } catch (cause) {
-      toast.show(`取消关注失败：${messageOf(cause)}`, 'error')
-    }
-  }
-
   /**
    * 卡片的「更多」按钮和右键走同一个菜单：按钮从自己下沿弹出（键盘也能点到），
    * 右键跟随光标。
@@ -255,36 +233,6 @@ export default function Library(): JSX.Element {
     [uid]
   )
 
-  const albumMenu = (album: AlbumSummaryDTO): ContextMenuItem[] => [
-    { label: '打开专辑', onSelect: () => navigation.push({ name: 'album', id: album.id, title: album.name }) },
-    {
-      label: '取消收藏',
-      danger: true,
-      onSelect: () =>
-        setConfirm({
-          title: '取消收藏',
-          body: `确定取消收藏专辑「${album.name}」吗？`,
-          confirmLabel: '取消收藏',
-          run: () => void unsubscribeAlbum(album)
-        })
-    }
-  ]
-
-  const artistMenu = (artist: ArtistSummaryDTO): ContextMenuItem[] => [
-    { label: '打开歌手', onSelect: () => navigation.push({ name: 'artist', id: artist.id, title: artist.name }) },
-    {
-      label: '取消关注',
-      danger: true,
-      onSelect: () =>
-        setConfirm({
-          title: '取消关注',
-          body: `确定取消关注「${artist.name}」吗？`,
-          confirmLabel: '取消关注',
-          run: () => void unfollowArtist(artist)
-        })
-    }
-  ]
-
   const created = useMemo(() => playlists.filter(isMine), [playlists, isMine])
   const collected = useMemo(() => playlists.filter((item) => !isMine(item)), [playlists, isMine])
   const recentSongs = useMemo(() => recent.map((record) => record.song), [recent])
@@ -303,8 +251,6 @@ export default function Library(): JSX.Element {
   const heroStats = [
     playlists.length > 0 ? `${playlists.length} 个歌单` : '',
     likedIDs.size > 0 ? `${likedIDs.size} 首喜欢` : '',
-    albums.length > 0 ? `${albums.length} 张专辑` : '',
-    artists.length > 0 ? `${artists.length} 位关注` : ''
   ].filter(Boolean)
 
   // 封面优先用「我喜欢的音乐」歌单封面，没有就退到第一首的专辑图。
@@ -313,6 +259,10 @@ export default function Library(): JSX.Element {
     160
   )
   const recentRows = expanded.recent ? recent : recent.slice(0, RECENT_PREVIEW)
+
+  // 换头像 / 换封面（或歌单封面后到）时重新尝试加载。
+  useEffect(() => setAvatarBroken(false), [auth.profile?.avatarUrl])
+  useEffect(() => setLikedCoverBroken(false), [likedCover])
 
   if (overview.loading) {
     return (
@@ -344,8 +294,8 @@ export default function Library(): JSX.Element {
       {/* 顶部用户卡：渐变玻璃，只放头像、昵称与真实存在的统计。 */}
       <section className="library__hero">
         <div className="library__hero-avatar">
-          {auth.profile?.avatarUrl ? (
-            <img src={auth.profile.avatarUrl} alt="" />
+          {auth.profile?.avatarUrl && !avatarBroken ? (
+            <img src={coverUrl(auth.profile.avatarUrl, 160)} alt="" onError={() => setAvatarBroken(true)} />
           ) : (
             <IconUser size={26} />
           )}
@@ -387,7 +337,11 @@ export default function Library(): JSX.Element {
 
           <div className="library__row">
             <div className="library__row-art">
-              {likedCover ? <img src={likedCover} alt="" loading="lazy" /> : <IconHeartFilled size={24} />}
+              {likedCover && !likedCoverBroken ? (
+                <img src={likedCover} alt="" loading="lazy" onError={() => setLikedCoverBroken(true)} />
+              ) : (
+                <IconHeartFilled size={24} />
+              )}
             </div>
             <div className="library__row-body">
               <div className="library__row-title">我喜欢的音乐</div>
@@ -424,13 +378,7 @@ export default function Library(): JSX.Element {
             <>
               {/* 展开是页面内状态，顶部导航的返回按钮管不到，所以列表上方再给一个返回。 */}
               <div className="library__list-bar">
-                <button
-                  type="button"
-                  className="library__collapse"
-                  onClick={() => setExpanded((current) => ({ ...current, liked: false }))}
-                >
-                  返回
-                </button>
+                <BackButton onClick={() => setExpanded((current) => ({ ...current, liked: false }))} />
                 <span className="library__list-count">共 {visibleLiked.length} 首</span>
               </div>
               <div className="library__list">
@@ -445,94 +393,6 @@ export default function Library(): JSX.Element {
               </div>
             </>
           ) : null}
-        </section>
-
-        {/* 收藏专辑 —— 通栏一行一张 */}
-        <section className="library__card library__card--wide">
-          <header className="library__card-head">
-            <span className="library__card-icon">
-              <IconDisc size={18} />
-            </span>
-            <h2 className="library__card-title">收藏专辑</h2>
-            {albums.length > 0 ? <span className="library__card-count">{albums.length} 张</span> : null}
-          </header>
-          {albums.length === 0 ? (
-            <div className="library__empty">
-              <div className="library__empty-title">还没有收藏专辑</div>
-              <div>在专辑页点「收藏」后会出现在这里</div>
-            </div>
-          ) : (
-            <div className="library__mini-grid">
-              {albums.map((album) => (
-                <div
-                  className="library-tile"
-                  key={album.id}
-                  onContextMenu={(event) => openTileMenu(event, albumMenu(album))}
-                >
-                  <ArtCard
-                    title={album.name}
-                    subtitle={album.artistName}
-                    imageUrl={coverUrl(album.picUrl, 320)}
-                    badge={album.size > 0 ? `${album.size} 首` : undefined}
-                    onClick={() => navigation.push({ name: 'album', id: album.id, title: album.name })}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button library-tile__more"
-                    title="更多操作"
-                    aria-label="更多操作"
-                    onClick={(event) => openTileMenu(event, albumMenu(album))}
-                  >
-                    <IconMore size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 关注歌手 —— 通栏一行一张 */}
-        <section className="library__card library__card--wide">
-          <header className="library__card-head">
-            <span className="library__card-icon">
-              <IconMic size={18} />
-            </span>
-            <h2 className="library__card-title">关注歌手</h2>
-            {artists.length > 0 ? <span className="library__card-count">{artists.length} 位</span> : null}
-          </header>
-          {artists.length === 0 ? (
-            <div className="library__empty">
-              <div className="library__empty-title">还没有关注歌手</div>
-              <div>在歌手页点「关注」后会出现在这里</div>
-            </div>
-          ) : (
-            <div className="library__mini-grid library__mini-grid--round">
-              {artists.map((artist) => (
-                <div
-                  className="library-tile"
-                  key={artist.id}
-                  onContextMenu={(event) => openTileMenu(event, artistMenu(artist))}
-                >
-                  <ArtCard
-                    title={artist.name}
-                    subtitle={artist.musicSize > 0 ? `${artist.musicSize} 首单曲` : undefined}
-                    imageUrl={coverUrl(artist.picUrl, 300)}
-                    round
-                    onClick={() => navigation.push({ name: 'artist', id: artist.id, title: artist.name })}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button library-tile__more"
-                    title="更多操作"
-                    aria-label="更多操作"
-                    onClick={(event) => openTileMenu(event, artistMenu(artist))}
-                  >
-                    <IconMore size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </section>
 
         {/* 我的歌单 —— 通栏一行一张；卡头「+」直接开新建歌单对话框。 */}
@@ -676,13 +536,7 @@ export default function Library(): JSX.Element {
               {/* 展开态同样给一个页面内的返回入口。 */}
               {expanded.recent ? (
                 <div className="library__list-bar">
-                  <button
-                    type="button"
-                    className="library__collapse"
-                    onClick={() => setExpanded((current) => ({ ...current, recent: false }))}
-                  >
-                    返回
-                  </button>
+                  <BackButton onClick={() => setExpanded((current) => ({ ...current, recent: false }))} />
                   <span className="library__list-count">共 {recent.length} 首</span>
                 </div>
               ) : null}

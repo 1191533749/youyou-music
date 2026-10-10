@@ -47,10 +47,14 @@ import {
   IconShuffle,
   IconSparkles,
   IconTrash,
+  IconUser,
   IconVolume,
   IconVolumeMute
 } from '../components/Icons'
 import { useImageReady } from '../components/FishAvatar'
+import { BackButton } from '../components/BackButton'
+// 歌手头像的取数、缓存与「切歌预取」都在 lib/artistPic 里（App 外壳负责预热）。
+import { useArtistPic } from '../lib/artistPic'
 import type { LyricLineDTO, LyricsDTO, SettingsDTO } from '@shared/types'
 
 /** 视觉特效，数组顺序就是切换顺序，默认第一个（黑胶）。 */
@@ -292,9 +296,13 @@ export default function NowPlaying(): JSX.Element {
     return activeIndexOf(lyrics, state.position)
   }, [lyrics, state.position])
 
+  /** 歌手头像：曲目自带 `artists[0].picUrl` 优先，缺席时按歌手 id 补一次 artist:detail。 */
+  const artistPic = useArtistPic(current?.artists[0]?.id, current?.artists[0]?.picUrl)
   // 视觉区、背景与取色共用一个图源：专辑封面缺席时退回歌手头像。
-  const artPic = current?.album.picUrl ?? current?.artists[0]?.picUrl
+  const artPic = current?.album.picUrl ?? artistPic
   const accent = useArtworkAccent(artPic)
+  const artistArt = coverUrl(artistPic, 96)
+  const artistArtReady = useImageReady(artistArt)
 
   // --- 歌词自动滚动 ------------------------------------------------------
 
@@ -351,6 +359,8 @@ export default function NowPlaying(): JSX.Element {
     ? ({ '--np-accent': accent.color, '--np-accent-deep': accent.deep } as CSSProperties)
     : undefined
   const cover = coverUrl(artPic, 640)
+  /** 背景大图也要等加载成功：拿不到图就不渲染 img，靠 .np-fs__bg-scrim 的渐变兜底。 */
+  const bgArtReady = useImageReady(cover)
 
   /**
    * 播放/暂停按钮的即时反馈：主进程广播回来之前先按本地意图翻转图标与文案，
@@ -415,17 +425,20 @@ export default function NowPlaying(): JSX.Element {
   return createPortal(
     <div className="np-fullscreen" style={style} role="dialog" aria-modal="true" aria-label="正在播放">
       <div className="np-fs__bg" aria-hidden="true">
-        {cover ? <img className="np-fs__bg-art" src={cover} alt="" /> : null}
+        {/* 背景图只在加载成功后才上屏：失败时留一层淡音符水印，不出现浏览器破图图标。 */}
+        {cover && bgArtReady ? (
+          <img className="np-fs__bg-art" src={cover} alt="" />
+        ) : (
+          <span className="np-art-fallback np-fs__bg-fallback">
+            <IconMusic size={96} />
+          </span>
+        )}
         <div className="np-fs__bg-scrim" />
       </div>
 
       <header className="np-fs__bar">
-        {/* 全屏层的返回入口：按需求只留文字，不带箭头符号；真全屏时没有返回按钮，用 ESC 退出。 */}
-        {systemFullScreen ? null : (
-          <button type="button" className="np-fs__back" onClick={exit}>
-            返回
-          </button>
-        )}
+        {/* 全屏层的返回入口：与全站统一的圆形返回按钮一致；真全屏时没有返回按钮，用 ESC 退出。 */}
+        {systemFullScreen ? null : <BackButton onClick={exit} />}
         <div className="np-fs__heading">
           <span className="np-fs__heading-title">正在播放</span>
           {current ? <span className="np-fs__heading-sub">{current.album.name}</span> : null}
@@ -505,7 +518,16 @@ export default function NowPlaying(): JSX.Element {
                 <h1 className="np-fs__title" title={current.name}>
                   {current.name}
                 </h1>
-                <div className="np-fs__artist">{artistLine(current)}</div>
+                <div className="np-fs__artist">
+                  <span className="np-fs__artist-art">
+                    {artistArt && artistArtReady ? (
+                      <img src={artistArt} alt="" />
+                    ) : (
+                      <IconUser size={14} />
+                    )}
+                  </span>
+                  <span className="np-fs__artist-name">{artistLine(current)}</span>
+                </div>
                 <div className="np-fs__album">{current.album.name}</div>
                 <div className="np-cover__badges">
                   {current.isCloud ? <span className="badge">云盘</span> : null}

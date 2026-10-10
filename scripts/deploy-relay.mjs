@@ -36,7 +36,7 @@ function readPrivateKey(file) {
   return `-----BEGIN PRIVATE KEY-----\n${chunks}\n-----END PRIVATE KEY-----\n`
 }
 
-const FILES = ['index.mjs', 'ws.mjs', 'gifts.mjs', 'alipay.mjs', 'daily.mjs']
+const FILES = ['index.mjs', 'ws.mjs', 'gifts.mjs', 'alipay.mjs', 'daily.mjs', 'logs.mjs']
 
 function connect() {
   return new Promise((resolve, reject) => {

@@ -22,6 +22,11 @@ shots-*/
 # 一起听中继的运行时数据与密钥：余额/订单状态、支付宝应用私钥，绝不入库
 server/data/
 
+# 打包产物按 ⑦ 放在根目录/桌面供本地测试（体积 200MB+，不入库）
+悠悠音乐*.exe
+YouyouMusic*.exe
+sha256sums.txt
+
 # 官网上放的安装包镜像（体积 200MB+，只存在服务器上，不进仓库）
 website/xz/
 website/downloads/

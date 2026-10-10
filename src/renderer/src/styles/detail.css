@@ -548,6 +548,47 @@
   margin-top: 0;
 }
 
+/* --- 全屏播放页：歌手头像 ---------------------------------------------------
+ *
+ * 歌手名左侧的圆形小头像，与名字同一行居中。
+ * 选择器统一带 .np-fullscreen 前缀（权重 0,2,0），无论样式表加载顺序如何都稳过
+ * home.css 里那条 .np-fs__artist（0,1,0）。
+ * 没有头像（部分歌单来源的 ar 对象本身没有图）或图加载失败时，组件会退到 IconUser，
+ * 这里只负责圆底与尺寸，所以任何情况下都不会出现破图。 */
+.np-fullscreen .np-fs__artist {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.np-fullscreen .np-fs__artist-art {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--glass-weak);
+  color: var(--text-tertiary);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.np-fullscreen .np-fs__artist-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 头像占掉一段宽度后，名字仍要能在行尾用省略号收尾。 */
+.np-fullscreen .np-fs__artist-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* --- 全屏播放页：歌词特效 ---------------------------------------------------
  *
  * 逐字卡拉OK 的关键：LRC 只有行级时间戳，所以「每个字什么时候亮」要现算。
@@ -789,6 +830,22 @@
   width: 34%;
   height: 34%;
   opacity: 0.72;
+}
+
+/* 背景大图缺席 / 加载失败时的兜底：整层铺满的极淡音符水印，压在 .np-fs__bg-scrim
+   下面，只做底色不抢前景；用它替代 <img> 就不会露出浏览器的破图图标。 */
+.np-fullscreen .np-fs__bg-fallback {
+  position: absolute;
+  inset: 0;
+  background: none;
+  color: var(--np-accent, var(--accent));
+  opacity: 0.12;
+}
+
+.np-fullscreen .np-fs__bg-fallback svg {
+  width: 30vh;
+  height: 30vh;
+  opacity: 1;
 }
 
 @keyframes fish-avatar-in {

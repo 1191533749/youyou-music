@@ -2,7 +2,7 @@
  * 灰色歌曲换源的调度层。
  *
  * 换源解析的语义：
- * 按 pyncmd → 酷狗 → 酷我 的顺序尝试，跳过本次会话已经失败过的音源，
+ * 按 汽水 → 酷狗 → 酷我 → QQ 的顺序尝试，跳过本次会话已经失败过的音源，
  * 并把「这次试过哪些」回传给调用方，避免同一首歌反复撞同一个死源。
  */
 import {
@@ -12,6 +12,7 @@ import {
   type AudioSourceID,
   type ResolvedAudioSource
 } from './providers.js'
+import type { QualityLevel } from '@shared/types'
 import type { Track } from '../netease/models.js'
 
 export interface UnblockResolution {
@@ -33,20 +34,27 @@ export class UnblockService {
     return this.deps.isEnabled() && this.deps.enabledSources().length > 0
   }
 
-  /** 按优先级尝试各音源；任何异常都只记日志，不向上抛。 */
-  async resolve(track: Track, attempted: Set<AudioSourceID> = new Set()): Promise<UnblockResolution> {
+  /**
+   * 按优先级尝试各音源；任何异常都只记日志，不向上抛。
+   * `preferred` 是用户的首选音质，透传给支持多档位的音源（汽水）用来挑档。
+   */
+  async resolve(
+    track: Track,
+    attempted: Set<AudioSourceID> = new Set(),
+    preferred?: QualityLevel
+  ): Promise<UnblockResolution> {
     const attemptedNow = new Set<AudioSourceID>()
     if (!this.enabled) return { source: null, attempted: attemptedNow }
 
     const configured = new Set(this.deps.enabledSources())
-    // 先按用户配置的顺序（默认 pyncmd → 酷狗 → 酷我），再按固定顺序兜底。
+    // 先按用户配置的顺序（默认 汽水 → 酷狗 → 酷我 → QQ），再按固定顺序兜底。
     const order = AUDIO_SOURCE_IDS.filter((id) => configured.has(id))
 
     for (const id of order) {
       if (attempted.has(id)) continue
       attemptedNow.add(id)
       try {
-        const source = await PROVIDERS[id](track)
+        const source = await PROVIDERS[id](track, preferred)
         if (source) {
           this.deps.log?.(`换源成功：${track.name} 来自 ${AUDIO_SOURCE_NAMES[id]}`)
           return { source, attempted: attemptedNow }

@@ -67,7 +67,12 @@ src/renderer/   lib/(contract,ipc,format,hooks,lyricsUtils) store/(player,auth,n
   桌面歌词窗口（开关双向同步 + **事件广播到全部窗口** + **按行自适配高度** + **透明区点击穿透**）、
   媒体键/托盘/单实例、IPC 注册
 - ✅ **受限歌曲自动换源**（`src/main/unblock/`）：官方地址失败或仅剩试听片段时，依次尝试
-  站内替代版本 → pyncmd → 酷狗 → 酷我；四条件严格匹配（时长±5s、歌名归一化、版本标记、歌手）
+  站内替代版本 → 汽水音乐 → 酷狗 → 酷我 → QQ；四条件严格匹配（时长±5s、歌名归一化、版本标记、歌手）
+- ✅ **多平台登录**（`src/main/accounts/platforms.ts` + `src/main/ipc/auth.ts` 的 `auth:platforms` /
+  `auth:platformQRStart` / `auth:platformQRPoll` / `auth:platformLogout` / `auth:platformPlaylists`）：
+  登录页底部平台图标切换，网易云沿用原二维码与矩阵，QQ音乐用 `ssl.ptlogin2.qq.com/ptqrshow` 的 PNG 二维码
+  以 data URL 直接渲染；登录态存 `<userData>/accounts.json`，与网易云 `cookies.json` 互不影响。
+  酷狗扫码接口当前全线 20006，登录搁置（酷狗仍然是一个可用的音源）
 - ✅ **音质诚实降档**：达不到所选音质自动降档且不打扰用户；第三方音源码率已知才映射档位（`servedBitrate`）；
   界面不再显示「来自 X」或降档文字（v0.3.0 按用户要求全部去掉）
 - ✅ **随机起播**：队列为空时点分类页「播放全部」→ `randomStart: true` → 随机一首立即播放（点行不受影响）
@@ -100,7 +105,7 @@ src/renderer/   lib/(contract,ipc,format,hooks,lyricsUtils) store/(player,auth,n
 
 ```powershell
 npm run typecheck      # 两个 tsconfig 都要 0 错误
-npm test               # 33 项通过
+npm test               # 127 项通过
 npm run build
 npm run smoke          # 15 项 PASS + SMOKE OK
 npm run dist           # node scripts/package.mjs：安装包 + 免安装版
@@ -111,8 +116,8 @@ npm run verify:packaged
 
 1. **exe 图标与版本信息由 afterPack 钩子写入**（`scripts/after-pack.cjs` + `vendor/rcedit`），
    因为 electron-builder 自带的资源编辑路径要解压含 macOS 符号链接的 winCodeSign 包，
-   在本机（未开开发者模式、非管理员）会解压失败。三条音源里 **酷我稳定可用、酷狗对本例歌曲返回「需要付费」、
-   pyncmd 对本例无结果**——换源覆盖度取决于第三方接口，属于外部依赖。
+   在本机（未开开发者模式、非管理员）会解压失败。四个音源里 **汽水免登录直连且最快、酷我稳定可用、酷狗对本例歌曲返回「需要付费」、
+   pyncmd 已被汽水音乐取代、QQ 未登录只覆盖部分免费歌**——换源覆盖度取决于第三方接口，属于外部依赖。
 2. **换源覆盖度有限。** 只有「时长 ±5 秒 + 歌名归一化相同 + 版本标记一致 + 歌手命中」四条全中才采用。
    想提高命中率可以增加音源（Migu / Bilibili 需要各自签名），或对纯音乐/现场版放宽版本判定。
 3. **AutoMix / 分轨混音未实现。** 需要另找 Windows 上的推理后端
@@ -127,6 +132,11 @@ npm run verify:packaged
 9. **队列无「跳到某一首」通道。** 页面用重排队列等价实现。
 10. **数据目录已改名** `%APPDATA%\youyou-music`，启动时会把旧目录 `kumone-windows` 里的
     `cookies.json` / `settings.json` 一次性迁移过来（`migrateLegacyUserData`）；旧目录的缓存不迁移。
+11. **酷狗登录搁置。** `/v2/qrcode` 对参数矩阵里的每一组都返回「参数错误 20006」（去掉 `uuid` 变 20010），
+    换主机（`login.` / `sso.` / `login.user.`）都不可达，官方 `kguser_min.js` 里也没有 `qrcode` 字样；
+    实现留在 `src/main/accounts/platforms.ts` 但未接入界面，酷狗仍作为音源可用。
+12. **QQ音乐登录后能取歌单，但还没有把歌单灌进「我的音乐」。** `auth:platformPlaylists` 已返回平台歌单，
+    登录页能列出；导入到队列/资料库尚未接线（需要把平台曲目映射成 `TrackDTO`）。
 
 ## 7. 排错手册
 

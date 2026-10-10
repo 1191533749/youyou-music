@@ -15,6 +15,7 @@ import { playability, playabilityReason, type Track } from '../netease/models.js
 import { matchesTrack, AUDIO_SOURCE_NAMES, type AudioSourceID } from '../unblock/providers.js'
 import type { UnblockService } from '../unblock/service.js'
 import type { MpvController, MpvState } from '../audio/mpv.js'
+import { looksLikeNoticeBySize, probeStream, type StreamProbeResult } from './streamProbe.js'
 import type { QualityLevel, RepeatMode, TrackDTO } from '@shared/types'
 
 /** 一次解析的最终落点：谁提供了音频、什么音质、能不能缓存。 */
@@ -30,7 +31,7 @@ interface ResolvedPlayback {
   format?: string
   cached: boolean
   remoteURL?: string
-  /** 缓存归档用的音源标记（netease / pyncmd / kugou / kuwo）。 */
+  /** 缓存归档用的音源标记（netease / qishui / kugou / kuwo / qq）。 */
   cacheVariant: string
   /** 走了第三方音源时显示给用户的来源名。 */
   servedFrom?: string
@@ -61,6 +62,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 /** 单次音源解析（含全部回退链）的最长等待时间。 */
 const RESOLVE_TIMEOUT_MS = 20_000
+
+/** 起播前探测第三方音源（连通性 + 体积）的超时。 */
+const PROBE_TIMEOUT_MS = 5_000
+
+/** 预解析成功后的预热探测：只要连通性和 CDN 边缘，超时给短一点。 */
+const PREWARM_TIMEOUT_MS = 4_000
+
+/**
+ * 搜索时后台预解析结果的缓存有效期。只缓存第三方音源（汽水/酷狗/酷我/QQ）
+ * 的直链，它们不依赖网易云的短时签名；10 分钟内命中直接复用，10 分钟后再
+ * 解析也够新鲜（第三方直链一般至少几小时内有效，过期由 mpv 报错自动换源兜底）。
+ */
+const PREFETCH_TTL_MS = 10 * 60_000
+
+/**
+ * 起播后过多久才开始后台整首缓存。
+ *
+ * 刚出声那几秒是缓冲最脆弱的时候，整首下载会和 mpv 抢同一条带宽
+ * （第三方源限速时尤其明显，实测能把起播拖到十几秒）。缓存只是顺手存一份，
+ * 晚一点开始用户完全无感。
+ */
+const CACHE_START_DELAY_MS = 12_000
 
 /** Quality tiers tried in order when the requested one is not entitled. */
 const QUALITY_LADDER: QualityLevel[] = [
@@ -106,6 +129,11 @@ export interface PlayerDeps {
   log?: (message: string) => void
   /** Playback position poll interval in ms while playing. */
   positionIntervalMs?: number
+  /**
+   * 音源探测实现，默认走真实的 streamProbe；测试可注入假实现，
+   * 从而在真实解析链路上确定性地验证「提示音源绝不交给 mpv」。
+   */
+  probe?: (url: string, timeoutMS: number) => Promise<StreamProbeResult>
 }
 
 export interface PlayerSnapshot {
@@ -144,6 +172,8 @@ interface QueueEntry {
   preResolved?: { url: string; sourceName: string }
   /** 顺序播放的下一首预解析结果：切歌时直接复用，跳过整条解析链路。 */
   preResolvedFull?: ResolvedPlayback
+  /** 预解析时顺手做的音源探测结果：切歌时复用，省掉第二次联网等待。 */
+  preProbe?: StreamProbeResult
 }
 
 export class PlayerController extends EventEmitter {
@@ -177,6 +207,16 @@ export class PlayerController extends EventEmitter {
   private resolveGeneration = 0
   /** 每首歌已尝试失败过的第三方音源，避免重复撞死源。 */
   private unblockAttempts = new Map<number, Set<AudioSourceID>>()
+  /** 搜索时后台预解析好的第三方直链缓存：命中即跳过联网解析（尤其第三方那几秒）。 */
+  private prefetchedSources = new Map<number, { resolved: ResolvedPlayback; at: number }>()
+  /** 正在后台预解析中的曲目：播放命中时直接 await 它，复用同一次解析，不再开第二条链路。 */
+  private prefetchInflight = new Map<number, Promise<ResolvedPlayback | undefined>>()
+  /** 后台整首缓存的串行队列：同一时刻只下载一首，避免多路抢带宽。 */
+  private cacheQueue: Promise<void> = Promise.resolve()
+  /** mpv 当前载入的曲目 id：切歌时若不同则先 unload 旧音频，避免「歌名变了歌没换」。 */
+  private loadedTrackId?: number
+  /** 随机模式下预先 roll 好的下一首下标，供 lookahead 预解析、pickNext 消费。 */
+  private shuffleNext?: number
 
   constructor(private readonly deps: PlayerDeps) {
     super()
@@ -254,6 +294,7 @@ export class PlayerController extends EventEmitter {
       startIndex = Math.floor(Math.random() * this.queue.length)
     }
     this.index = this.queue.length === 0 ? -1 : clamp(startIndex, 0, this.queue.length - 1)
+    this.shuffleNext = undefined
     this.emitSnapshot()
     if (this.index >= 0) await this.playIndex(this.index, { keepQueue: true })
   }
@@ -299,6 +340,8 @@ export class PlayerController extends EventEmitter {
   async clearQueue(): Promise<void> {
     this.queue = []
     this.index = -1
+    this.loadedTrackId = undefined
+    this.shuffleNext = undefined
     await this.deps.mpv.unload().catch(() => undefined)
     this.playing = false
     this.position = 0
@@ -315,7 +358,10 @@ export class PlayerController extends EventEmitter {
 
   // MARK: - Transport
 
-  async playIndex(index: number, options: { keepQueue?: boolean } = {}): Promise<void> {
+  async playIndex(
+    index: number,
+    options: { keepQueue?: boolean; qualityReload?: boolean } = {}
+  ): Promise<void> {
     if (index < 0 || index >= this.queue.length) return
     const generation = ++this.resolveGeneration
     this.switching = true
@@ -332,11 +378,20 @@ export class PlayerController extends EventEmitter {
     this.deps.onTrackChanged?.(this.queue[index].track)
 
     const entry = this.queue[index]
+    // 切歌先停掉旧音频：否则歌名已变但旧歌还在继续播（用户反馈「歌名变了歌曲半天不换」）。
+    // 重载当前曲目 / 重复播同一首时 id 相同，跳过 unload 避免打断播放。
+    if (this.loadedTrackId !== undefined && this.loadedTrackId !== entry.track.id) {
+      await this.deps.mpv.unload().catch(() => undefined)
+      this.loadedTrackId = undefined
+    }
     try {
       let resolved: ResolvedPlayback | undefined
-      // 版权提示音防御：第三方音源偶尔返回「当前歌曲仅支持 XX 客户端播放」的
-      // 语音占位文件（时长只有十几秒）。逐候选重试：验证失败就把该音源记入
-      // attempted，resolveSource 自然会尝试下一个音源，直到拿到真歌。
+      const expectedSeconds = entry.track.durationMS / 1000
+      // 版权提示音 / 死链防御：第三方音源先探测一次再交给 mpv。
+      // 旧实现是「静音播放 + 2.5 秒轮询时长」，但第三方流在这个窗口里通常还
+      // 读不到时长，等于白等 2.5 秒；连不上的源还要再让用户干等 mpv 的
+      // network-timeout。探测失败或判定为提示音就把该音源记入 attempted，
+      // resolveSource 自然会换下一个音源，直到拿到真歌。
       let verified = false
       for (let candidate = 0; candidate < 4; candidate += 1) {
         if (generation !== this.resolveGeneration) return
@@ -365,11 +420,36 @@ export class PlayerController extends EventEmitter {
         this.servedBitrate = resolved.bitrate
         this.servedFrom = resolved.servedFrom ?? resolved.servedNote
         this.source = resolved.source
-        // 远程第三方音源先静音播放，验证时长通过后再恢复用户音量——
-        // 提示音最长只会在静音窗口里被缓冲，用户听到的永远是验证过的真歌。
-        // try/finally 保证任何失败路径（play 抛错、时长读取超时）都恢复静音，
+        const remote = !resolved.cached && resolved.remoteURL ? resolved.remoteURL : undefined
+        // 第三方音源（有 servedFrom）先探测：拿不到数据就当场换源，
+        // 不用等 mpv 建连超时；拿到体积就能提前识破版权提示音。
+        let probe: StreamProbeResult | undefined
+        if (remote && resolved.servedFrom) {
+          // 预解析时已经探过的同一条 URL 直接复用（结果在 entry 上），
+          // 切歌就不用再等一次联网；探测失败的重新探一次，避免误杀。
+          const reused = entry.preResolvedFull === resolved ? entry.preProbe : undefined
+          probe = reused?.ok ? reused : await this.probeRemote(remote, PROBE_TIMEOUT_MS)
+          if (generation !== this.resolveGeneration) return
+          if (!probe.ok) {
+            this.markSourceFailed(entry, resolved)
+            this.deps.log?.(
+              `音源探测失败（${probe.error ?? '未知原因'}），换下一个音源：${entry.track.name} 来自 ${resolved.servedFrom}`
+            )
+            continue
+          }
+          if (looksLikeNoticeBySize(probe.totalBytes, expectedSeconds)) {
+            this.markSourceFailed(entry, resolved)
+            this.deps.log?.(
+              `检测到版权提示音（体积 ${probe.totalBytes} 字节，期望约 ${Math.round(expectedSeconds)} 秒），换下一个音源：${entry.track.name} 来自 ${resolved.servedFrom}`
+            )
+            continue
+          }
+        }
+        // 只有「体积未知」的流才退回旧的静音时长校验（窗口缩到 1.2 秒）：
+        // 远程第三方音源先静音播放，验证通过后再恢复用户音量，提示音最长只会
+        // 在静音窗口里被缓冲。try/finally 保证任何失败路径都恢复静音，
         // 否则 mpv 会永远保持静音，表现为「莫名其妙自己静音」。
-        const verifyMuted = !resolved.cached && !!resolved.servedFrom
+        const verifyMuted = !!remote && probe?.totalBytes === undefined
         const userMuted = this.muteState
         if (verifyMuted) {
           this.suppressMuteEcho = true
@@ -379,10 +459,7 @@ export class PlayerController extends EventEmitter {
           // A local cache hit is a file path, not a stream.
           await this.deps.mpv.play(resolved.source, 0)
           if (verifyMuted && (await this.looksLikeNotice(entry.track))) {
-            const variant = resolved.cacheVariant
-            if (variant && variant !== 'netease') {
-              this.attemptedSources(entry.track.id).add(variant as AudioSourceID)
-            }
+            this.markSourceFailed(entry, resolved)
             this.deps.log?.(
               `检测到版权提示音（时长不符），换下一个音源：${entry.track.name} 来自 ${resolved.servedFrom}`
             )
@@ -414,7 +491,8 @@ export class PlayerController extends EventEmitter {
       if (!resolved.cached && resolved.remoteURL) {
         // Cache in the background: the user should hear the track now, not
         // after a full download. 验证通过才缓存，提示音不会污染本地缓存。
-        void this.cacheInBackground(
+        // 起播后延迟一会儿再开始（见 CACHE_START_DELAY_MS），别抢 mpv 的带宽。
+        this.scheduleCacheInBackground(
           entry.track,
           resolved.level,
           resolved.remoteURL,
@@ -423,11 +501,12 @@ export class PlayerController extends EventEmitter {
         )
       }
       this.playing = true
+      this.loadedTrackId = entry.track.id
       this.consecutiveFailures = 0
       this.startPositionTimer()
       this.scrobbleStart()
-      // 顺序模式下后台预解析下一首：切歌瞬间就能出声（用户反馈「加载慢、卡顿」）。
-      if (!this.shuffle && this.repeatMode !== 'one') {
+      // 后台预解析下一首（顺序 + 随机都做）：切歌瞬间就能出声（用户反馈「加载慢、卡顿」）。
+      if (this.repeatMode !== 'one') {
         void this.prepareLookahead(generation)
       }
       // 真实码率要等 mpv 把文件载入后才能读到：异步补一次，用来诚实显示音质。
@@ -436,6 +515,9 @@ export class PlayerController extends EventEmitter {
       if (generation !== this.resolveGeneration) return
       const message = describeError(cause)
       this.deps.log?.(`播放失败: ${message}`)
+      // 换音质失败不能像正常播放那样「自动跳下一首」：用户只是想换个档位，
+      // 歌还是那一首。抛回去由 reloadCurrentTrack 退回原来那一档。
+      if (options.qualityReload) throw cause
       // 拿不到可播版本时**自动跳下一首**，不要把「版权/受限」这类原因摆到用户面前。
       // 只有整条队列都放过一遍还是不行，才给一句中性提示。
       if (this.queue.length > 1 && this.consecutiveFailures < this.queue.length - 1) {
@@ -455,7 +537,6 @@ export class PlayerController extends EventEmitter {
         this.emitSnapshot()
       }
     }
-    void options
   }
 
   /**
@@ -487,17 +568,45 @@ export class PlayerController extends EventEmitter {
     }
   }
 
+  /** 探测一条远程音频流（测试可注入替身，默认走真实实现）。 */
+  private probeRemote(url: string, timeoutMS = PROBE_TIMEOUT_MS): Promise<StreamProbeResult> {
+    return (this.deps.probe ?? probeStream)(url, timeoutMS)
+  }
+
+  /**
+   * 把某个换源音源记进「本会话别再撞」的集合；如果它就是预解析好的那一条，
+   * 顺手作废预解析结果——否则候选循环每次都会拿到同一个坏地址重试四遍。
+   */
+  private markSourceFailed(entry: QueueEntry, resolved: ResolvedPlayback): void {
+    const variant = resolved.cacheVariant
+    if (variant && variant !== 'netease') {
+      this.attemptedSources(entry.track.id).add(variant as AudioSourceID)
+    }
+    if (entry.preResolvedFull === resolved) {
+      entry.preResolvedFull = undefined
+      entry.preProbe = undefined
+    }
+  }
+
   /**
    * 判断正在播放的远程流是不是「版权提示音」占位文件：
    * mpv 报出的实际时长比曲目时长短 90 秒以上基本可以断定被替换
    * （提示语音通常 10~30 秒）。短歌（<2 分钟）不检查，避免误伤。
    * 超时读不到时长（还在缓冲）宁可放过，不冤枉正常歌曲。
+   *
+   * 这是**兜底**路径：只有播前探测拿不到体积（分块传输）时才会走到这里，
+   * 所以窗口压到 3 × 400ms —— 实测第三方流往往整窗口都读不到时长，
+   * 让用户白等更久没有意义。
    */
-  private async looksLikeNotice(track: Track): Promise<boolean> {
+  private async looksLikeNotice(
+    track: Track,
+    attempts = 3,
+    intervalMS = 400
+  ): Promise<boolean> {
     const expected = track.durationMS / 1000
     if (expected < 120) return false
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500))
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMS))
       let actual: number | undefined
       try {
         actual = await this.deps.mpv.duration()
@@ -512,12 +621,13 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
-   * 顺序模式下后台预解析下一首：正在播的时候把下一条的音源解析好，
+   * 后台预解析下一首（顺序 + 随机都覆盖）：正在播的时候把下一条的音源解析好，
    * 切歌瞬间就能出声。失败静默——真正切歌时仍走完整解析链路。
    */
   private async prepareLookahead(generation: number): Promise<void> {
-    const nextIndex = this.index + 1
-    if (nextIndex >= this.queue.length) return
+    if (this.repeatMode === 'one') return
+    const nextIndex = this.planNextIndex(false)
+    if (nextIndex < 0) return
     const entry = this.queue[nextIndex]
     if (entry.preResolvedFull) return
     try {
@@ -526,6 +636,20 @@ export class PlayerController extends EventEmitter {
       if (this.queue[nextIndex] !== entry) return
       entry.preResolvedFull = resolved
       this.deps.log?.(`已预解析下一首：${entry.track.name}`)
+      // 顺手把这条 URL 探测一遍（只取前 96KB）：既提前识破提示音/死链，
+      // 也把 DNS/TLS 与 CDN 边缘热起来，切歌时 mpv 首包更快到。
+      // 结果存进 entry，切歌时直接复用，不再多等一次联网。
+      if (resolved.remoteURL && resolved.servedFrom) {
+        const probe = await this.probeRemote(resolved.remoteURL, PREWARM_TIMEOUT_MS)
+        if (generation === this.resolveGeneration && this.queue[nextIndex] === entry) {
+          entry.preProbe = probe
+        }
+        if (probe.ok) {
+          this.deps.log?.(
+            `已预热音源：${entry.track.name}（${probe.elapsedMS}ms${probe.totalBytes ? `，${Math.round(probe.totalBytes / 1024)}KB` : ''}）`
+          )
+        }
+      }
     } catch {
       // 预解析失败就等切歌时再走完整链路，绝不影响当前播放。
     }
@@ -534,10 +658,34 @@ export class PlayerController extends EventEmitter {
   /**
    * Decides what mpv should open.
    *
+   * 先查搜索时后台预解析好的第三方直链缓存——命中即跳过整条联网解析链，
+   * 第三方解析那几秒就不用再等；再查是否正在后台预解析，命中则复用同一次
+   * 解析（不再开第二条链路）；都没有才走真正的解析链。
+   */
+  private async resolveSource(track: Track): Promise<ResolvedPlayback> {
+    const key = track.id
+    const prefetched = this.prefetchedSources.get(key)
+    if (prefetched) {
+      if (Date.now() - prefetched.at < PREFETCH_TTL_MS) {
+        this.deps.log?.(`复用预热音源：${track.name} 来自 ${prefetched.resolved.servedFrom ?? '?'}`)
+        return prefetched.resolved
+      }
+      this.prefetchedSources.delete(key)
+    }
+    const inflight = this.prefetchInflight.get(key)
+    if (inflight) {
+      const resolved = await inflight
+      if (resolved) return resolved
+    }
+    return this.resolveSourceUncached(track)
+  }
+
+  /**
+   * 真正的解析链（不含预热缓存检查）：
    * 顺序：本次请求音质的本地缓存 → 网易云官方地址 → （受限时）站内替代版本 →
    * 第三方音源。缓存命中是最好情况（完全不联网）。
    */
-  private async resolveSource(track: Track): Promise<ResolvedPlayback> {
+  private async resolveSourceUncached(track: Track): Promise<ResolvedPlayback> {
     const requested = this.deps.getQuality()
 
     const cachedAtRequested = await this.deps.cache
@@ -602,7 +750,7 @@ export class PlayerController extends EventEmitter {
       }
     }
 
-    // 3. 第三方音源（pyncmd / 酷狗 / 酷我）。
+    // 3. 第三方音源（汽水 / 酷狗 / 酷我 / QQ）。
     for (const level of [requested, 'exhigh', 'standard'] as QualityLevel[]) {
       for (const id of this.deps.unblockSourceIds()) {
         const cached = await this.deps.cache?.audioPath(track.id, level, id).catch(() => undefined)
@@ -619,7 +767,11 @@ export class PlayerController extends EventEmitter {
       }
     }
 
-    const { source } = await this.deps.unblock.resolve(track, this.attemptedSources(track.id))
+    const { source } = await this.deps.unblock.resolve(
+      track,
+      this.attemptedSources(track.id),
+      requested
+    )
     if (source) {
       // 第三方音源的码率往往不确定：知道码率就如实映射到音质档位，
       // 不知道就不声称任何档位，只告诉用户「来自哪个音源」。
@@ -639,6 +791,31 @@ export class PlayerController extends EventEmitter {
     // 不把「版权/受限/换源失败」这类原因暴露给用户：上层会自动跳下一首，
     // 整队都失败时只给一句中性提示。
     throw new NeteaseAPIError('business', { code: -1, message: '暂时无法播放这首歌' })
+  }
+
+  /**
+   * 后台预解析（不播放）：供搜索/首页在结果返回后顺手把顶部曲目的第三方
+   * 直链先解析好缓存起来，用户点第一首歌时就不用再等第三方解析那几秒。
+   *
+   * 只缓存第三方音源结果（`servedFrom` 非空）：官方地址有短时签名、且官方
+   * 解析本身够快，缓存收益小、过期风险大；第三方直链才是起播慢的大头。
+   * 失败静默（预解析本来就是锦上添花，不该影响任何正常链路）。
+   */
+  async prefetchSource(track: Track): Promise<void> {
+    const key = track.id
+    if (this.prefetchedSources.has(key) || this.prefetchInflight.has(key)) return
+    const inflight = withTimeout(this.resolveSourceUncached(track), RESOLVE_TIMEOUT_MS, `预热《${track.name}》`)
+      .then((resolved) => {
+        if (resolved.remoteURL && resolved.servedFrom) {
+          this.prefetchedSources.set(key, { resolved, at: Date.now() })
+          this.deps.log?.(`已预热音源：${track.name} 来自 ${resolved.servedFrom}`)
+          return resolved
+        }
+        return undefined
+      })
+      .catch(() => undefined)
+    this.prefetchInflight.set(key, inflight)
+    void inflight.finally(() => this.prefetchInflight.delete(key))
   }
 
   /** 本会话内某首歌已经失败过的音源，避免反复撞同一个死源。 */
@@ -719,6 +896,29 @@ export class PlayerController extends EventEmitter {
       }
     }
     return undefined
+  }
+
+  /**
+   * 起播后延迟 `CACHE_START_DELAY_MS` 再排队做整首缓存。
+   * 刚出声的那十几秒是缓冲最脆弱的时候，mpv 还要建连、填 demuxer 缓存，
+   * 这时再开一条全速下载会直接抢带宽（源站限速时尤其明显，表现为起播卡
+   * 或中途 underrun）；延迟一下、并且串行化（同一时刻只下载一首），
+   * 既保住听感，缓存也照样能攒起来。
+   */
+  private scheduleCacheInBackground(
+    track: Track,
+    level: QualityLevel,
+    url: string,
+    format: string | undefined,
+    variant: string
+  ): void {
+    if (!this.deps.cache) return
+    const timer = setTimeout(() => {
+      this.cacheQueue = this.cacheQueue
+        .then(() => this.cacheInBackground(track, level, url, format, variant))
+        .catch(() => undefined)
+    }, CACHE_START_DELAY_MS)
+    timer.unref?.()
   }
 
   private async cacheInBackground(
@@ -812,29 +1012,86 @@ export class PlayerController extends EventEmitter {
 
   setShuffle(enabled: boolean): void {
     this.shuffle = enabled
+    this.shuffleNext = undefined
     this.emitSnapshot()
   }
 
-  /** Re-resolves the current track, e.g. after the user changes the quality. */
+  /**
+   * 换音质：拿当前这首歌按新档位重新解析一次，从原来的位置接着播。
+   *
+   * 必须先把「上一次解析好的音源」丢掉：`entry.preResolved*` 与 `prefetchedSources`
+   * 都是按 track.id 缓存的、跟音质无关 —— 不清掉就会原样复用旧档位的地址，
+   * 用户看到的就是「切到标准音质又自己弹回极高」（snapshot 里的 servedQuality 没变，
+   * 底部那个音质下拉框是受控的，于是一起弹回去）。
+   *
+   * 位置：playIndex 会先把 position 归零，所以解析成功后要 seek 回原处；
+   * 同一首歌 id 不变，`playIndex` 不会 unload，mpv 只是换一个文件接着放，
+   * 不会从头重新开始。换档失败时退回原来那一档，绝不顺手跳下一首。
+   */
   async reloadCurrentTrack(): Promise<void> {
     if (this.index < 0) return
+    const entry = this.queue[this.index]
+    // 站外曲目（汽水/酷狗/酷我搜来的歌）的音质由音源决定，换档没有意义，
+    // 而且它的地址只存在于 preResolved 里，清了就播不了。
+    if (entry.track.id < 0) return
     const position = this.position
-    await this.playIndex(this.index)
-    if (position > 0) await this.seek(position)
+    const wasPlaying = this.playing
+    const previous = {
+      servedQuality: this.servedQuality,
+      servedBitrate: this.servedBitrate,
+      servedFrom: this.servedFrom
+    }
+    entry.preResolved = undefined
+    entry.preResolvedFull = undefined
+    entry.preProbe = undefined
+    // 预解析是「按当时的音质」做的，整条队列的都作废，免得下一首还用旧档位。
+    for (const item of this.queue) {
+      item.preResolvedFull = undefined
+      item.preProbe = undefined
+    }
+    this.prefetchedSources.delete(entry.track.id)
+    this.prefetchInflight.delete(entry.track.id)
+    try {
+      await this.playIndex(this.index, { qualityReload: true })
+      if (position > 0) await this.seek(position)
+      if (wasPlaying && !this.playing) await this.play()
+    } catch (cause) {
+      // 失败就静默退回原来那一档：不给用户弹任何提示文字。
+      this.deps.log?.(`切换音质失败，保留原音质: ${String(cause)}`)
+      this.servedQuality = previous.servedQuality
+      this.servedBitrate = previous.servedBitrate
+      this.servedFrom = previous.servedFrom
+      if (position > 0) await this.seek(position).catch(() => undefined)
+      if (wasPlaying) await this.play().catch(() => undefined)
+      this.emitSnapshot()
+    }
   }
 
   // MARK: - Playback bookkeeping
 
-  private pickNext(userInitiated: boolean): number {
+  /**
+   * 决定「下一首」将落在哪个下标，lookahead 用它预解析、pickNext 用它真正切歌。
+   * 随机模式下先 roll 一次并缓存在 shuffleNext，保证预解析与真正切歌是同一首。
+   */
+  private planNextIndex(userInitiated: boolean): number {
     if (this.queue.length === 1) return this.repeatMode === 'one' ? 0 : userInitiated ? 0 : -1
     if (this.shuffle) {
+      if (this.shuffleNext !== undefined && this.shuffleNext !== this.index) return this.shuffleNext
       let candidate = Math.floor(Math.random() * this.queue.length)
       if (candidate === this.index) candidate = (candidate + 1) % this.queue.length
+      this.shuffleNext = candidate
       return candidate
     }
     const isLast = this.index === this.queue.length - 1
     if (isLast && this.repeatMode === 'off' && !userInitiated) return -1
     return (this.index + 1) % this.queue.length
+  }
+
+  private pickNext(userInitiated: boolean): number {
+    const next = this.planNextIndex(userInitiated)
+    // 消费掉预 roll 的随机下标：下一次随机再重新 roll。
+    if (this.shuffle && next === this.shuffleNext) this.shuffleNext = undefined
+    return next
   }
 
   private async onTrackEnd(): Promise<void> {
@@ -915,7 +1172,11 @@ function toTrackDTO(entry: QueueEntry): TrackDTO {
   return {
     id: track.id,
     name: track.name,
-    artists: track.artists.map((artist) => ({ id: artist.id, name: artist.name })),
+    artists: track.artists.map((artist) => ({
+      id: artist.id,
+      name: artist.name,
+      ...(artist.picUrl ? { picUrl: artist.picUrl } : {})
+    })),
     album: { id: track.album.id, name: track.album.name, picUrl: track.album.picUrl },
     durationMS: track.durationMS,
     alias: track.alias,
