@@ -17,6 +17,7 @@ import {
   resolveQq,
   resolveQqByMid,
   type AudioSourceID,
+  type QqOptions,
   type ResolvedAudioSource
 } from '../unblock/providers.js'
 import {
@@ -250,20 +251,22 @@ export interface ResolvedExternalAudio {
  * 歌单来的曲目带着平台自己的 `songMid`：那首 QQ 音乐的歌先直接在 QQ 取地址——
  * 这是唯一「平台自己认定」的匹配，比任何同名搜索都准；拿不到（VIP/付费）再退到
  * 其余三个源按严格匹配兜底。`skip` 里是本次已经判定坏链的源，直接跳过。
+ * `qq` 里是绑定在「设置 → 音源账号」的 QQ 登录态与音质档位，QQ 的两条路径都会带上它。
  */
 export async function resolveExternalAudio(
   item: ExternalTrack,
-  hints?: { qqSongMid?: string; skip?: ReadonlySet<string> }
+  hints?: { qqSongMid?: string; skip?: ReadonlySet<string>; qq?: QqOptions }
 ): Promise<ResolvedExternalAudio | null> {
   const synthetic = toSyntheticTrack(item)
   const songMid = hints?.qqSongMid ?? item.songMid
   const skip = hints?.skip
+  const qq = hints?.qq
   const attempts: Array<{ id: AudioSourceID; run: () => Promise<ResolvedAudioSource | null> }> = [
-    ...(songMid ? [{ id: 'qq' as AudioSourceID, run: () => resolveQqByMid(songMid) }] : []),
+    ...(songMid ? [{ id: 'qq' as AudioSourceID, run: () => resolveQqByMid(songMid, qq) }] : []),
     { id: 'qishui' as AudioSourceID, run: () => resolveQishui(synthetic) },
     { id: 'kugou' as AudioSourceID, run: () => resolveKugou(synthetic) },
     { id: 'kuwo' as AudioSourceID, run: () => resolveKuwo(synthetic) },
-    { id: 'qq' as AudioSourceID, run: () => resolveQq(synthetic) }
+    { id: 'qq' as AudioSourceID, run: () => resolveQq(synthetic, undefined, qq) }
   ]
   for (const attempt of attempts) {
     if (skip?.has(attempt.id)) continue

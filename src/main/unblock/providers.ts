@@ -345,6 +345,46 @@ const QQ_HEADERS: Record<string, string> = {
   Referer: 'https://y.qq.com/'
 }
 
+/**
+ * QQ音乐 的登录态（设置 → 音源账号里绑定，与网易云主账号互不影响）。
+ * vkey 是按账号鉴权的：带上有会员的 cookie 才能拿到付费/VIP 歌的地址与 320kbps。
+ */
+export interface QqAuth {
+  cookie: string
+  uin?: string
+}
+
+export interface QqOptions {
+  auth?: QqAuth
+  /** 设置里的音质档位 ≥ 320kbps 时优先请求 M800。 */
+  highQuality?: boolean
+}
+
+/**
+ * 取地址时的档位候选（纯函数，便于单测）：
+ * - 未绑定账号：只发匿名 M500（与历史行为一致）。
+ * - 绑定了账号：按设置档位（320 → M800）→ M500 → 再退一次匿名 M500（cookie 过期时也不至于整条链路挂掉）。
+ * - 没有 media_mid：不传 filename，服务端只给 96kbps AAC。
+ */
+export function qqFilenamePlan(
+  mediaMid: string | undefined,
+  options: { authed: boolean; highQuality?: boolean }
+): Array<{ filename?: string; bitrate: number; authed: boolean }> {
+  const plan: Array<{ filename?: string; bitrate: number; authed: boolean }> = []
+  if (!mediaMid) {
+    plan.push({ bitrate: 96, authed: options.authed })
+    if (options.authed) plan.push({ bitrate: 96, authed: false })
+    return plan
+  }
+  // 匿名拿不到 320：只有带 cookie 时才请求 M800。
+  if (options.highQuality && options.authed) {
+    plan.push({ filename: `M800${mediaMid}.mp3`, bitrate: 320, authed: true })
+  }
+  plan.push({ filename: `M500${mediaMid}.mp3`, bitrate: 128, authed: options.authed })
+  if (options.authed) plan.push({ filename: `M500${mediaMid}.mp3`, bitrate: 128, authed: false })
+  return plan
+}
+
 interface QqCandidate {
   mid: string
   title: string
@@ -433,42 +473,64 @@ async function fetchQqMediaMid(songmid: string): Promise<string | undefined> {
  *   （`retcode=104009`、`msg="<IP>;invalidq;"`、purl 空）。
  * - 想要 128kbps 必须显式传 `filename: ['M500'+media_mid+'.mp3']`；
  *   不传 filename 时服务端只给 96kbps AAC。
- * - 未登录时付费/VIP 歌拿不到 purl，如实返回 null 交给下一个音源，不报错。
+ * - 未登录时付费/VIP 歌拿不到 purl，如实返回 null 交给下一个音源，不报错；
+ *   带上绑定的 cookie（`QqOptions.auth`）后会员权益生效：VIP 歌有地址、可请求 M800（320kbps）。
  */
-async function fetchQqAudioUrl(songmid: string): Promise<{ url: string; bitrate?: number } | null> {
+async function fetchQqAudioUrl(
+  songmid: string,
+  options: QqOptions = {}
+): Promise<{ url: string; bitrate?: number } | null> {
   const guid = String(Math.floor(1e9 + Math.random() * 9e9))
   const mediaMid = await fetchQqMediaMid(songmid)
-  const param: Record<string, unknown> = {
-    guid,
-    songmid: [songmid],
-    songtype: [0],
-    uin: '0',
-    loginflag: 1,
-    platform: '20'
+  const cookie = options.auth?.cookie
+  const authed = Boolean(cookie)
+  const uin = options.auth?.uin && options.auth.uin !== '0' ? options.auth.uin : '0'
+  const plan = qqFilenamePlan(mediaMid, { authed, highQuality: options.highQuality })
+  for (const step of plan) {
+    const param: Record<string, unknown> = {
+      guid,
+      songmid: [songmid],
+      songtype: [0],
+      uin: step.authed ? uin : '0',
+      loginflag: 1,
+      platform: '20'
+    }
+    if (step.filename) param.filename = [step.filename]
+    const data = {
+      req_0: { module: 'vkey.GetVkeyServer', method: 'CgiGetVkey', param },
+      comm: { uin: step.authed ? Number(uin) || 0 : 0, format: 'json', ct: 24, cv: 0 }
+    }
+    const headers =
+      step.authed && cookie ? { ...QQ_HEADERS, Cookie: cookie } : QQ_HEADERS
+    try {
+      const payload = await fetchJSONWithHeaders(
+        `https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=${encodeURIComponent(JSON.stringify(data))}`,
+        headers
+      )
+      const info = payload?.req_0?.data?.midurlinfo?.[0]
+      const purl = typeof info?.purl === 'string' ? info.purl : ''
+      if (purl) {
+        return {
+          url: purl.startsWith('http') ? purl : `https://ws.stream.qqmusic.qq.com/${purl}`,
+          bitrate: step.bitrate
+        }
+      }
+    } catch {
+      // 这一档没拿到（网络或鉴权）：试下一档
+    }
   }
-  if (mediaMid) param.filename = [`M500${mediaMid}.mp3`]
-  const data = {
-    req_0: { module: 'vkey.GetVkeyServer', method: 'CgiGetVkey', param },
-    comm: { uin: 0, format: 'json', ct: 24, cv: 0 }
-  }
-  const payload = await fetchJSONWithHeaders(
-    `https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=${encodeURIComponent(JSON.stringify(data))}`,
-    QQ_HEADERS
-  )
-  const info = payload?.req_0?.data?.midurlinfo?.[0]
-  const purl = typeof info?.purl === 'string' ? info.purl : ''
-  if (!purl) return null
-  return {
-    url: purl.startsWith('http') ? purl : `https://ws.stream.qqmusic.qq.com/${purl}`,
-    bitrate: mediaMid ? 128 : 96
-  }
+  return null
 }
 
-export async function resolveQq(track: Track): Promise<ResolvedAudioSource | null> {
+export async function resolveQq(
+  track: Track,
+  _preferred?: QualityLevel,
+  options: QqOptions = {}
+): Promise<ResolvedAudioSource | null> {
   const candidates = await searchQq(track)
   const match = candidates.find((candidate) => matchesTrack(track, candidate))
   if (!match) return null
-  const audio = await fetchQqAudioUrl(match.mid)
+  const audio = await fetchQqAudioUrl(match.mid, options)
   if (!audio) return null
   return {
     id: 'qq',
@@ -482,9 +544,12 @@ export async function resolveQq(track: Track): Promise<ResolvedAudioSource | nul
  * 已知 songmid 时直接取地址（QQ 歌单里的曲目走这条路）：平台自己给的曲目
  * 不需要再经搜索与同名匹配，省一次请求，也避免匹配到别的版本。
  */
-export async function resolveQqByMid(songmid: string): Promise<ResolvedAudioSource | null> {
+export async function resolveQqByMid(
+  songmid: string,
+  options: QqOptions = {}
+): Promise<ResolvedAudioSource | null> {
   if (!songmid) return null
-  const audio = await fetchQqAudioUrl(songmid)
+  const audio = await fetchQqAudioUrl(songmid, options)
   if (!audio) return null
   return {
     id: 'qq',

@@ -34,7 +34,7 @@ import type { AppContext } from './context.js'
 import type { PlayerSnapshot } from './player/controller.js'
 import { bootLog } from './diagnostics.js'
 import { initLogCollector, recordLog } from './logCollector.js'
-import { DEFAULT_SETTINGS } from '@shared/types'
+import { DEFAULT_SETTINGS, QUALITY_OPTIONS } from '@shared/types'
 
 // The self-check runs against a throwaway profile so it neither reads the
 // user's real login/settings nor leaves state behind — and so a stale
@@ -410,7 +410,19 @@ async function bootstrap(): Promise<void> {
     isUnblockEnabled: () => settings.current.unblockGreyTracks,
     unblockSourceIds: () => settings.current.unblockSources as AudioSourceID[],
     // 平台歌单（QQ音乐）里的曲目：本平台直取 + 其余音源严格匹配兜底。
-    resolveExternal: (item, skip) => resolveExternalAudio(item, { skip }),
+    // QQ 的地址是按账号鉴权的：带上「设置 → 音源账号」里绑定的 cookie，
+    // 会员权益才生效（VIP 歌可播），音质档位跟着设置走（≥320kbps 请求 M800）。
+    resolveExternal: (item, skip) => {
+      const qq = contextRef.value?.accounts.get('qq')
+      const bitrate = QUALITY_OPTIONS.find((option) => option.level === settings.current.quality)?.br ?? 0
+      return resolveExternalAudio(item, {
+        skip,
+        qq: {
+          auth: qq?.cookie ? { cookie: qq.cookie, uin: qq.userId } : undefined,
+          highQuality: bitrate >= 320
+        }
+      })
+    },
     cache: {
       audioPath: (trackID, level, variant) => cache.audioPath(trackID, level, variant),
       cacheAudio: (trackID, level, url, format, variant) =>

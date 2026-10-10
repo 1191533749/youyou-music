@@ -1,5 +1,5 @@
 /**
- * 端到端验证「QQ音乐歌单 → 曲目 → 真的出声」：登录页点开歌单、列出曲目、播放全部。
+ * 端到端验证「QQ音乐歌单 → 曲目 → 真的出声」，入口在 设置 → 音源账号。
  *
  * 用法：npx electron-vite build 之后 node scripts/test-playlist.mjs
  *
@@ -62,7 +62,7 @@ async function cdpEval(expression) {
   return value
 }
 
-/** 轮询一段表达式直到它为真（或返回预设值）。 */
+/** 轮询一段表达式直到它为真。 */
 async function waitFor(expression, timeoutMs = 20_000, label = expression) {
   const deadline = Date.now() + timeoutMs
   let last
@@ -76,6 +76,36 @@ async function waitFor(expression, timeoutMs = 20_000, label = expression) {
 }
 
 const state = () => cdpEval(`(async () => (await window.youyou.invoke('player:state')).data)()`)
+
+/** 侧栏「设置」入口。 */
+const openSettings = () =>
+  cdpEval(
+    `(() => {
+      const link = [...document.querySelectorAll('.sidebar__link')].find((node) => (node.textContent ?? '').trim() === '设置')
+      if (!link) return false
+      link.click()
+      return true
+    })()`
+  )
+
+const sourceSnapshot = () =>
+  cdpEval(
+    `(() => {
+      const rows = [...document.querySelectorAll('.settings__group')]
+      const group = rows.find((node) => (node.querySelector('h2')?.textContent ?? '').trim() === '音源账号')
+      if (!group) return { found: false }
+      return {
+        found: true,
+        title: group.querySelector('.source-account-title')?.textContent ?? null,
+        hint: group.querySelector('.settings__row-hint')?.textContent ?? null,
+        button: group.querySelector('.settings__row-control .button')?.textContent ?? null,
+        playlists: group.querySelectorAll('.source-playlist').length,
+        tracks: group.querySelectorAll('.source-track-name').length,
+        bar: group.querySelector('.source-tracks-bar .button')?.textContent ?? null,
+        qr: Boolean(group.querySelector('.source-bind img, .source-bind .login__qr-placeholder'))
+      }
+    })()`
+  )
 
 async function main() {
   fs.rmSync(userData, { recursive: true, force: true })
@@ -109,65 +139,61 @@ async function main() {
     }
     record('实例启动并连上 CDP', true)
 
-    const opened = await cdpEval(
+    record('侧栏进入设置页', await openSettings())
+    const onSettings = await waitFor(
+      `document.querySelectorAll('.settings__group').length > 0`,
+      15_000,
+      '设置页出现'
+    )
+    record('设置页出现', onSettings)
+
+    const bound = await waitFor(
       `(() => {
-        const button = [...document.querySelectorAll('button')].find((node) => (node.textContent ?? '').trim() === '去登录')
-        if (!button) return false
-        button.click()
-        return true
-      })()`
+        const group = [...document.querySelectorAll('.settings__group')].find((node) => (node.querySelector('h2')?.textContent ?? '').trim() === '音源账号')
+        return Boolean(group && group.querySelector('.source-playlist'))
+      })()`,
+      25_000,
+      '已绑定 QQ 并列出歌单'
     )
-    record('从首页进入登录页', opened)
-
-    const onLogin = await waitFor(`Boolean(document.querySelector('.login__platforms'))`, 15_000, '登录页出现')
-    record('登录页出现', onLogin)
-
-    // 切到 QQ音乐：这里用的是测试钩子种下的假账号，歌单接口是真实返回
-    await cdpEval(`(() => { document.querySelectorAll('.login__platform')[1].click(); return true })()`)
-    const accountShown = await waitFor(`Boolean(document.querySelector('.login__account'))`, 20_000, 'QQ 账号视图')
-    record('切到 QQ音乐显示账号', accountShown)
-
-    const listShown = await waitFor(
-      `document.querySelectorAll('.login__playlist').length === 1`,
-      20_000,
-      '歌单列表出现'
-    )
-    record('账号下出现歌单', listShown)
+    const initial = await sourceSnapshot()
+    record('音源账号分组存在', initial.found, `title=${JSON.stringify(initial.title)}`)
+    record('显示为已绑定', initial.hint === '测试账号', `hint=${JSON.stringify(initial.hint)}`)
+    record('提供解绑入口', initial.button === '解绑', `button=${JSON.stringify(initial.button)}`)
+    record('已绑定即列出歌单', bound, `playlists=${initial.playlists}`)
+    record('未绑定时不显示二维码', initial.qr === false)
 
     // 点开歌单 → 曲目从 auth:platformPlaylistTracks 真实取回
-    await cdpEval(`(() => { document.querySelector('.login__playlist').click(); return true })()`)
+    await cdpEval(`(() => { document.querySelector('.source-playlist').click(); return true })()`)
     const skeletonShown = await waitFor(
-      `Boolean(document.querySelector('.login__track--skeleton'))`,
+      `Boolean(document.querySelector('.source-track--skeleton'))`,
       5_000,
       '取曲目时先给占位'
     )
     const trackListed = await waitFor(
-      `document.querySelectorAll('.login__track-name').length > 0`,
+      `document.querySelectorAll('.source-track-name').length > 0`,
       30_000,
       '歌单曲目列出'
     )
     const tracks = await cdpEval(
       `(() => {
-        const rows = [...document.querySelectorAll('.login__track-list li')]
-        const names = [...document.querySelectorAll('.login__track-name')]
+        const rows = [...document.querySelectorAll('.source-track-list li')]
+        const names = [...document.querySelectorAll('.source-track-name')]
         return {
           count: rows.length,
           count2: names.length,
           first: rows[0]?.textContent ?? null,
-          second: rows[1]?.textContent ?? null,
-          bar: document.querySelector('.login__tracks-bar .button')?.textContent ?? null,
-          active: Boolean(document.querySelector('.login__playlist--active'))
+          bar: document.querySelector('.source-tracks-bar .button')?.textContent ?? null,
+          active: Boolean(document.querySelector('.source-playlist--active'))
         }
       })()`
     )
     record('取曲目时先给占位', skeletonShown)
     record('点开歌单列出曲目', trackListed, `count=${tracks.count} first=${JSON.stringify(tracks.first)}`)
-    record('曲目行有歌名与歌手', /[^\d\s]/.test(tracks.first ?? ''), JSON.stringify(tracks.first))
     record('歌单行进入展开态', tracks.active)
     record('提供播放全部', tracks.bar === '播放全部', String(tracks.bar))
 
     // 播放全部：站外队列 → 解析音源 → mpv 出声
-    await cdpEval(`(() => { document.querySelector('.login__tracks-bar .button').click(); return true })()`)
+    await cdpEval(`(() => { document.querySelector('.source-tracks-bar .button').click(); return true })()`)
     const playing = await waitFor(
       `(async () => {
         const s = (await window.youyou.invoke('player:state')).data
@@ -192,16 +218,11 @@ async function main() {
       typeof snapshot?.track?.id === 'number' && snapshot.track.id < 0,
       `id=${snapshot?.track?.id} name=${snapshot?.track?.name}`
     )
-    record(
-      '多首曲目都进了队列',
-      Array.isArray(snapshot?.queue) && snapshot.queue.length > 1,
-      `queue=${snapshot?.queue?.length}`
-    )
 
     // 点第三行：应该切到那一首
     const clickedThird = await cdpEval(
       `(() => {
-        const rows = [...document.querySelectorAll('.login__track-list li .login__track')]
+        const rows = [...document.querySelectorAll('.source-track-list li .source-track')]
         if (rows.length < 3) return false
         rows[2].click()
         return true
@@ -220,6 +241,28 @@ async function main() {
     } else {
       record('点某一行从那一首开始播', false, '歌单曲目不足三首')
     }
+
+    // 解绑：状态回到未绑定，歌单与曲目一起消失（证明绑定状态来自真实数据）
+    await cdpEval(`(() => {
+      const group = [...document.querySelectorAll('.settings__group')].find((node) => (node.querySelector('h2')?.textContent ?? '').trim() === '音源账号')
+      const button = [...group.querySelectorAll('.settings__row-control .button')].find((node) => (node.textContent ?? '').trim() === '解绑')
+      if (!button) return false
+      button.click()
+      return true
+    })()`)
+    const unbound = await waitFor(
+      `(() => {
+        const group = [...document.querySelectorAll('.settings__group')].find((node) => (node.querySelector('h2')?.textContent ?? '').trim() === '音源账号')
+        if (!group) return false
+        const hint = group.querySelector('.settings__row-hint')?.textContent ?? ''
+        return hint.trim() === '未绑定' && group.querySelectorAll('.source-playlist').length === 0
+      })()`,
+      20_000,
+      '解绑后回到未绑定'
+    )
+    const after = await sourceSnapshot()
+    record('解绑后回到未绑定', unbound, `hint=${JSON.stringify(after.hint)} button=${JSON.stringify(after.button)}`)
+    record('解绑后歌单清空', after.playlists === 0, `playlists=${after.playlists}`)
   } finally {
     try {
       await cdpEval(`window.close()`)

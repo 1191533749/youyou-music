@@ -46,6 +46,8 @@ export interface AuthStore {
   refreshQR: () => Promise<void>
   logout: () => Promise<void>
   logoutPlatform: (platform: AccountPlatform) => Promise<void>
+  /** 解绑某个音源账号（设置 → 音源账号）：只清登录态，不重新出二维码。 */
+  unbindPlatform: (platform: AccountPlatform) => Promise<void>
   loginWithSMS: (phone: string, captcha: string) => Promise<void>
   sendSMSCode: (phone: string) => Promise<void>
 }
@@ -298,6 +300,19 @@ export function useAuthStore(): AuthStore {
     [closePlaylist, refreshAccounts, startQR, stopPolling]
   )
 
+  const unbindPlatform = useCallback(
+    async (target: AccountPlatform) => {
+      stopPolling()
+      await call('auth:platformLogout', { platform: target }).catch(() => undefined)
+      setQR(undefined)
+      setQrImage(undefined)
+      setPlaylists([])
+      closePlaylist()
+      await refreshAccounts()
+    },
+    [closePlaylist, refreshAccounts, stopPolling]
+  )
+
   const sendSMSCode = useCallback(async (phone: string) => {
     await call('auth:sendSMSCode', { phone })
   }, [])
@@ -332,6 +347,7 @@ export function useAuthStore(): AuthStore {
       refreshQR,
       logout,
       logoutPlatform,
+      unbindPlatform,
       loginWithSMS,
       sendSMSCode
     }),
@@ -357,6 +373,7 @@ export function useAuthStore(): AuthStore {
       refreshQR,
       logout,
       logoutPlatform,
+      unbindPlatform,
       loginWithSMS,
       sendSMSCode
     ]

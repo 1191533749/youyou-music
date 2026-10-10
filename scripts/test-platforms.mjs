@@ -1,5 +1,5 @@
 /**
- * 端到端验证多平台登录页：平台图标、默认网易云二维码、切到 QQ 后拿到真二维码图片。
+ * 端到端验证「登录页只有网易云 + QQ 音源账号在设置里按需绑定」。
  *
  * 用法：npx electron-vite build 之后 node scripts/test-platforms.mjs
  * 用独立的 userData（全新的、没登录过），所以进去就是登录页。
@@ -40,13 +40,21 @@ async function cdpEval(expression) {
       ws.removeEventListener('message', onMessage)
       const result = message.result
       if (result?.exceptionDetails) {
-        resolve({ __exception: `${result.exceptionDetails.text} ${result.exceptionDetails.exception?.description ?? ''}` })
+        resolve({
+          __exception: `${result.exceptionDetails.text} ${result.exceptionDetails.exception?.description ?? ''}`
+        })
         return
       }
       resolve(result?.result?.value)
     }
     ws.addEventListener('message', onMessage)
-    ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, returnByValue: true, awaitPromise: true } }))
+    ws.send(
+      JSON.stringify({
+        id,
+        method: 'Runtime.evaluate',
+        params: { expression, returnByValue: true, awaitPromise: true }
+      })
+    )
   })
   ws.close()
   return value
@@ -65,35 +73,59 @@ async function waitFor(expression, timeoutMs = 20_000, label = expression) {
   return false
 }
 
-const snapshot = () =>
+const loginSnapshot = () =>
+  cdpEval(
+    `(() => ({
+      platforms: document.querySelectorAll('.login__platform').length,
+      hasMatrix: Boolean(document.querySelector('.qr-grid')),
+      status: document.querySelector('.login__status')?.textContent ?? null,
+      hint: document.querySelector('.login__hint')?.textContent ?? null,
+      playlists: document.querySelectorAll('.source-playlist').length
+    }))()`
+  )
+
+/** 侧栏一级入口（设置 / 首页）。 */
+const clickSidebar = (label) =>
   cdpEval(
     `(() => {
-      const chips = [...document.querySelectorAll('.login__platform')]
-      const image = document.querySelector('.login__qr-image')
-      const matrix = document.querySelector('.qr-grid')
-      return {
-        chips: chips.length,
-        active: chips.findIndex((node) => node.classList.contains('login__platform--active')),
-        labels: chips.map((node) => node.getAttribute('aria-label')),
-        loggedInDots: document.querySelectorAll('.login__platform-dot').length,
-        hasImage: Boolean(image),
-        imageOk: image ? image.complete && image.naturalWidth > 0 : false,
-        imageSrc: image ? image.getAttribute('src').slice(0, 30) : null,
-        hasMatrix: Boolean(matrix),
-        status: document.querySelector('.login__status')?.textContent ?? null,
-        placeholder: document.querySelector('.login__qr-placeholder')?.textContent ?? null
-      }
+      const link = [...document.querySelectorAll('.sidebar__link')].find((node) => (node.textContent ?? '').trim() === ${JSON.stringify(label)})
+      if (!link) return false
+      link.click()
+      return true
     })()`
   )
 
-const clickChip = (index) => cdpEval(`(() => { document.querySelectorAll('.login__platform')[${index}].click(); return true })()`)
+const sourceSnapshot = () =>
+  cdpEval(
+    `(() => {
+      const group = [...document.querySelectorAll('.settings__group')].find((node) => (node.querySelector('h2')?.textContent ?? '').trim() === '音源账号')
+      if (!group) return { found: false }
+      const image = group.querySelector('.source-bind img')
+      return {
+        found: true,
+        title: group.querySelector('.source-account-title')?.textContent ?? null,
+        hint: group.querySelector('.settings__row-hint')?.textContent ?? null,
+        button: group.querySelector('.settings__row-control .button')?.textContent ?? null,
+        hasQR: Boolean(group.querySelector('.source-bind')),
+        imageOk: image ? image.complete && image.naturalWidth > 0 : false,
+        imageSrc: image ? image.getAttribute('src').slice(0, 30) : null,
+        status: group.querySelector('.login__status')?.textContent ?? null,
+        playlists: group.querySelectorAll('.source-playlist').length
+      }
+    })()`
+  )
 
 async function main() {
   fs.rmSync(userData, { recursive: true, force: true })
   fs.mkdirSync(userData, { recursive: true })
   const env = { ...process.env, YOYOU_USER_DATA: userData }
   delete env.ELECTRON_RUN_AS_NODE
-  const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], { stdio: 'ignore', env, cwd: root, detached: true })
+  const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
+    stdio: 'ignore',
+    env,
+    cwd: root,
+    detached: true
+  })
   child.unref()
 
   try {
@@ -117,8 +149,8 @@ async function main() {
 
     const platforms = await cdpEval(`(async () => (await window.youyou.invoke('auth:platforms')).data)()`)
     record(
-      'auth:platforms 返回两个平台',
-      Array.isArray(platforms) && platforms.length === 2 && platforms.every((item) => item.loggedIn === false),
+      'auth:platforms 仍提供 QQ 平台状态',
+      Array.isArray(platforms) && platforms.some((item) => item.platform === 'qq' && item.loggedIn === false),
       JSON.stringify(platforms)
     )
 
@@ -133,31 +165,64 @@ async function main() {
     )
     record('从首页进入登录页', opened)
 
-    const onLogin = await waitFor(`Boolean(document.querySelector('.login__platforms'))`, 15_000, '登录页出现')
+    const onLogin = await waitFor(`Boolean(document.querySelector('.login__qr-frame'))`, 15_000, '登录页出现')
     record('登录页出现', onLogin)
 
-    const initial = await snapshot()
-    record('平台图标数量', initial.chips === 2, `labels=${JSON.stringify(initial.labels)}`)
-    record('默认选中网易云', initial.active === 0, `active=${initial.active}`)
     const neteaseQR = await waitFor(`Boolean(document.querySelector('.qr-grid'))`, 15_000, '网易云二维码矩阵')
-    record('默认显示网易云二维码', neteaseQR)
-    record('网易云状态文案', /网易云/.test((await snapshot()).status ?? ''), (await snapshot()).status ?? '')
+    const login = await loginSnapshot()
+    record('登录页只剩网易云：出二维码', neteaseQR)
+    record('登录页不再有平台图标', login.platforms === 0, `platforms=${login.platforms}`)
+    record('状态文案是网易云', /网易云/.test(login.status ?? ''), login.status ?? '')
+    record('提示文案是网易云扫码', /网易云音乐 App/.test(login.hint ?? ''), login.hint ?? '')
 
-    // 切到 QQ音乐：二维码由平台直接给图片
-    await clickChip(1)
-    const qqImage = await waitFor(
-      `(() => { const img = document.querySelector('.login__qr-image'); return Boolean(img && img.complete && img.naturalWidth > 0) })()`,
+    // 设置 → 音源账号：未绑定 + 扫码绑定
+    record('侧栏进入设置页', await clickSidebar('设置'))
+    const onSettings = await waitFor(
+      `(() => {
+        const group = [...document.querySelectorAll('.settings__group')].find((node) => (node.querySelector('h2')?.textContent ?? '').trim() === '音源账号')
+        return Boolean(group)
+      })()`,
+      15_000,
+      '音源账号分组出现'
+    )
+    record('设置页出现音源账号分组', onSettings)
+
+    const before = await sourceSnapshot()
+    record('音源账号是 QQ音乐', /QQ音乐/.test(before.title ?? ''), JSON.stringify(before.title))
+    record('默认为未绑定', before.hint === '未绑定', JSON.stringify(before.hint))
+    record('提供扫码绑定', before.button === '扫码绑定', JSON.stringify(before.button))
+    record('未绑定时不显示二维码', before.hasQR === false)
+
+    // 点绑定 → QQ 的二维码图片（ptqrshow 返回的 PNG，data URL 直接显示）
+    await cdpEval(
+      `(() => {
+        const group = [...document.querySelectorAll('.settings__group')].find((node) => (node.querySelector('h2')?.textContent ?? '').trim() === '音源账号')
+        const button = group.querySelector('.settings__row-control .button')
+        button.click()
+        return true
+      })()`
+    )
+    const qrShown = await waitFor(
+      `(() => {
+        const image = document.querySelector('.source-bind img')
+        return Boolean(image && image.complete && image.naturalWidth > 0)
+      })()`,
       25_000,
       'QQ 二维码图片加载完成'
     )
-    const qq = await snapshot()
-    record('切到 QQ音乐出现二维码图片', qqImage, `src=${qq.imageSrc}`)
-    record('QQ 状态文案', /QQ/.test(qq.status ?? ''), qq.status ?? '')
+    const bound = await sourceSnapshot()
+    record('点绑定后出现二维码图片', qrShown, `src=${bound.imageSrc}`)
+    record('二维码是 PNG data URL', (bound.imageSrc ?? '').startsWith('data:image/png'), String(bound.imageSrc))
+    record('状态文案是请使用 QQ 扫码', bound.status === '请使用 QQ 扫码', JSON.stringify(bound.status))
+    record('已进入绑定态', bound.hasQR === true)
 
-    // 切回网易云
-    await clickChip(0)
-    const backToNetease = await waitFor(`Boolean(document.querySelector('.qr-grid'))`, 15_000, '切回网易云二维码')
-    record('切回网易云恢复二维码', backToNetease)
+    // 离开设置页再回来：不崩、仍是未绑定
+    record('侧栏回到首页', await clickSidebar('首页'))
+    await wait(1200)
+    record('侧栏再次进入设置页', await clickSidebar('设置'))
+    const again = await waitFor(`Boolean(document.querySelector('.source-account-title'))`, 15_000, '音源账号重新出现')
+    const after = await sourceSnapshot()
+    record('切走再回来不崩且未绑定', again && after.hint === '未绑定', `hint=${JSON.stringify(after.hint)}`)
   } finally {
     try {
       await cdpEval(`window.close()`)

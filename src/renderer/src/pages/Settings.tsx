@@ -32,6 +32,7 @@ import {
   removeWallpaper
 } from '../lib/appearance'
 import { useToast } from '../components/Toast'
+import SourceAccount from '../components/SourceAccount'
 
 /** 音源开关的展示信息；与主进程 `AUDIO_SOURCE_NAMES` 保持一致。 */
 const SOURCES: Array<{ id: 'qishui' | 'kugou' | 'kuwo' | 'qq'; name: string; hint: string }> = [
@@ -710,6 +711,11 @@ export default function Settings(): JSX.Element {
             )}
           </div>
         </div>
+      </section>
+
+      <section className="settings__group">
+        <h2>音源账号</h2>
+        <SourceAccount />
       </section>
 
       <section className="settings__group">
