@@ -109,17 +109,67 @@ export default function Login(): JSX.Element {
             </div>
 
             <div className="login__playlists">
-              {auth.playlists.map((item) => (
-                <div key={item.id} className="login__playlist">
-                  {item.coverUrl ? (
-                    <img className="login__playlist-cover" src={item.coverUrl} alt="" loading="lazy" />
-                  ) : (
-                    <span className="login__playlist-cover login__playlist-cover--empty" />
-                  )}
-                  <span className="login__playlist-name">{item.name}</span>
-                  <span className="login__playlist-count">{item.trackCount}</span>
-                </div>
-              ))}
+              {auth.playlists.map((item) => {
+                const opened = auth.openedPlaylist?.id === item.id
+                return (
+                  <div key={item.id} className="login__playlist-group">
+                    <button
+                      type="button"
+                      className={`login__playlist${opened ? ' login__playlist--active' : ''}`}
+                      aria-expanded={opened}
+                      onClick={() => void auth.openPlaylist(item)}
+                    >
+                      {item.coverUrl ? (
+                        <img
+                          className="login__playlist-cover"
+                          src={item.coverUrl}
+                          alt=""
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="login__playlist-cover login__playlist-cover--empty" />
+                      )}
+                      <span className="login__playlist-name">{item.name}</span>
+                      <span className="login__playlist-count">{item.trackCount}</span>
+                    </button>
+
+                    {opened ? (
+                      <div className="login__tracks">
+                        {auth.playlistTracks.length > 0 ? (
+                          <div className="login__tracks-bar">
+                            <button
+                              type="button"
+                              className="button button--small"
+                              onClick={() => void auth.playPlaylist(0)}
+                            >
+                              播放全部
+                            </button>
+                          </div>
+                        ) : null}
+                        <ul className="login__track-list">
+                          {auth.playlistTracksLoading
+                            ? [0, 1, 2].map((row) => (
+                                <li key={row} className="login__track login__track--skeleton" />
+                              ))
+                            : auth.playlistTracks.map((track, index) => (
+                                <li key={track.sourceId}>
+                                  <button
+                                    type="button"
+                                    className="login__track"
+                                    onClick={() => void auth.playPlaylist(index)}
+                                  >
+                                    <span className="login__track-index">{index + 1}</span>
+                                    <span className="login__track-name">{track.name}</span>
+                                    <span className="login__track-artist">{track.artists}</span>
+                                  </button>
+                                </li>
+                              ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
               {!auth.playlistsLoading && auth.playlists.length === 0 ? (
                 <p className="login__playlists-empty">这个账号还没有歌单</p>
               ) : null}

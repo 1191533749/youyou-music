@@ -15,6 +15,8 @@ import {
   resolveKugou,
   resolveKuwo,
   resolveQq,
+  resolveQqByMid,
+  type AudioSourceID,
   type ResolvedAudioSource
 } from '../unblock/providers.js'
 import {
@@ -234,27 +236,40 @@ export function toSyntheticTrack(item: ExternalTrack): Track {
 
 export interface ResolvedExternalAudio {
   url: string
-  /** 实际来源（酷狗 / 酷我），用于界面如实标注。 */
+  /** 实际来源（汽水 / 酷狗 / 酷我 / QQ），用于界面如实标注。 */
   sourceName: string
+  /** 音源标记，供缓存归档与「这个源已经坏链、别再撞」的去重。 */
+  sourceId: AudioSourceID
 }
 
 /**
  * 解析站外曲目的可播放地址：依次走 汽水 → 酷狗 → 酷我 → QQ
  * （四个实现都会做「时长 ±5 秒 + 歌名归一化 + 版本标记 + 歌手」严格匹配，
  * 宁可不播也不放错歌）。
+ *
+ * 歌单来的曲目带着平台自己的 `songMid`：那首 QQ 音乐的歌先直接在 QQ 取地址——
+ * 这是唯一「平台自己认定」的匹配，比任何同名搜索都准；拿不到（VIP/付费）再退到
+ * 其余三个源按严格匹配兜底。`skip` 里是本次已经判定坏链的源，直接跳过。
  */
-export async function resolveExternalAudio(item: ExternalTrack): Promise<ResolvedExternalAudio | null> {
+export async function resolveExternalAudio(
+  item: ExternalTrack,
+  hints?: { qqSongMid?: string; skip?: ReadonlySet<string> }
+): Promise<ResolvedExternalAudio | null> {
   const synthetic = toSyntheticTrack(item)
-  const attempts: Array<() => Promise<ResolvedAudioSource | null>> = [
-    () => resolveQishui(synthetic),
-    () => resolveKugou(synthetic),
-    () => resolveKuwo(synthetic),
-    () => resolveQq(synthetic)
+  const songMid = hints?.qqSongMid ?? item.songMid
+  const skip = hints?.skip
+  const attempts: Array<{ id: AudioSourceID; run: () => Promise<ResolvedAudioSource | null> }> = [
+    ...(songMid ? [{ id: 'qq' as AudioSourceID, run: () => resolveQqByMid(songMid) }] : []),
+    { id: 'qishui' as AudioSourceID, run: () => resolveQishui(synthetic) },
+    { id: 'kugou' as AudioSourceID, run: () => resolveKugou(synthetic) },
+    { id: 'kuwo' as AudioSourceID, run: () => resolveKuwo(synthetic) },
+    { id: 'qq' as AudioSourceID, run: () => resolveQq(synthetic) }
   ]
   for (const attempt of attempts) {
+    if (skip?.has(attempt.id)) continue
     try {
-      const source = await attempt()
-      if (source) return { url: source.url, sourceName: source.displayName }
+      const source = await attempt.run()
+      if (source) return { url: source.url, sourceName: source.displayName, sourceId: attempt.id }
     } catch {
       // 某个源不可用时继续试下一个；全失败由上层给用户明确提示
     }

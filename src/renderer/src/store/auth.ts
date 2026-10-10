@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { call, onEvent } from '../lib/ipc'
 import type {
   AccountPlatform,
+  ExternalTrackDTO,
   PlatformAccountDTO,
   PlatformPlaylistDTO,
   QRLoginStateDTO,
@@ -29,6 +30,14 @@ export interface AuthStore {
   /** 当前平台账号的歌单。 */
   playlists: PlatformPlaylistDTO[]
   playlistsLoading: boolean
+  /** 正在展开查看的那个歌单（再点一次收起）。 */
+  openedPlaylist?: PlatformPlaylistDTO
+  /** 展开歌单里的曲目（点哪一首就从哪一首开始播）。 */
+  playlistTracks: ExternalTrackDTO[]
+  playlistTracksLoading: boolean
+  openPlaylist: (playlist: PlatformPlaylistDTO) => Promise<void>
+  closePlaylist: () => void
+  playPlaylist: (startIndex?: number) => Promise<void>
   /** 发起某个平台的扫码登录；不传则用当前平台。 */
   startQR: (platform?: AccountPlatform) => Promise<void>
   /** 切换平台：已登录就展示该账号，没登录就出二维码。 */
@@ -53,6 +62,9 @@ export function useAuthStore(): AuthStore {
   const [accounts, setAccounts] = useState<PlatformAccountDTO[]>([])
   const [playlists, setPlaylists] = useState<PlatformPlaylistDTO[]>([])
   const [playlistsLoading, setPlaylistsLoading] = useState(false)
+  const [openedPlaylist, setOpenedPlaylist] = useState<PlatformPlaylistDTO | undefined>()
+  const [playlistTracks, setPlaylistTracks] = useState<ExternalTrackDTO[]>([])
+  const [playlistTracksLoading, setPlaylistTracksLoading] = useState(false)
   const pollTimer = useRef<number | undefined>(undefined)
   const stopped = useRef(true)
   const current = useRef<AccountPlatform>('netease')
@@ -87,6 +99,47 @@ export function useAuthStore(): AuthStore {
       setPlaylistsLoading(false)
     }
   }, [])
+
+  const closePlaylist = useCallback(() => {
+    setOpenedPlaylist(undefined)
+    setPlaylistTracks([])
+  }, [])
+
+  /**
+   * 点歌单：展开它、把曲目取回来；再点一次同一张就收起。
+   * 曲目是站外曲目（`source: 'qq'`），点播放时由主进程逐个音源严格匹配音频。
+   */
+  const openPlaylist = useCallback(
+    async (playlist: PlatformPlaylistDTO) => {
+      if (openedPlaylist?.id === playlist.id) {
+        closePlaylist()
+        return
+      }
+      setOpenedPlaylist(playlist)
+      setPlaylistTracks([])
+      setPlaylistTracksLoading(true)
+      try {
+        const tracks = await call('auth:platformPlaylistTracks', {
+          platform: current.current,
+          id: playlist.id
+        })
+        setPlaylistTracks(tracks)
+      } catch {
+        setPlaylistTracks([])
+      } finally {
+        setPlaylistTracksLoading(false)
+      }
+    },
+    [closePlaylist, openedPlaylist?.id]
+  )
+
+  const playPlaylist = useCallback(
+    async (startIndex = 0) => {
+      if (playlistTracks.length === 0) return
+      await call('player:playExternalList', { items: playlistTracks, startIndex })
+    },
+    [playlistTracks]
+  )
 
   useEffect(() => {
     void call('auth:state')
@@ -172,7 +225,7 @@ export function useAuthStore(): AuthStore {
       failures.current = 0
       setQR({ status: 'waiting' })
       setQrImage(undefined)
-      setPlaylists([])
+      closePlaylist()
       try {
         const start = await call('auth:platformQRStart', { platform: target })
         setQR({ status: 'waiting', url: start.url, image: start.image })
@@ -182,7 +235,7 @@ export function useAuthStore(): AuthStore {
         setQR({ status: 'error', message: cause instanceof Error ? cause.message : String(cause) })
       }
     },
-    [poll, stopPolling]
+    [closePlaylist, poll, stopPolling]
   )
 
   const selectPlatform = useCallback(
@@ -192,7 +245,7 @@ export function useAuthStore(): AuthStore {
       stopPolling()
       setQR(undefined)
       setQrImage(undefined)
-      setPlaylists([])
+      closePlaylist()
       const list = await refreshAccounts()
       const entry = list.find((item) => item.platform === target)
       if (target === 'netease') {
@@ -205,7 +258,7 @@ export function useAuthStore(): AuthStore {
       }
       await startQR(target)
     },
-    [loadPlaylists, refreshAccounts, startQR, stopPolling]
+    [closePlaylist, loadPlaylists, refreshAccounts, startQR, stopPolling]
   )
 
   const cancelQR = useCallback(() => {
@@ -238,10 +291,11 @@ export function useAuthStore(): AuthStore {
         setProfile(undefined)
       }
       setPlaylists([])
+      closePlaylist()
       await refreshAccounts()
       await startQR(target)
     },
-    [refreshAccounts, startQR, stopPolling]
+    [closePlaylist, refreshAccounts, startQR, stopPolling]
   )
 
   const sendSMSCode = useCallback(async (phone: string) => {
@@ -266,6 +320,12 @@ export function useAuthStore(): AuthStore {
       accounts,
       playlists,
       playlistsLoading,
+      openedPlaylist,
+      playlistTracks,
+      playlistTracksLoading,
+      openPlaylist,
+      closePlaylist,
+      playPlaylist,
       startQR,
       selectPlatform,
       cancelQR,
@@ -285,6 +345,12 @@ export function useAuthStore(): AuthStore {
       accounts,
       playlists,
       playlistsLoading,
+      openedPlaylist,
+      playlistTracks,
+      playlistTracksLoading,
+      openPlaylist,
+      closePlaylist,
+      playPlaylist,
       startQR,
       selectPlatform,
       cancelQR,

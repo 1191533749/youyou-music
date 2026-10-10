@@ -13,7 +13,13 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import { ACCOUNT_PLATFORMS } from '@shared/types'
-import type { AccountPlatform, PlatformAccountDTO, PlatformPlaylistDTO, QRLoginStatus } from '@shared/types'
+import type {
+  AccountPlatform,
+  ExternalTrackDTO,
+  PlatformAccountDTO,
+  PlatformPlaylistDTO,
+  QRLoginStatus
+} from '@shared/types'
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
@@ -112,6 +118,18 @@ export class PlatformAccounts {
       }
     } catch {
       // 文件不存在或损坏：当作没登录过
+    }
+    // 端到端测试钩子：真实 QQ 账号要扫码登录才拿得到，测试里种一个假账号，
+    // 让「点歌单 → 取曲目 → 播放」这条链路能在无人值守下跑通。只在显式设了
+    // YOYOU_FAKE_QQ_ACCOUNT=1 时生效。
+    if (process.env.YOYOU_FAKE_QQ_ACCOUNT === '1' && !this.sessions.has('qq')) {
+      this.sessions.set('qq', {
+        platform: 'qq',
+        cookie: `uin=0; qqmusic_key=${'test'.padEnd(16, '0')}`,
+        nickname: '测试账号',
+        userId: '0',
+        updatedAt: Date.now()
+      })
     }
   }
 
@@ -410,4 +428,111 @@ export async function qqPlaylists(session: PlatformSession): Promise<PlatformPla
       coverUrl: typeof item?.logo === 'string' && item.logo ? item.logo : undefined
     }))
     .filter((item) => item.id && item.name)
+}
+
+/** QQ 专辑封面：`T002R300x300M000<albumMid>.jpg` 是官方相册地址模板。 */
+function qqAlbumCover(albumMid: unknown): string | undefined {
+  if (typeof albumMid !== 'string' || albumMid.length === 0) return undefined
+  return `https://y.qq.com/music/photo_new/T002R300x300M000${albumMid}.jpg`
+}
+
+/** 把 `CgiGetDiss` 返回的一首歌映射成站外曲目；字段缺失就返回 undefined 由调用方跳过。 */
+export function parseQqPlaylistTrack(song: any): ExternalTrackDTO | undefined {
+  const mid = String(song?.mid ?? song?.songmid ?? '').trim()
+  const name = String(song?.name ?? song?.title ?? song?.songname ?? '').trim()
+  if (!mid || !name) return undefined
+  const artists = (Array.isArray(song?.singer) ? song.singer : [])
+    .map((singer: any) => singer?.name)
+    .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0)
+  return {
+    source: 'qq',
+    sourceId: mid,
+    name,
+    artists: artists.join(' / ') || '未知歌手',
+    album: typeof song?.album?.name === 'string' ? song.album.name : undefined,
+    durationMS: Number(song?.interval ?? 0) * 1000,
+    coverUrl: qqAlbumCover(song?.album?.mid ?? song?.albummid),
+    songMid: mid
+  }
+}
+
+/** 从 `CgiGetDiss` 的响应里取曲目数组（不同版本可能在 dirinfo 下）。 */
+export function parseQqDissSongs(payload: any): any[] {
+  const data = payload?.req_0?.data
+  if (Array.isArray(data?.songlist)) return data.songlist
+  if (Array.isArray(data?.dirinfo?.songlist)) return data.dirinfo.songlist
+  return []
+}
+
+/**
+ * QQ 歌单的曲目列表。
+ *
+ * 走 `music.srfDissInfo.DissInfo/CgiGetDiss`：`comm` 块不能省（少了会回 `param error`），
+ * `disstid` 是数字。公开歌单免登录可读；自己账号的歌单带上 cookie 一起发。
+ * 曲目映射成站外曲目（`source: 'qq'`），播放时仍走严格匹配链路，不直接信任平台顺序。
+ */
+export async function qqPlaylistTracks(
+  session: PlatformSession | undefined,
+  disstid: string,
+  limit = 300
+): Promise<ExternalTrackDTO[]> {
+  if (!Number(disstid)) return []
+  const jar: CookieJar = new Map()
+  const pageSize = 100
+  const result: ExternalTrackDTO[] = []
+  for (let offset = 0; offset < limit; offset += pageSize) {
+    const response = await request(
+      `https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=${encodeURIComponent(
+        JSON.stringify({
+          req_0: {
+            module: 'music.srfDissInfo.DissInfo',
+            method: 'CgiGetDiss',
+            param: {
+              disstid: Number(disstid),
+              dirid: 0,
+              tag: 1,
+              song_begin: offset,
+              song_num: pageSize,
+              userinfo: 0,
+              order: 1,
+              onlysonglist: 0,
+              enc_host_uin: '',
+              platform: 'yqq.json'
+            }
+          },
+          comm: { uin: Number(session?.userId ?? 0) || 0, format: 'json', ct: 24, cv: 0 }
+        })
+      )}`,
+      jar,
+      {
+        headers: {
+          ...(session?.cookie ? { Cookie: session.cookie } : {}),
+          Referer: 'https://y.qq.com/'
+        }
+      }
+    )
+    const songs = parseQqDissSongs(await response.json())
+    if (songs.length === 0) break
+    for (const song of songs) {
+      const mapped = parseQqPlaylistTrack(song)
+      if (mapped) result.push(mapped)
+    }
+    if (songs.length < pageSize) break
+  }
+  return result
+}
+
+/** 歌单广场里的公开歌单 id（联调用：不登录也能读到曲目）。 */
+export async function qqPublicPlaylist(): Promise<{ id: string; name: string } | undefined> {
+  const response = await request(
+    'https://c.y.qq.com/splcloud/fcgi-bin/fcg_get_diss_by_tag.fcg?picmid=1&rnd=0.1&g_tk=5381&json=1' +
+      '&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json' +
+      '&needNewCode=0&categoryId=10000000&sortId=5&sin=0&ein=1',
+    new Map(),
+    { headers: { Referer: 'https://y.qq.com/' } }
+  )
+  const payload: any = await response.json()
+  const first = payload?.data?.list?.[0]
+  if (!first?.dissid) return undefined
+  return { id: String(first.dissid), name: String(first.dissname ?? '') }
 }

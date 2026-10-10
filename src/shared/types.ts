@@ -134,21 +134,30 @@ export type ExternalSource = 'qishui' | 'kugou' | 'kuwo'
 
 export const EXTERNAL_SOURCES: ExternalSource[] = ['qishui', 'kugou', 'kuwo']
 
-export const EXTERNAL_SOURCE_NAMES: Record<ExternalSource, string> = {
+/**
+ * 站外曲目的来源标记。三个「发现层」之外，平台歌单（QQ音乐）里的曲目也走同一条
+ * 严格匹配播放链路，所以它们共用 `ExternalTrackDTO`，只是来源标记不同。
+ */
+export type ExternalItemSource = ExternalSource | 'qq'
+
+export const EXTERNAL_SOURCE_NAMES: Record<ExternalItemSource, string> = {
   qishui: '汽水音乐',
   kugou: '酷狗音乐',
-  kuwo: '酷我音乐'
+  kuwo: '酷我音乐',
+  qq: 'QQ音乐'
 }
 
 export interface ExternalTrackDTO {
-  source: ExternalSource
-  /** 源内 ID（汽水 track_id / 酷狗 hash / 酷我 rid） */
+  source: ExternalItemSource
+  /** 源内 ID（汽水 track_id / 酷狗 hash / 酷我 rid / QQ songmid） */
   sourceId: string
   name: string
   artists: string
   album?: string
   durationMS: number
   coverUrl?: string
+  /** 已知的 QQ 音乐 songmid：有它就直接取地址，不再搜索匹配。 */
+  songMid?: string
 }
 
 export type QRLoginStatus = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error'

@@ -41,6 +41,16 @@ npm run dist:portable              # 免安装 exe（未验证）
 
 `node_modules/electron` 未安装时 `npm run smoke` 会给出可读报错。
 
+需要真实窗口的 CDP 用例（都要先 `npm run build`；脚本自己开独立 `YOYOU_USER_DATA` 与调试端口）：
+
+```powershell
+node scripts/test-platforms.mjs   # 多平台登录：图标切换 / QQ 二维码 data URL / 文案
+node scripts/test-playlist.mjs    # QQ 歌单：展开曲目 → 播放全部 → 真的出声
+node scripts/test-speed.mjs       # 播放速度（私人漫游首声、切歌）
+node scripts/test-quality.mjs     # 音质切换与状态栏同步
+node scripts/test-auto-retry.mjs  # 数据加载失败静默重试
+```
+
 ## 4. 架构与不变量
 
 ```
@@ -73,6 +83,10 @@ src/renderer/   lib/(contract,ipc,format,hooks,lyricsUtils) store/(player,auth,n
   登录页底部平台图标切换，网易云沿用原二维码与矩阵，QQ音乐用 `ssl.ptlogin2.qq.com/ptqrshow` 的 PNG 二维码
   以 data URL 直接渲染；登录态存 `<userData>/accounts.json`，与网易云 `cookies.json` 互不影响。
   酷狗扫码接口当前全线 20006，登录搁置（酷狗仍然是一个可用的音源）
+- ✅ **QQ 歌单可点开、可播放**（`auth:platformPlaylistTracks` + `player:playExternalList`）：
+  登录页点歌单展开曲目（`music.srfDissInfo.DissInfo/CgiGetDiss`，带 cookie、每页 100、上限 300），
+  「播放全部」或点某一行 → 整张歌单灌进播放队列；带 `songMid` 的曲目先走 `resolveQqByMid`（平台直取），
+  拿不到（VIP/付费）自动退到 汽水 → 酷狗 → 酷我，坏链继续换源。端到端实测 15/15（66 首真实出声）
 - ✅ **音质诚实降档**：达不到所选音质自动降档且不打扰用户；第三方音源码率已知才映射档位（`servedBitrate`）；
   界面不再显示「来自 X」或降档文字（v0.3.0 按用户要求全部去掉）
 - ✅ **随机起播**：队列为空时点分类页「播放全部」→ `randomStart: true` → 随机一首立即播放（点行不受影响）
@@ -135,8 +149,10 @@ npm run verify:packaged
 11. **酷狗登录搁置。** `/v2/qrcode` 对参数矩阵里的每一组都返回「参数错误 20006」（去掉 `uuid` 变 20010），
     换主机（`login.` / `sso.` / `login.user.`）都不可达，官方 `kguser_min.js` 里也没有 `qrcode` 字样；
     实现留在 `src/main/accounts/platforms.ts` 但未接入界面，酷狗仍作为音源可用。
-12. **QQ音乐登录后能取歌单，但还没有把歌单灌进「我的音乐」。** `auth:platformPlaylists` 已返回平台歌单，
-    登录页能列出；导入到队列/资料库尚未接线（需要把平台曲目映射成 `TrackDTO`）。
+12. **QQ歌单已在登录页可播放，但还没进「我的音乐」。** `auth:platformPlaylistTracks` + `player:playExternalList`
+    已把 QQ 歌单曲目灌进队列并出声；要在「我的音乐」里列出这些歌单需要把平台曲目映射成 `TrackDTO` 并加一个导入通道。
+    联调钩子：`YOYOU_FAKE_QQ_ACCOUNT=1` 会种一个假 QQ 会话并在 `auth:platformPlaylists` 返回公开歌单 7707261125
+    （曲目与播放仍走真实接口），`node scripts/test-playlist.mjs` 是配套 CDP 用例。
 
 ## 7. 排错手册
 

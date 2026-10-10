@@ -16,7 +16,8 @@ import { matchesTrack, AUDIO_SOURCE_NAMES, type AudioSourceID } from '../unblock
 import type { UnblockService } from '../unblock/service.js'
 import type { MpvController, MpvState } from '../audio/mpv.js'
 import { looksLikeNoticeBySize, probeStream, type StreamProbeResult } from './streamProbe.js'
-import type { QualityLevel, RepeatMode, TrackDTO } from '@shared/types'
+import { toSyntheticTrack } from '../external/search.js'
+import type { ExternalTrackDTO, QualityLevel, RepeatMode, TrackDTO } from '@shared/types'
 
 /** 一次解析的最终落点：谁提供了音频、什么音质、能不能缓存。 */
 interface ResolvedPlayback {
@@ -62,6 +63,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 /** 单次音源解析（含全部回退链）的最长等待时间。 */
 const RESOLVE_TIMEOUT_MS = 20_000
+/**
+ * 站外曲目（平台歌单）的解析预算：它要按顺序连撞几个音源，每个源自己就有 12 秒
+ * 超时，用 20 秒会把「慢一点但能放」的歌提前判死。
+ */
+const EXTERNAL_RESOLVE_TIMEOUT_MS = 32_000
 
 /** 起播前探测第三方音源（连通性 + 体积）的超时。 */
 const PROBE_TIMEOUT_MS = 5_000
@@ -127,6 +133,14 @@ export interface PlayerDeps {
   onTrackChanged?: (track: Track | undefined) => void
   onError?: (message: string) => void
   log?: (message: string) => void
+  /**
+   * 站外曲目（平台歌单）的音频解析：主进程注入 `resolveExternalAudio`。
+   * `skip` 是本次已经判定坏链的音源，实现里会跳过它们换下一个。
+   */
+  resolveExternal?: (
+    item: ExternalTrackDTO,
+    skip?: ReadonlySet<string>
+  ) => Promise<{ url: string; sourceName: string; sourceId: string } | null>
   /** Playback position poll interval in ms while playing. */
   positionIntervalMs?: number
   /**
@@ -170,6 +184,11 @@ interface QueueEntry {
    * 播放时跳过网易云的解析链路。
    */
   preResolved?: { url: string; sourceName: string }
+  /**
+   * 站外曲目本体：平台歌单整条入队时，每首歌都要在播放时（或坏链换源时）
+   * 走一次「本平台直取 + 其余音源严格匹配」，所以队列里留着它。
+   */
+  external?: ExternalTrackDTO
   /** 顺序播放的下一首预解析结果：切歌时直接复用，跳过整条解析链路。 */
   preResolvedFull?: ResolvedPlayback
   /** 预解析时顺手做的音源探测结果：切歌时复用，省掉第二次联网等待。 */
@@ -311,6 +330,25 @@ export class PlayerController extends EventEmitter {
     await this.playIndex(0, { keepQueue: true })
   }
 
+  /**
+   * 播放一整串站外曲目（平台歌单）：整条入队，逐首解析音频。
+   * 某一首的四个音源都拿不到时由现有逻辑自动跳下一首，不把原因摆到用户面前。
+   */
+  async playExternalQueue(items: ExternalTrackDTO[], startIndex = 0): Promise<void> {
+    const entries: QueueEntry[] = []
+    for (const item of items) {
+      if (!item?.sourceId || !item?.name) continue
+      entries.push({ track: toSyntheticTrack(item), playability: 'playable', external: item })
+    }
+    if (entries.length === 0) return
+    this.queue = entries
+    this.index = Math.max(0, Math.min(Math.floor(startIndex) || 0, entries.length - 1))
+    this.consecutiveFailures = 0
+    this.shuffleNext = undefined
+    this.emitSnapshot()
+    await this.playIndex(this.index, { keepQueue: true })
+  }
+
   async append(tracks: Track[]): Promise<void> {    const existing = new Set(this.queue.map((entry) => entry.track.id))
     const added = tracks.filter((track) => !existing.has(track.id))
     if (added.length === 0) return
@@ -408,8 +446,8 @@ export class PlayerController extends EventEmitter {
                   servedFrom: entry.preResolved.sourceName
                 }
               : await withTimeout(
-                  this.resolveSource(entry.track),
-                  RESOLVE_TIMEOUT_MS,
+                  this.resolveSource(entry.track, entry),
+                  entry.external ? EXTERNAL_RESOLVE_TIMEOUT_MS : RESOLVE_TIMEOUT_MS,
                   `解析《${entry.track.name}》`
                 )
         if (generation !== this.resolveGeneration) return
@@ -630,8 +668,11 @@ export class PlayerController extends EventEmitter {
     if (nextIndex < 0) return
     const entry = this.queue[nextIndex]
     if (entry.preResolvedFull) return
+    // 站外曲目（平台歌单）的解析本来就要连撞几个源，预解析它等于替用户提前跑一遍
+    // 全网；收益远小于代价，等真正切到那一首再解析。
+    if (entry.external) return
     try {
-      const resolved = await withTimeout(this.resolveSource(entry.track), RESOLVE_TIMEOUT_MS, `预解析《${entry.track.name}》`)
+      const resolved = await withTimeout(this.resolveSource(entry.track, entry), RESOLVE_TIMEOUT_MS, `预解析《${entry.track.name}》`)
       if (generation !== this.resolveGeneration) return
       if (this.queue[nextIndex] !== entry) return
       entry.preResolvedFull = resolved
@@ -656,13 +697,58 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
+   * 站外曲目（平台歌单）的音频解析：本平台直取 → 汽水 → 酷狗 → 酷我 → QQ 搜索，
+   * 每一环都做严格匹配（时长/歌名/歌手），拿不到就换下一个源。
+   * 上一次判定坏链的源记在 attemptedSources 里，下一次候选循环不会再撞它。
+   */
+  private async resolveExternalEntry(entry: QueueEntry): Promise<ResolvedPlayback> {
+    const item = entry.external
+    if (!item || !this.deps.resolveExternal) {
+      throw new NeteaseAPIError('business', { code: -1, message: '暂时无法播放这首歌' })
+    }
+    const requested = this.deps.getQuality()
+    // 同一个站外曲目第二次播放直接放本地缓存，不再联网。
+    for (const variant of this.deps.unblockSourceIds()) {
+      const cached = await this.deps.cache
+        ?.audioPath(entry.track.id, requested, variant)
+        .catch(() => undefined)
+      if (cached) {
+        return {
+          source: cached,
+          level: requested,
+          claimedLevel: undefined,
+          cached: true,
+          cacheVariant: variant,
+          servedFrom: AUDIO_SOURCE_NAMES[variant] ?? variant
+        }
+      }
+    }
+    const resolved = await this.deps.resolveExternal(item, this.attemptedSources(entry.track.id))
+    if (!resolved) {
+      throw new NeteaseAPIError('business', { code: -1, message: '暂时无法播放这首歌' })
+    }
+    return {
+      source: resolved.url,
+      level: requested,
+      // 第三方音源码率未知：不声称档位，也就不会虚报音质。
+      claimedLevel: undefined,
+      cached: false,
+      remoteURL: resolved.url,
+      cacheVariant: resolved.sourceId,
+      servedFrom: resolved.sourceName
+    }
+  }
+
+  /**
    * Decides what mpv should open.
    *
    * 先查搜索时后台预解析好的第三方直链缓存——命中即跳过整条联网解析链，
    * 第三方解析那几秒就不用再等；再查是否正在后台预解析，命中则复用同一次
    * 解析（不再开第二条链路）；都没有才走真正的解析链。
    */
-  private async resolveSource(track: Track): Promise<ResolvedPlayback> {
+  private async resolveSource(track: Track, entry?: QueueEntry): Promise<ResolvedPlayback> {
+    // 站外曲目（平台歌单里的歌）没有网易云 ID，整条链路都不一样，单独走。
+    if (entry?.external) return this.resolveExternalEntry(entry)
     const key = track.id
     const prefetched = this.prefetchedSources.get(key)
     if (prefetched) {

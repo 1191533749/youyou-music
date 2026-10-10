@@ -478,6 +478,22 @@ export async function resolveQq(track: Track): Promise<ResolvedAudioSource | nul
   }
 }
 
+/**
+ * 已知 songmid 时直接取地址（QQ 歌单里的曲目走这条路）：平台自己给的曲目
+ * 不需要再经搜索与同名匹配，省一次请求，也避免匹配到别的版本。
+ */
+export async function resolveQqByMid(songmid: string): Promise<ResolvedAudioSource | null> {
+  if (!songmid) return null
+  const audio = await fetchQqAudioUrl(songmid)
+  if (!audio) return null
+  return {
+    id: 'qq',
+    displayName: AUDIO_SOURCE_NAMES.qq,
+    url: audio.url,
+    bitrate: audio.bitrate
+  }
+}
+
 export const PROVIDERS: Record<
   AudioSourceID,
   (track: Track, preferred?: QualityLevel) => Promise<ResolvedAudioSource | null>

@@ -13,15 +13,27 @@ import {
   kugouPlaylists,
   pollKugouQR,
   pollQqQR,
+  qqPlaylistTracks,
   qqPlaylists,
   startKugouQR,
   startQqQR
 } from '../accounts/platforms.js'
 import type { AppContext } from '../context.js'
-import type { PlatformAccountDTO, QRLoginStateDTO, UserProfileDTO } from '@shared/types'
+import type {
+  PlatformAccountDTO,
+  PlatformPlaylistDTO,
+  QRLoginStateDTO,
+  UserProfileDTO
+} from '@shared/types'
 
 /** QR codes are valid for roughly two minutes; the UI shows a countdown. */
 const QR_TTL_MS = 120_000
+
+/**
+ * 测试钩子（YOYOU_FAKE_QQ_ACCOUNT=1）：真实 QQ 歌单必须扫码登录才拿得到，测试里
+ * 直接挂一张公开歌单。曲目与播放仍是真实接口，只有这张歌单本身是固定的。
+ */
+const FAKE_QQ_PLAYLIST: PlatformPlaylistDTO = { id: '7707261125', name: '公开歌单', trackCount: 0 }
 
 interface Session {
   unikey: string
@@ -225,12 +237,27 @@ export function registerAuthHandlers(context: AppContext): void {
 
   defineHandler('auth:platformPlaylists', async ({ platform }) => {
     if (platform === 'netease') return []
+    if (platform === 'qq' && process.env.YOYOU_FAKE_QQ_ACCOUNT === '1') return [FAKE_QQ_PLAYLIST]
     const stored = context.accounts.get(platform)
     if (!stored) return []
     try {
       return platform === 'kugou' ? await kugouPlaylists(stored) : await qqPlaylists(stored)
     } catch (cause) {
       context.log(`读取 ${platform} 歌单失败: ${String(cause)}`)
+      return []
+    }
+  })
+
+  /**
+   * 平台歌单里的曲目：映射成站外曲目交给渲染层。播放时仍由播放器的解析链路
+   * 逐个音源严格匹配，所以这里只负责如实列出歌单内容。
+   */
+  defineHandler('auth:platformPlaylistTracks', async ({ platform, id }) => {
+    if (platform === 'netease') return []
+    try {
+      return platform === 'kugou' ? [] : await qqPlaylistTracks(context.accounts.get(platform), id)
+    } catch (cause) {
+      context.log(`读取 ${platform} 歌单曲目失败: ${String(cause)}`)
       return []
     }
   })

@@ -164,6 +164,11 @@ export interface IPCContract {
   'auth:platformLogout': { request: { platform: AccountPlatform }; response: void }
   /** 该平台账号的歌单列表（登录后才有）。 */
   'auth:platformPlaylists': { request: { platform: AccountPlatform }; response: PlatformPlaylistDTO[] }
+  /** 平台歌单里的曲目：映射成站外曲目（播放时走严格匹配链路）。 */
+  'auth:platformPlaylistTracks': {
+    request: { platform: AccountPlatform; id: string }
+    response: ExternalTrackDTO[]
+  }
 
   // --- home / discovery ---
   'home:feed': { request: void; response: HomeFeedDTO }
@@ -240,6 +245,11 @@ export interface IPCContract {
   }
   /** 播放站外曲目（汽水/酷狗/酷我 搜索来的歌）：主进程解析完整音频后直接播放。 */
   'player:playExternal': { request: { item: ExternalTrackDTO }; response: PlayerStateDTO }
+  /** 播放一整串站外曲目（平台歌单）：整条入队，逐首解析，解析不到自动跳下一首。 */
+  'player:playExternalList': {
+    request: { items: ExternalTrackDTO[]; startIndex?: number }
+    response: PlayerStateDTO
+  }
   'player:playFMTracks': { request: { tracks: TrackDTO[] }; response: PlayerStateDTO }
   'player:toggle': { request: void; response: PlayerStateDTO }
   'player:play': { request: void; response: PlayerStateDTO }
@@ -349,6 +359,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'auth:platformQRPoll',
   'auth:platformLogout',
   'auth:platformPlaylists',
+  'auth:platformPlaylistTracks',
   'home:feed',
   'home:dailySongs',
   'home:hotSongs',
@@ -387,6 +398,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'player:state',
   'player:playTracks',
   'player:playExternal',
+  'player:playExternalList',
   'player:playFMTracks',
   'player:toggle',
   'player:play',

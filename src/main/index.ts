@@ -20,6 +20,7 @@ import { LyricsService } from './lyrics/service.js'
 import { MediaKeys } from './media/keys.js'
 import { UnblockService } from './unblock/service.js'
 import type { AudioSourceID } from './unblock/providers.js'
+import { resolveExternalAudio } from './external/search.js'
 import { contextRef, sendEvent, assertAllChannelsRegistered } from './ipc/registry.js'
 import { registerAuthHandlers } from './ipc/auth.js'
 import { PlatformAccounts } from './accounts/platforms.js'
@@ -408,6 +409,8 @@ async function bootstrap(): Promise<void> {
     unblock,
     isUnblockEnabled: () => settings.current.unblockGreyTracks,
     unblockSourceIds: () => settings.current.unblockSources as AudioSourceID[],
+    // 平台歌单（QQ音乐）里的曲目：本平台直取 + 其余音源严格匹配兜底。
+    resolveExternal: (item, skip) => resolveExternalAudio(item, { skip }),
     cache: {
       audioPath: (trackID, level, variant) => cache.audioPath(trackID, level, variant),
       cacheAudio: (trackID, level, url, format, variant) =>

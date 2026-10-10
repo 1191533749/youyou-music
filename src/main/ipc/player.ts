@@ -138,6 +138,17 @@ export function registerPlayerHandlers(context: AppContext): void {
     return context.player.snapshot()
   })
 
+  /**
+   * 播放一整串站外曲目（平台歌单）。音频解析交给播放器的解析链路：
+   * 逐首解析、坏链换源、拿不到就自动跳下一首，这里只把队列交给它。
+   */
+  defineHandler('player:playExternalList', async ({ items, startIndex }) => {
+    if (items.length === 0) return context.player.snapshot()
+    context.log(`播放平台歌单：${items.length} 首（${items[0]?.source ?? '?'}）`)
+    await context.player.playExternalQueue(items, startIndex)
+    return context.player.snapshot()
+  })
+
   defineHandler('player:playFMTracks', async ({ tracks }) => {
     const hydrated = tracks.length > 0 ? tracks.map(trackFromDTO) : await context.api.personalFM()
     await context.player.setQueue(hydrated as Track[], 0)
