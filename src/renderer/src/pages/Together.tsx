@@ -15,7 +15,8 @@
  * 注意：聊天与礼物里的表情是**用户明确要求的功能**（互发文字与表情、赠礼），
  * 页面其余部分保持无表情装饰。
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import { usePlayerStore } from '../store/player'
 import { useTogetherStore } from '../store/together'
 import { useAuthStore } from '../store/auth'
@@ -44,9 +45,65 @@ const TIER_LABELS: Record<RelayGift['tier'], string> = {
   legend: '传说'
 }
 
+/**
+ * 成员显示名：中继返回的成员不一定带 id / nickname（服务器实际字段和 lib/relay.ts 的
+ * 类型声明不完全一致，实测出现过只有昵称没有 id、以及两者都缺的情况），这里兜一层，
+ * 保证界面上永远不出现 undefined。
+ */
+function memberLabel(member: { id?: number; nickname?: string }): string {
+  if (member.nickname) return member.nickname
+  return typeof member.id === 'number' ? `听友${member.id}` : '听友'
+}
+
 interface QrMatrix {
   size: number
   modules: boolean[][]
+}
+
+/** 单列断点：和 together.css 里的媒体查询保持一致，窄屏不强行撑满一屏。 */
+const SINGLE_COLUMN_MAX = 1080
+
+/**
+ * 一屏高度：`.page-slot` 没有高度，百分比解析不了，所以直接量 `.content` 的内高，
+ * 把结果写到根元素的 inline min-height 上；窄屏（单列）清掉，回到自然高度可滚动。
+ */
+function useFillHeight(ref: RefObject<HTMLDivElement>): void {
+  useLayoutEffect(() => {
+    const measure = (): void => {
+      const el = ref.current
+      if (!el) return
+      if (window.innerWidth <= SINGLE_COLUMN_MAX) {
+        if (el.style.minHeight !== '') el.style.minHeight = ''
+        return
+      }
+      const host = el.closest('.content')
+      if (!(host instanceof HTMLElement)) return
+      const cs = getComputedStyle(host)
+      const inner =
+        host.clientHeight -
+        parseFloat(cs.paddingTop || '0') -
+        parseFloat(cs.paddingBottom || '0') -
+        parseFloat(cs.borderTopWidth || '0') -
+        parseFloat(cs.borderBottomWidth || '0')
+      const next = Math.max(0, Math.round(inner))
+      const prev = Number(el.dataset.fillHeight ?? '0')
+      // 差 1px 以内不重写，避免观察者与写入互相触发。
+      if (Math.abs(prev - next) < 1) return
+      el.dataset.fillHeight = String(next)
+      el.style.minHeight = `${next}px`
+    }
+    measure()
+    const host = ref.current?.closest('.content')
+    const observer = new ResizeObserver(measure)
+    if (host) observer.observe(host)
+    window.addEventListener('resize', measure)
+    const raf = requestAnimationFrame(measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+      cancelAnimationFrame(raf)
+    }
+  }, [ref])
 }
 
 /** 把一段文本渲染成二维码（复用主进程的编码能力）。 */
@@ -92,6 +149,10 @@ export default function Together(): JSX.Element {
   const auth = useAuthStore()
   const navigation = useNavigation()
   const { state } = together
+
+  // 一屏放满：整页不再需要下滑滚动（窄屏仍可滚）。
+  const rootRef = useRef<HTMLDivElement>(null)
+  useFillHeight(rootRef)
 
   const [roomName, setRoomName] = useState('')
   const [chatText, setChatText] = useState('')
@@ -169,23 +230,14 @@ export default function Together(): JSX.Element {
 
   const listeners = state.listeners
   const myMeta = listenerMeta({ gender: state.profile.gender, age: state.profile.age, region: state.profile.region })
-  const giftsByTier = useMemo(() => {
-    const groups = new Map<RelayGift['tier'], RelayGift[]>()
-    for (const gift of state.gifts) {
-      const list = groups.get(gift.tier) ?? []
-      list.push(gift)
-      groups.set(gift.tier, list)
-    }
-    return [...groups.entries()]
-  }, [state.gifts])
 
   return (
-    <div className="together">
+    <div className="together" ref={rootRef}>
       <header className="together__head">
         <h1 className="page__title">一起听</h1>
       </header>
 
-      {!auth.loggedIn ? (
+      {auth.loading ? null : !auth.loggedIn ? (
         <section className="together__gate glass">
           <span className="together__gate-icon">
             <IconUser size={22} />
@@ -245,7 +297,7 @@ export default function Together(): JSX.Element {
           </section>
 
           <div className="together__grid">
-            <section className="together__panel glass">
+            <section className="together__panel together__panel--rooms glass">
               <h2 className="together__h2">房间</h2>
               <div className="together__create">
                 <input
@@ -352,7 +404,7 @@ export default function Together(): JSX.Element {
               />
             </section>
 
-            <section className="together__panel glass">
+            <section className="together__panel together__panel--live glass">
               {state.room ? (
                 <>
                   <div className="together__room-head">
@@ -372,9 +424,9 @@ export default function Together(): JSX.Element {
                   {state.syncInfo ? <p className="together__sync">{state.syncInfo}</p> : null}
 
                   <div className="together__members">
-                    {state.room.members.map((member) => (
-                      <span key={member.id} className="together__member">
-                        {member.nickname ?? `听友${member.id}`}
+                    {state.room.members.map((member, index) => (
+                      <span key={member.id ?? `member-${index}`} className="together__member">
+                        {memberLabel(member)}
                         {member.isHost ? '（房主）' : ''}
                         {member.id === state.room?.you ? '（我）' : ''}
                       </span>
@@ -390,7 +442,7 @@ export default function Together(): JSX.Element {
                           key={`${message.at}-${index}`}
                           className={`together__msg${message.from === state.room?.you ? ' is-mine' : ''}`}
                         >
-                          <span className="together__msg-name">{message.from === state.room?.you ? '我' : message.nickname}</span>
+                          <span className="together__msg-name">{message.from === state.room?.you ? '我' : (message.nickname ?? '听友')}</span>
                           <span className="together__msg-text">
                             {message.text}
                             {message.emoji ? <em className="together__msg-emoji">{message.emoji}</em> : null}
@@ -446,26 +498,19 @@ export default function Together(): JSX.Element {
                     送礼物（余额 {(state.balance / 100).toFixed(2)} 元）
                   </h3>
                   <div className="together__gifts">
-                    {giftsByTier.map(([tier, gifts]) => (
-                      <div key={tier} className="together__gift-group">
-                        <span className="together__gift-tier">{TIER_LABELS[tier]}</span>
-                        <div className="together__gift-items">
-                          {gifts.map((gift) => (
-                            <button
-                              key={gift.id}
-                              type="button"
-                              className={`together__gift is-${gift.tier}`}
-                              disabled={state.balance < gift.price}
-                              onClick={() => together.sendGift(gift.id)}
-                              title={`${gift.name} · ${(gift.price / 100).toFixed(2)} 元`}
-                            >
-                              <span className="together__gift-emoji">{gift.emoji}</span>
-                              <span className="together__gift-name">{gift.name}</span>
-                              <span className="together__gift-price">{(gift.price / 100).toFixed(2)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                    {state.gifts.map((gift) => (
+                      <button
+                        key={gift.id}
+                        type="button"
+                        className={`together__gift is-${gift.tier}`}
+                        disabled={state.balance < gift.price}
+                        onClick={() => together.sendGift(gift.id)}
+                        title={`${TIER_LABELS[gift.tier]} · ${gift.name} · ${(gift.price / 100).toFixed(2)} 元`}
+                      >
+                        <span className="together__gift-emoji">{gift.emoji}</span>
+                        <span className="together__gift-name">{gift.name}</span>
+                        <span className="together__gift-price">{(gift.price / 100).toFixed(2)}</span>
+                      </button>
                     ))}
                   </div>
 

@@ -1,13 +1,14 @@
 /**
  * 设置。
  *
- * 分五组：播放（音质与换源）、输出设备、桌面歌词、缓存、系统集成、账号。
- * 所有控件都直接写回 `settings:update`，由主进程持久化并广播，
+ * 分组：播放、音源、输出设备、桌面歌词、缓存、系统集成、外观（主题 + 皮肤）、背景、
+ * 账号、更新、加入群聊、关于。所有控件都直接写回 `settings:update`，由主进程持久化并广播，
  * 因此没有「保存」按钮，也不会出现界面与存储值不一致。
  */
-import { useEffect, useRef, useState } from 'react'
-import { call } from '../lib/contract'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { call, tryCall, useNavigation } from '../lib/contract'
 import {
+  DEFAULT_SETTINGS,
   DESKTOP_LYRICS_EFFECTS,
   LYRIC_FONTS,
   QUALITY_OPTIONS,
@@ -21,6 +22,15 @@ import {
 import { formatBytes } from '../lib/format'
 import { useAuthStore } from '../store/auth'
 import { checkForUpdateInteractive } from '../lib/updatePrompt'
+import { SKINS, applySkin, readSkin, type SkinId } from '../lib/skin'
+import {
+  BLUR_MAX,
+  BLUR_MIN,
+  applyGlassBlur,
+  pickWallpaper,
+  readGlassBlur,
+  removeWallpaper
+} from '../lib/appearance'
 import { useToast } from '../components/Toast'
 
 /** 音源开关的展示信息；与主进程 `AUDIO_SOURCE_NAMES` 保持一致。 */
@@ -118,7 +128,15 @@ function DraftRange({
 
 export default function Settings(): JSX.Element {
   const auth = useAuthStore()
-  const [settings, setSettings] = useState<SettingsDTO | undefined>()
+  const navigation = useNavigation()
+  /**
+   * 主进程里的设置。读取失败时保持 undefined，界面退到 DEFAULT_SETTINGS 继续渲染：
+   * 「settings:get 失败 → 返回一整页错误文案」曾让设置页完全没有控件，用户看到的
+   * 就是「提示 Object has been destroyed + 一堆按钮点不动」。宁可显示默认值，
+   * 也不吃掉整页。
+   */
+  const [stored, setStored] = useState<SettingsDTO | undefined>()
+  const [settingsError, setSettingsError] = useState<string | undefined>()
   const [info, setInfo] = useState<AppInfoDTO | undefined>()
   const [usage, setUsage] = useState<CacheUsageDTO | undefined>()
   const [devices, setDevices] = useState<AudioDeviceDTO[]>([])
@@ -126,6 +144,17 @@ export default function Settings(): JSX.Element {
   const [message, setMessage] = useState<string | undefined>()
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [checking, setChecking] = useState(false)
+  /** 皮肤：整套观感参数（主色 + 玻璃色调 + 底纹），点了立刻换；只记在渲染层。 */
+  const [skin, setSkin] = useState<SkinId>(readSkin)
+  /** 背景模糊度：0–100 的档位（渲染层记录，localStorage），当场写根节点变量，不走主进程。 */
+  const [blur, setBlur] = useState<number>(readGlassBlur)
+  /** 选图/清除进行中：壁纸是可选功能，失败只提示一句，不影响其它控件。 */
+  const [wallpaperBusy, setWallpaperBusy] = useState(false)
+  /**
+   * 主题的乐观值。select 的 value 直接绑 settings.theme 时，值要等 IPC 回来才更新，
+   * 慢一步就表现成「选了又弹回去」。先用本地草稿让选择立刻成立。
+   */
+  const [themeDraft, setThemeDraft] = useState<SettingsDTO['theme'] | undefined>()
   /** QQ 群二维码（随包分发的 data URL）。 */
   const [groupImage, setGroupImage] = useState<string | undefined>()
   const toast = useToast()
@@ -134,43 +163,112 @@ export default function Settings(): JSX.Element {
   // 最后一次请求的响应。
   const patchSeq = useRef(0)
 
-  useEffect(() => {
-    void call('settings:get').then(setSettings).catch((cause) => setError(String(cause)))
-    void call('app:info').then(setInfo).catch(() => undefined)
-    void call('app:cacheUsage').then(setUsage).catch(() => undefined)
-    void call('player:audioDevices').then(setDevices).catch(() => undefined)
-    void call('app:qqGroupImage').then(setGroupImage).catch(() => undefined)
+  /** 读设置：失败只留一条可重试的提示，不阻断页面。 */
+  const loadSettings = useCallback(async (): Promise<void> => {
+    try {
+      const next = await call('settings:get')
+      setStored(next)
+      setSettingsError(undefined)
+    } catch (cause) {
+      setSettingsError(cause instanceof Error ? cause.message : String(cause))
+    }
   }, [])
 
-  const patch = async (change: Partial<SettingsDTO>): Promise<void> => {
+  useEffect(() => {
+    void loadSettings()
+    // 其余读取都是「有则更好」：失败就保持空，绝不因此让整页变成错误页。
+    void tryCall('app:info').then(setInfo)
+    void tryCall('player:audioDevices').then((value) => setDevices(value ?? []))
+    void tryCall('app:qqGroupImage').then(setGroupImage)
+  }, [loadSettings])
+
+  /**
+   * 缓存用量。设置页是 keep-alive 的（App.tsx 的 KEEP_ALIVE_PAGES）：切走再切回来组件
+   * 不会重新挂载，只在挂载时读一次的话，之后播放攒下的缓存永远不会出现在这里 ——
+   * 用户看到的就一直是最初那个 0B（音频缓存其实真的落盘了）。所以用量跟着路由走：
+   * 每次切回设置页重新读一次。读失败就保留上一次的数字，不把已有用量抹成空。
+   */
+  const refreshUsage = useCallback(async (): Promise<void> => {
+    const next = await tryCall('app:cacheUsage')
+    if (next) setUsage(next)
+  }, [])
+
+  const routeName = navigation.route.name
+
+  useEffect(() => {
+    if (routeName !== 'settings') return
+    void refreshUsage()
+  }, [refreshUsage, routeName])
+
+  /**
+   * 选壁纸：主进程弹系统文件框、把图片存进 userData，渲染层只负责换背景
+   * （appearance.pickWallpaper 里已经写好 html[data-wallpaper] 与 --wallpaper）。
+   * 用户取消时 { set: false }，什么都不用改；失败只提示一句，不打断设置页。
+   */
+  const chooseWallpaper = useCallback(async (): Promise<void> => {
+    setWallpaperBusy(true)
+    try {
+      const result = await pickWallpaper()
+      if (!result.set) return
+      setStored((current) => ({
+        ...(current ?? DEFAULT_SETTINGS),
+        wallpaperSet: true,
+        wallpaperVersion: result.version
+      }))
+    } catch (cause) {
+      toast.show(cause instanceof Error ? cause.message : '选择壁纸失败', 'error')
+    } finally {
+      setWallpaperBusy(false)
+    }
+  }, [toast])
+
+  /** 清除壁纸：主进程删掉图片，渲染层同时撤掉背景，回退成皮肤色晕。 */
+  const dropWallpaper = useCallback(async (): Promise<void> => {
+    setWallpaperBusy(true)
+    try {
+      await removeWallpaper()
+      setStored((current) => ({ ...(current ?? DEFAULT_SETTINGS), wallpaperSet: false }))
+    } catch (cause) {
+      toast.show(cause instanceof Error ? cause.message : '清除壁纸失败', 'error')
+    } finally {
+      setWallpaperBusy(false)
+    }
+  }, [toast])
+
+  /** 模糊度：本地记录 + 立刻写根节点变量；CSS 变量一换，全应用的玻璃当场跟着变。 */
+  const changeBlur = (value: number): void => {
+    setBlur(applyGlassBlur(value))
+  }
+
+  /** 界面一律读它：真值缺失时退到默认值，控件因此永远可用。 */
+  const settings = stored ?? DEFAULT_SETTINGS
+
+  /**
+   * 写回设置。返回三态而不是抛错，调用方据此决定乐观值是否撤销：
+   * 'applied' = 已采用；'stale' = 有更新的请求在飞，交给它收尾；'failed' = 撤销乐观值。
+   */
+  const patch = async (change: Partial<SettingsDTO>): Promise<'applied' | 'stale' | 'failed'> => {
     const seq = ++patchSeq.current
     setError(undefined)
     try {
       const next = await call('settings:update', change)
-      if (seq === patchSeq.current) setSettings(next)
+      if (seq !== patchSeq.current) return 'stale'
+      setStored(next)
+      setSettingsError(undefined)
+      return 'applied'
     } catch (cause) {
+      // 单点失败只在顶部挂一条横幅，页面其余控件照旧可用。
       setError(cause instanceof Error ? cause.message : String(cause))
+      return 'failed'
     }
   }
 
   const toggleSource = async (id: 'pyncmd' | 'kugou' | 'kuwo', enabled: boolean): Promise<void> => {
-    if (!settings) return
     const current = settings.unblockSources ?? []
     const next = enabled ? [...current, id] : current.filter((item) => item !== id)
     // 保持固定优先级顺序，避免用户勾选顺序影响尝试次序。
     const ordered = SOURCES.map((source) => source.id).filter((source) => next.includes(source))
     await patch({ unblockSources: ordered as SettingsDTO['unblockSources'] })
-  }
-
-  if (!settings) {
-    return (
-      <div className="page settings">
-        <div className="page__header">
-          <h1 className="page__title">设置</h1>
-        </div>
-        <div className="page__empty">{error ?? '正在读取设置'}</div>
-      </div>
-    )
   }
 
   const enabledSources = settings.unblockSources ?? []
@@ -181,6 +279,14 @@ export default function Settings(): JSX.Element {
         <h1 className="page__title">设置</h1>
       </div>
       {error ? <div className="page__error">{error}</div> : null}
+      {settingsError ? (
+        <div className="page__error">
+          设置读取失败：{settingsError}（当前显示默认值，改动仍会保存）
+          <button type="button" className="button glass-btn" onClick={() => void loadSettings()}>
+            重试
+          </button>
+        </div>
+      ) : null}
 
       <section className="settings__group">
         <h2>播放</h2>
@@ -351,12 +457,14 @@ export default function Settings(): JSX.Element {
             <button
               type="button"
               className="button"
-              onClick={async () => {
-                const directory = await call('app:chooseCacheDirectory').catch(() => undefined)
-                if (directory) {
-                  await patch({ cacheDirectory: directory })
-                  setMessage('缓存目录将在下次启动时生效')
-                }
+              onClick={() => {
+                void (async () => {
+                  const directory = await tryCall('app:chooseCacheDirectory')
+                  if (!directory) return
+                  if ((await patch({ cacheDirectory: directory })) === 'applied') {
+                    setMessage('缓存目录将在下次启动时生效')
+                  }
+                })()
               }}
             >
               更改
@@ -389,9 +497,15 @@ export default function Settings(): JSX.Element {
             <button
               type="button"
               className="button"
-              onClick={async () => {
-                setUsage(await call('app:clearCache', { what: 'audio' }))
-                setMessage('音频缓存已清理')
+              onClick={() => {
+                void (async () => {
+                  try {
+                    setUsage(await call('app:clearCache', { what: 'audio' }))
+                    setMessage('音频缓存已清理')
+                  } catch (cause) {
+                    toast.show(cause instanceof Error ? cause.message : '清理缓存失败', 'error')
+                  }
+                })()
               }}
             >
               清理音频
@@ -399,9 +513,15 @@ export default function Settings(): JSX.Element {
             <button
               type="button"
               className="button"
-              onClick={async () => {
-                setUsage(await call('app:clearCache', { what: 'all' }))
-                setMessage('全部缓存已清理')
+              onClick={() => {
+                void (async () => {
+                  try {
+                    setUsage(await call('app:clearCache', { what: 'all' }))
+                    setMessage('全部缓存已清理')
+                  } catch (cause) {
+                    toast.show(cause instanceof Error ? cause.message : '清理缓存失败', 'error')
+                  }
+                })()
               }}
             >
               清理全部
@@ -427,23 +547,109 @@ export default function Settings(): JSX.Element {
           checked={settings.closeToTray}
           onChange={(value) => void patch({ closeToTray: value })}
         />
+        <SettingSwitch
+          label="GPU 加速"
+          hint="使用显卡加速界面渲染；关闭后改用软件渲染，重启后生效。"
+          checked={settings.hardwareAcceleration}
+          onChange={(value) => void patch({ hardwareAcceleration: value })}
+        />
+      </section>
+
+      {/* 外观：明暗（主题）与主色（皮肤）是两件正交的事 —— 主题写 data-theme，皮肤写
+          data-skin + localStorage youyou-skin，两边的 apply 逻辑互不覆盖，所以合成
+          一组、上下排开，而不是各占一个分组。 */}
+      <section className="settings__group">
+        <h2>外观</h2>
         <div className="settings__row">
           <div className="settings__row-label">
             <span>主题</span>
           </div>
           <div className="settings__row-control">
             <select
-              value={settings.theme}
+              value={themeDraft ?? settings.theme}
               onChange={(event) => {
                 const theme = event.target.value as SettingsDTO['theme']
-                document.documentElement.dataset.theme = theme === 'system' ? detectSystemTheme() : theme
-                void patch({ theme })
+                // 主题反馈必须瞬时：先写根节点与本地草稿，再落盘。
+                applyTheme(theme)
+                setThemeDraft(theme)
+                void patch({ theme }).then((outcome) => {
+                  if (outcome === 'applied') setThemeDraft(undefined)
+                  else if (outcome === 'failed') {
+                    // 落盘失败：撤销草稿并把根节点恢复成存储值，避免界面与存储不一致。
+                    setThemeDraft(undefined)
+                    applyTheme(settings.theme)
+                  }
+                  // 'stale'：有更新的请求在飞，交给它收尾，草稿先留着。
+                })
               }}
             >
               <option value="system">跟随系统</option>
               <option value="light">浅色</option>
               <option value="dark">深色</option>
             </select>
+          </div>
+        </div>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>主题皮肤</span>
+          </div>
+          <div className="settings__row-control">
+            <div className="skin-picker" role="radiogroup" aria-label="主题皮肤">
+              {SKINS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="radio"
+                  className={`skin-option${item.id === skin ? ' is-active' : ''}`}
+                  aria-checked={item.id === skin}
+                  aria-label={item.name}
+                  title={item.name}
+                  onClick={() => setSkin(applySkin(item.id))}
+                >
+                  <span className="skin-swatch" data-skin={item.id} aria-hidden="true" />
+                  <span className="skin-option__name">{item.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 背景：壁纸（图片存主进程，渲染层用 youyou-wallpaper:// 读）+ 毛玻璃模糊度（本地记录）。 */}
+      <section className="settings__group">
+        <h2>背景</h2>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>自定义壁纸</span>
+          </div>
+          <div className="settings__row-control">
+            <button
+              type="button"
+              className="button glass-btn"
+              disabled={wallpaperBusy}
+              onClick={() => void chooseWallpaper()}
+            >
+              {settings.wallpaperSet ? '更换图片' : '选择图片'}
+            </button>
+            {settings.wallpaperSet ? (
+              <button
+                type="button"
+                className="button glass-btn"
+                disabled={wallpaperBusy}
+                onClick={() => void dropWallpaper()}
+              >
+                清除壁纸
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>背景模糊度</span>
+          </div>
+          <div className="settings__row-control">
+            <DraftRange value={blur} min={BLUR_MIN} max={BLUR_MAX} label="背景模糊度" onChange={changeBlur} />
+            <span className="settings__row-hint">{blur}%</span>
           </div>
         </div>
       </section>
@@ -464,10 +670,16 @@ export default function Settings(): JSX.Element {
                   <button
                     type="button"
                     className="button button--primary"
-                    onClick={async () => {
+                    onClick={() => {
                       setConfirmLogout(false)
-                      await auth.logout()
-                      setMessage('已退出登录')
+                      void (async () => {
+                        try {
+                          await auth.logout()
+                          setMessage('已退出登录')
+                        } catch (cause) {
+                          toast.show(cause instanceof Error ? cause.message : '退出登录失败', 'error')
+                        }
+                      })()
                     }}
                   >
                     确认退出
@@ -514,6 +726,7 @@ export default function Settings(): JSX.Element {
                     else if (outcome === 'error') toast.show('检查更新失败，请稍后再试', 'error')
                     // 'update' 时全局弹窗出现，这里不需要再提示
                   })
+                  .catch(() => toast.show('检查更新失败，请稍后再试', 'error'))
                   .finally(() => setChecking(false))
               }}
             >
@@ -564,7 +777,11 @@ export default function Settings(): JSX.Element {
             <button
               type="button"
               className="settings__link"
-              onClick={() => void call('app:openExternal', { url: 'https://yy.ytw.asia' })}
+              onClick={() => {
+                void call('app:openExternal', { url: 'https://yy.ytw.asia' }).catch(() =>
+                  toast.show('打开链接失败', 'error')
+                )
+              }}
             >
               https://yy.ytw.asia
             </button>
@@ -574,7 +791,11 @@ export default function Settings(): JSX.Element {
             <button
               type="button"
               className="settings__link"
-              onClick={() => void call('app:openExternal', { url: 'https://github.com/1191533749/youyou-music' })}
+              onClick={() => {
+                void call('app:openExternal', { url: 'https://github.com/1191533749/youyou-music' }).catch(() =>
+                  toast.show('打开链接失败', 'error')
+                )
+              }}
             >
               https://github.com/1191533749/youyou-music
             </button>
@@ -619,6 +840,16 @@ function SettingSwitch({
       </div>
     </div>
   )
+}
+
+/**
+ * 把主题写到根节点。
+ *
+ * 主题只决定明暗、皮肤只决定主色，两者互不覆盖（见 global.css 顶部的约定）。
+ * 抽成函数是因为「选择立刻生效」和「落盘失败后回退」要用同一套换算。
+ */
+function applyTheme(theme: SettingsDTO['theme']): void {
+  document.documentElement.dataset.theme = theme === 'system' ? detectSystemTheme() : theme
 }
 
 function detectSystemTheme(): 'light' | 'dark' {

@@ -222,8 +222,8 @@
   place-items: center;
   padding: 24px;
   background: color-mix(in srgb, var(--bg) 55%, transparent);
-  backdrop-filter: blur(6px) saturate(120%);
-  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  backdrop-filter: blur(var(--blur-xs)) saturate(120%);
+  -webkit-backdrop-filter: blur(var(--blur-xs)) saturate(120%);
 }
 
 /* 背景、模糊与 1px 亮边全部来自 .glass；这里只管布局、圆角与投影。 */
@@ -494,4 +494,362 @@
     opacity: 0;
     transform: translateX(12px);
   }
+}
+
+/* --- 全屏播放页：底部控制条 -------------------------------------------------
+ *
+ * 上一曲 / 播放暂停 / 下一曲 / 音量整条沉到页面底部（NowPlaying.tsx 里的
+ * .np-fs__dock），上半部分让给歌词。排版全在 home.css，这份文件在它之后加载，
+ * 所以每条都带 .np-fullscreen 前缀：同权重下稳赢，也不用去改别人的文件。
+ */
+.np-fullscreen .np-fs__main {
+  /* home.css 留的 78px 底边距原本是给浮动按钮让位的，现在底部有实体控制条。 */
+  padding: 0 40px 14px;
+}
+
+/* 窄窗口（960–1080px）下 home.css 会换成单列布局，左右边距跟着它收窄。 */
+@media (max-width: 1080px) {
+  .np-fullscreen .np-fs__main {
+    padding: 0 20px 14px;
+  }
+}
+
+/* 底部控制条：整宽的玻璃片，和页面顶栏同一套语言。 */
+.np-fullscreen .np-fs__dock {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 40px 18px;
+  border-top: 1px solid var(--glass-border);
+  background: linear-gradient(180deg, transparent, var(--glass-weak));
+}
+
+.np-fullscreen .np-fs__dock-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(780px, 100%);
+}
+
+/* 按钮居中；右侧那 200 多像素留给右下角的两个切换按钮，960px 最小宽度下不会撞上。 */
+.np-fullscreen .np-fs__dock-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+}
+
+/* 搬下来之后不再需要 home.css 里那条 margin-top。 */
+.np-fullscreen .np-cover__controls {
+  margin-top: 0;
+}
+
+/* --- 全屏播放页：歌词特效 ---------------------------------------------------
+ *
+ * 逐字卡拉OK 的关键：LRC 只有行级时间戳，所以「每个字什么时候亮」要现算。
+ * lyricsUtils 负责时间轴（有下一行就用行间距，最后一行按字数估计），这里只管画：
+ * 每个字一片两段式渐变，--np-char-fill 是此刻唱到的百分比。注册成 <percentage>
+ * 的自定义属性是能被 transition 插值的，所以推进是滑过去的，不是一格一格跳。
+ */
+@property --np-char-fill {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+/* 酷狗那套配色：唱过的字/句统一用暖橙强调。取主题的 accent-2（默认主题正是橙），
+   不再拿封面主色 --np-accent 当已唱色 —— 灰封面会把已唱句一起拖成灰的。 */
+.np-fullscreen {
+  --np-sung: var(--accent-2);
+  --np-unsung: color-mix(in srgb, var(--np-lyric-dim) 70%, transparent);
+}
+
+.np-fullscreen .np-lyric__text {
+  letter-spacing: 0.012em;
+}
+
+/* 1) 逐字卡拉OK（酷狗默认那套）：唱过的字变暖橙、没唱的是暗灰，正在唱的那个字
+   最亮并带一圈贴字小光晕；整行不铺底色，靠字本身亮起来。 */
+.np-fullscreen .np-lyrics__list--karaoke .np-lyric.is-active {
+  background: none;
+}
+
+.np-fullscreen .np-lyrics__list--karaoke .np-lyric__text {
+  color: var(--np-lyric-dim);
+  opacity: 0.5;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+  transition: color 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* 唱过去的整句：暖橙、比未唱句亮，但仍低于正在唱的这一句。 */
+.np-fullscreen .np-lyrics__list--karaoke .np-lyric.is-sung .np-lyric__text {
+  color: var(--np-sung);
+  opacity: 0.82;
+}
+
+.np-fullscreen .np-lyrics__list--karaoke .np-lyric.is-active .np-lyric__text {
+  /* 当前句比其它句略大一点（酷狗的招牌做法）：只用 transform，不触发重排、行高不变。 */
+  display: inline-block;
+  transform-origin: left center;
+  transform: scale(1.04);
+  opacity: 1;
+}
+
+/* 逐字格子：两段式渐变，--np-char-fill 左侧是已唱的暖橙、右侧是未唱的暗色。 */
+.np-fullscreen .np-lyrics__list--karaoke .np-lyric__char {
+  background-image: linear-gradient(
+    90deg,
+    var(--np-sung) var(--np-char-fill),
+    var(--np-unsung) var(--np-char-fill)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  transition: --np-char-fill 0.18s linear;
+}
+
+/* 正在唱的那一个字：渐变调亮，描边加一圈贴着字形的小光晕。 */
+.np-fullscreen .np-lyrics__list--karaoke .np-lyric__char.is-singing {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--np-sung) 68%, #fff) var(--np-char-fill),
+    var(--np-unsung) var(--np-char-fill)
+  );
+  -webkit-text-stroke: 0.5px color-mix(in srgb, var(--np-sung) 55%, #fff);
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--np-sung) 55%, transparent));
+}
+
+/* 2) 经典：不加渐变、不加装饰线，只靠明暗与暖橙区分三态 ——
+   还没唱的最暗、唱过的转暖橙、当前句纯白并带一层很淡的投影。 */
+.np-fullscreen .np-lyric--classic .np-lyric__text {
+  color: var(--np-lyric-dim);
+  opacity: 0.45;
+  transition: color 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+}
+
+.np-fullscreen .np-lyric--classic.is-sung .np-lyric__text {
+  color: var(--np-sung);
+  opacity: 0.78;
+}
+
+.np-fullscreen .np-lyric--classic.is-active .np-lyric__text {
+  /* 与卡拉OK同一个处理：当前句略大，靠 transform 不走重排。 */
+  display: inline-block;
+  transform-origin: left center;
+  transform: scale(1.04);
+  color: var(--text);
+  opacity: 1;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.45);
+}
+
+/* 3) 霓虹：只有当前行发光 —— 两层很淡的暖橙辉光 + 细描边 + 轻微呼吸；
+   字按「已唱暖橙、未唱压暗」推进，唱过的整句转为暖橙。整屏不铺光，克制为主。 */
+.np-fullscreen .np-lyric--neon .np-lyric__text {
+  color: var(--np-lyric-dim);
+  opacity: 0.45;
+  transition: color 0.3s ease, opacity 0.3s ease, text-shadow 0.45s ease;
+}
+
+.np-fullscreen .np-lyric--neon.is-sung .np-lyric__text {
+  color: var(--np-sung);
+  opacity: 0.8;
+}
+
+.np-fullscreen .np-lyric--neon.is-active .np-lyric__text {
+  color: var(--np-sung);
+  opacity: 1;
+  -webkit-text-stroke: 0.45px color-mix(in srgb, var(--np-sung) 45%, white);
+  text-shadow:
+    0 0 7px color-mix(in srgb, var(--np-sung) 30%, transparent),
+    0 0 18px color-mix(in srgb, var(--np-sung) 14%, transparent);
+  animation: np-neon-breathe 5.4s ease-in-out infinite;
+}
+
+/* 逐字：唱过的字是暖橙实色，没唱到的压成暗色，正在唱的那个字靠 --np-char-fill 过渡。 */
+.np-fullscreen .np-lyrics__list--neon .np-lyric__char {
+  background-image: linear-gradient(
+    90deg,
+    var(--np-sung) var(--np-char-fill),
+    color-mix(in srgb, var(--np-sung) 18%, var(--np-lyric-dim)) var(--np-char-fill)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  transition: --np-char-fill 0.16s linear;
+}
+
+/* 光晕轻轻起伏：只动半径，不动透明度，避免整行闪。 */
+@keyframes np-neon-breathe {
+  0%,
+  100% {
+    text-shadow:
+      0 0 7px color-mix(in srgb, var(--np-sung) 30%, transparent),
+      0 0 18px color-mix(in srgb, var(--np-sung) 14%, transparent);
+  }
+
+  50% {
+    text-shadow:
+      0 0 9px color-mix(in srgb, var(--np-sung) 34%, transparent),
+      0 0 22px color-mix(in srgb, var(--np-sung) 17%, transparent);
+  }
+}
+
+/* 4) 渐变放大：当前句暖橙渐变填充 + 平缓放大（1 → 1.06，缓动不是跳变），其余行低对比度。 */
+.np-fullscreen .np-lyric--zoom .np-lyric__text {
+  display: inline-block;
+  transform-origin: left center;
+  transform: scale(1);
+  color: var(--np-lyric-dim);
+  opacity: 0.45;
+  transition: transform 0.6s cubic-bezier(0.22, 0.61, 0.36, 1), color 0.3s ease, opacity 0.3s ease;
+}
+
+.np-fullscreen .np-lyric--zoom.is-sung .np-lyric__text {
+  color: var(--np-sung);
+  opacity: 0.78;
+}
+
+.np-fullscreen .np-lyric--zoom.is-active .np-lyric__text {
+  transform: scale(1.06);
+  background-image: linear-gradient(
+    96deg,
+    color-mix(in srgb, var(--np-sung) 58%, white) 0%,
+    var(--np-sung) 46%,
+    var(--accent-3) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  opacity: 1;
+  text-shadow: 0 2px 20px color-mix(in srgb, var(--np-sung) 22%, transparent);
+}
+
+/* 星海档的封面：整块渐隐进星场。原来那层实心方底 + 投影会让一半像融进去、
+   一半像硬贴上去；这里只用 radial mask 收边，不加边框也不加投影。 */
+.np-fullscreen .np-stars__art {
+  background: transparent;
+  box-shadow: none;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 54%, transparent 76%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 54%, transparent 76%);
+}
+
+/* 动画降级：逐字推进直接跟随时间，霓虹不再呼吸，小鱼不缩放。 */
+@media (prefers-reduced-motion: reduce) {
+  .np-fullscreen .np-lyrics__list--karaoke .np-lyric__char,
+  .np-fullscreen .np-lyrics__list--neon .np-lyric__char,
+  .np-fullscreen .np-lyric--zoom .np-lyric__text {
+    transition: none;
+  }
+
+  .np-fullscreen .np-lyric--neon.is-active .np-lyric__text,
+  .fish-avatar {
+    animation: none;
+  }
+}
+
+/* --- 小鱼占位头像（components/FishAvatar.tsx）-----------------------------
+   现在只剩歌手页头像在没到位时用它顶一会儿：圆底 + 细线条小鱼。高度撑满容器，
+   靠 aspect-ratio 保持正方，非方形容器里居中不拉伸；图片一加载完组件就卸载，
+   不留残影。播放页大封面与播放条封面改用中性占位（.np-art-fallback）。 */
+.fish-avatar {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 100%;
+  margin: auto;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  animation: fish-avatar-in 0.32s ease both;
+}
+
+.fish-avatar svg {
+  width: 62%;
+  height: 62%;
+}
+
+/* --- 封面 / 头像都缺席时的中性占位 -----------------------------------------
+   回退链走完（专辑封面 → 歌手头像）才轮到它：渐变底 + 音符图标，撑满容器，
+   不做插画；在播放页里跟着所在窗口（黑胶标签 / 胶片窗 / 星海方框）一起被裁切。 */
+.np-art-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--accent-soft), var(--glass-weak));
+  color: var(--accent);
+}
+
+.np-art-fallback svg {
+  width: 34%;
+  height: 34%;
+  opacity: 0.72;
+}
+
+@keyframes fish-avatar-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* --- 播放/暂停按钮的加载态 -----------------------------------------------
+   .spin（home.css）自带 color: var(--accent)，落在强调色主按钮上会和底色融成一片，
+   这里让旋转图标沿用按钮自身的前景色。 */
+.icon-button--primary .spin {
+  color: inherit;
+}
+
+/* --- 真全屏空闲：把控件收起来 ---------------------------------------------
+   类名由 lib/fullscreenIdle.ts 挂在 <html> 上。过渡始终写在元素上，进出都顺滑；
+   收起后关掉 pointer-events，空白处不再挡点击。
+   顶栏与底部控制条都在 .np-fullscreen 里（home.css 给了 overflow: hidden），
+   向上/向下滑出去会被裁掉；全局播放条是应用外壳的 grid 项，只做淡出不做位移，
+   免得挤出网格。 */
+.np-fs__bar,
+.np-fs__dock,
+.np-fs__tools,
+.player-bar {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* 队列抽屉自己带 0.26s 的位移动画，这里只补一层淡出，别把它的位移节奏改掉。 */
+html.fullscreen-idle .np-drawer,
+html.fullscreen-idle .np-drawer__scrim {
+  transition: opacity 0.3s ease, transform 0.26s ease;
+}
+
+html.fullscreen-idle .np-fs__bar {
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+
+html.fullscreen-idle .np-fs__dock {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+}
+
+/* 右下角的视觉效果 / 歌词特效按钮同样收进底部，全屏空闲时一个按钮都不留。 */
+html.fullscreen-idle .np-fs__tools {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+}
+
+html.fullscreen-idle .np-drawer,
+html.fullscreen-idle .np-drawer__scrim {
+  opacity: 0;
+  pointer-events: none;
+}
+
+html.fullscreen-idle .player-bar {
+  opacity: 0;
+  pointer-events: none;
 }

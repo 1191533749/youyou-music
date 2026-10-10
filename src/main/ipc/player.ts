@@ -8,6 +8,8 @@
  */
 import { defineHandler } from './registry.js'
 import { mappingContextFrom, toTracksDTO } from './mappers.js'
+import { localDateKey } from '../storage/dailyHistory.js'
+import { pushDailyToServer } from './explore.js'
 import { resolveExternalAudio, toSyntheticTrack } from '../external/search.js'
 import type { AppContext } from '../context.js'
 import type { QualityLevel, AudioDeviceDTO } from '@shared/types'
@@ -61,18 +63,56 @@ function trackFromDTO(dto: {
 export function registerPlayerHandlers(context: AppContext): void {
   defineHandler('player:state', () => context.player.snapshot())
 
+  /**
+   * 队列为空时点播放：立即从今日推荐随机起播一首（用户 0.4.1 反馈第 6 项）。
+   * 取不到（未登录/限流）就静默放弃，交给原有空队列行为。
+   */
+  async function ensureQueueHasMusic(ctx: AppContext): Promise<void> {
+    if (ctx.player.snapshot().queue.length > 0) return
+    try {
+      const daily = await ctx.api.dailyRecommendSongs()
+      if (daily.length > 0) {
+        // 顺手把今天的列表落进历史快照：如果用户今天第一次播放就走这条路
+        // （没打开过每日推荐页），「昨天的日推」明天也要能回看。
+        ctx.dailyHistory.save(localDateKey(0), toTracksDTO(daily, mappingContext(ctx)))
+        void pushDailyToServer(ctx, localDateKey(0), toTracksDTO(daily, mappingContext(ctx)))
+        ctx.log(`队列为空，自动从今日推荐随机起播（共 ${daily.length} 首）`)
+        await ctx.player.setQueue(daily, 0, undefined, { randomStart: true })
+      }
+    } catch (cause) {
+      ctx.log(`队列为空时取今日推荐失败: ${String(cause)}`)
+    }
+  }
+
+  /** 起播前等曲目详情的上限：整页最多 200 首，接口一慢点一下就卡住（用户反馈第 6 项）。 */
+  const DETAIL_DEADLINE_MS = 1500
+
   defineHandler('player:playTracks', async ({ tracks, startIndex, randomStart }) => {
     if (tracks.length === 0) return context.player.snapshot()
     const ids = tracks.map((track) => track.id)
     let hydrated: Track[] = []
     let privileges
     try {
-      const detail = await context.api.songDetails(ids)
-      hydrated = detail.songs
-      privileges = detail.privileges
-      // Preserve the caller's ordering; the detail endpoint does not guarantee it.
-      const byID = new Map(hydrated.map((track) => [track.id, track]))
-      hydrated = ids.map((id) => byID.get(id)).filter((track): track is Track => !!track)
+      // 起播不能被「整页曲目详情」拖住：最多等 1.5 秒，超时就用列表自带的数据先播。
+      // 列表页拿到的 TrackDTO 已经够起播；详情接口额外给的只是特权/封面数据，
+      // 缺了它 VIP 标签可能显示得保守一点，但站外兜底链路照样能把这歌放出来。
+      const detailPromise = context.api.songDetails(ids)
+      detailPromise.catch(() => undefined) // 超时后没人 await，别让它变成 unhandled rejection
+      const detail = await Promise.race([
+        detailPromise,
+        new Promise<undefined>((resolve) => {
+          setTimeout(() => resolve(undefined), DETAIL_DEADLINE_MS).unref?.()
+        })
+      ])
+      if (!detail) {
+        context.log(`曲目详情超过 ${DETAIL_DEADLINE_MS}ms 未返回，先用列表数据起播（共 ${ids.length} 首）`)
+      } else {
+        hydrated = detail.songs
+        privileges = detail.privileges
+        // Preserve the caller's ordering; the detail endpoint does not guarantee it.
+        const byID = new Map(hydrated.map((track) => [track.id, track]))
+        hydrated = ids.map((id) => byID.get(id)).filter((track): track is Track => !!track)
+      }
     } catch (cause) {
       context.log(`获取歌曲详情失败，改用列表数据播放: ${String(cause)}`)
     }
@@ -105,11 +145,13 @@ export function registerPlayerHandlers(context: AppContext): void {
   })
 
   defineHandler('player:toggle', async () => {
+    await ensureQueueHasMusic(context)
     await context.player.toggle()
     return context.player.snapshot()
   })
 
   defineHandler('player:play', async () => {
+    await ensureQueueHasMusic(context)
     await context.player.play()
     return context.player.snapshot()
   })

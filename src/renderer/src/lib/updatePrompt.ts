@@ -16,6 +16,17 @@ export type UpdateCheckOutcome = 'update' | 'latest' | 'error'
 let current: UpdatePromptState | undefined
 const listeners = new Set<() => void>()
 
+/** 「稍后更新」记住的版本：同一版本只弹一次，不每次启动都打扰。 */
+const DISMISS_KEY = 'youyou-update-dismissed'
+
+function readDismissedVersion(): string {
+  try {
+    return localStorage.getItem(DISMISS_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 function notify(): void {
   for (const listener of listeners) listener()
 }
@@ -29,24 +40,30 @@ export function subscribeUpdatePrompt(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-/** 关闭弹窗（稍后更新）；不触发安装。 */
+/** 关闭弹窗（稍后更新）；记住这个版本，之后启动不再为它打扰。 */
 export function dismissUpdatePrompt(): void {
   if (!current) return
+  try {
+    localStorage.setItem(DISMISS_KEY, current.version)
+  } catch {
+    /* 存储不可用时最坏就是下次再弹一次 */
+  }
   current = undefined
   notify()
 }
 
 /**
  * 检查更新：
- *  - 有新版本 → 弹窗出现（30 秒倒计时），返回 'update'；
- *  - 已是最新 → 返回 'latest'；
+ *  - 有新版本且不是用户点过「稍后更新」的版本 → 弹窗出现，返回 'update'；
+ *  - 已是最新、或该版本已被「稍后」过 → 返回 'latest'；
  *  - 网络/解析失败 → 返回 'error'（不弹窗）。
- * 启动时的静默检测与设置里的手动检测都走这里，行为一致。
+ * 弹窗不再倒计时自动安装：更新是否安装由用户点「立即更新」决定。
  */
 export async function checkForUpdateInteractive(): Promise<UpdateCheckOutcome> {
   try {
     const result = await call('update:check')
     if (result.version) {
+      if (readDismissedVersion() === result.version) return 'latest'
       current = { version: result.version, notes: result.notes }
       notify()
       return 'update'

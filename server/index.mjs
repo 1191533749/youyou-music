@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { acceptKey, decodeFrames, encodeClose, encodeFrame } from './ws.mjs'
 import { GIFTS, findGift } from './gifts.mjs'
 import { Alipay, loadPrivateKey } from './alipay.mjs'
+import { getDaily, sanitiseTracks, saveDaily, validDate, validUid } from './daily.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.join(root, 'data')
@@ -203,8 +204,12 @@ async function handleMessage(client, message) {
       }
       rooms.set(id, room)
       client.roomId = id
-      send(client, 'roomJoined', { room: roomSummary(room), you: client.id, members: [...room.members] })
-      broadcast(id, 'peerJoined', { member: { id: client.id, nickname: client.profile?.nickname } }, client.id)
+      send(client, 'roomJoined', {
+        room: roomSummary(room),
+        you: client.id,
+        members: [...room.members].map((memberId) => ({ id: memberId, nickname: clients.get(memberId)?.profile?.nickname ?? `听友${memberId}` }))
+      })
+      broadcast(id, 'peerJoined', { member: { id: client.id, nickname: client.profile?.nickname ?? `听友${client.id}` } }, client.id)
       break
     }
 
@@ -220,10 +225,10 @@ async function handleMessage(client, message) {
       send(client, 'roomJoined', {
         room: roomSummary(room),
         you: client.id,
-        members: [...room.members].map((id) => ({ id, nickname: clients.get(id)?.profile?.nickname })),
+        members: [...room.members].map((id) => ({ id, nickname: clients.get(id)?.profile?.nickname ?? `听友${id}` })),
         state: room.state
       })
-      broadcast(room.id, 'peerJoined', { member: { id: client.id, nickname: client.profile?.nickname } }, client.id)
+      broadcast(room.id, 'peerJoined', { member: { id: client.id, nickname: client.profile?.nickname ?? `听友${client.id}` } }, client.id)
       break
     }
 
@@ -388,7 +393,7 @@ function leaveRoom(client) {
   client.roomId = undefined
   if (!room) return
   room.members.delete(client.id)
-  broadcast(roomId, 'peerLeft', { member: { id: client.id, nickname: client.profile?.nickname } })
+  broadcast(roomId, 'peerLeft', { member: { id: client.id, nickname: client.profile?.nickname ?? `听友${client.id}` } })
   if (room.members.size === 0) rooms.delete(roomId)
   else if (room.hostId === client.id) room.hostId = [...room.members][0]
   send(client, 'roomLeft', {})
@@ -396,24 +401,117 @@ function leaveRoom(client) {
 
 // --- HTTP + WebSocket 升级 ---
 const server = createServer((request, response) => {
-  // 兼容反代前缀：/relay/health 与 /health 都算健康检查。
-  if (request.url === '/health' || request.url === '/relay/health' || request.url?.endsWith('/health')) {
-    response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(
-      JSON.stringify({
-        ok: true,
-        rooms: rooms.size,
-        online: onlineCount(),
-        gifts: GIFTS.length,
-        alipay: alipay.configured,
-        uptime: Math.round(process.uptime())
-      })
-    )
+  void handleHttp(request, response).catch((cause) => {
+    console.error('[http] 处理失败', cause)
+    respond(response, 500, { ok: false, message: '服务器内部错误' })
+  })
+})
+
+function respond(response, status, data) {
+  try {
+    response.writeHead(status, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*'
+    })
+    response.end(JSON.stringify(data))
+  } catch {
+    /* 响应可能已中断 */
+  }
+}
+
+/** 与 WebSocket 一致的口令校验：?token= 或 x-relay-token 头。 */
+function tokenOk(searchParams, headers) {
+  if (!RELAY_TOKEN) return true
+  const supplied = searchParams.get('token') ?? headers['x-relay-token']
+  return supplied === RELAY_TOKEN
+}
+
+async function handleHttp(request, response) {
+  let parsed
+  try {
+    parsed = new URL(request.url ?? '/', 'http://localhost')
+  } catch {
+    respond(response, 400, { ok: false, message: '无效的请求地址' })
     return
   }
+  // 兼容反代前缀：/relay/health 与 /health 都算健康检查。
+  if (parsed.pathname === '/health' || parsed.pathname.endsWith('/health')) {
+    respond(response, 200, {
+      ok: true,
+      rooms: rooms.size,
+      online: onlineCount(),
+      gifts: GIFTS.length,
+      alipay: alipay.configured,
+      uptime: Math.round(process.uptime())
+    })
+    return
+  }
+
+  // 每日推荐历史（悠悠音乐自己的跨设备同步逻辑）。
+  const isDaily = parsed.pathname === '/daily' || parsed.pathname === '/relay/daily'
+  const isDailySave = parsed.pathname === '/daily/save' || parsed.pathname === '/relay/daily/save'
+  if (isDaily || isDailySave) {
+    if (!tokenOk(parsed.searchParams, request.headers)) {
+      respond(response, 401, { ok: false, message: '未授权' })
+      return
+    }
+    const uid = parsed.searchParams.get('uid')
+    const date = parsed.searchParams.get('date')
+    if (!validUid(uid)) {
+      respond(response, 400, { ok: false, message: 'uid 非法' })
+      return
+    }
+    if (!validDate(date)) {
+      respond(response, 400, { ok: false, message: 'date 非法' })
+      return
+    }
+    if (isDailySave) {
+      let body = ''
+      try {
+        for await (const chunk of request) body += chunk
+      } catch {
+        respond(response, 400, { ok: false, message: '请求体读取失败' })
+        return
+      }
+      if (body.length > 1_000_000) {
+        respond(response, 413, { ok: false, message: '请求体过大' })
+        return
+      }
+      let payload
+      try {
+        payload = JSON.parse(body || '{}')
+      } catch {
+        respond(response, 400, { ok: false, message: 'JSON 解析失败' })
+        return
+      }
+      const tracks = sanitiseTracks(payload.tracks)
+      if (!tracks) {
+        respond(response, 400, { ok: false, message: 'tracks 非法（需要非空数组）' })
+        return
+      }
+      try {
+        saveDaily(uid, date, tracks)
+        console.log(`[daily] uid=${uid} date=${date} 保存 ${tracks.length} 首`)
+        respond(response, 200, { ok: true, saved: tracks.length })
+      } catch (cause) {
+        console.error('[daily] 保存失败', cause)
+        respond(response, 500, { ok: false, message: '保存失败' })
+      }
+      return
+    }
+    try {
+      respond(response, 200, { ok: true, date, tracks: getDaily(uid, date) })
+    } catch (cause) {
+      console.error('[daily] 读取失败', cause)
+      respond(response, 500, { ok: false, message: '读取失败' })
+    }
+    return
+  }
+
   response.writeHead(404)
   response.end()
-})
+}
 
 server.on('upgrade', (request, socket) => {
   const key = request.headers['sec-websocket-key']

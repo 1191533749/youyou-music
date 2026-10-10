@@ -22,6 +22,7 @@ import {
   type Track,
   type TrackPrivilege,
   type UserProfile,
+  isLikedSongsList,
   toAlbumDetail,
   toAlbumSummary,
   toArtistSummary,
@@ -148,6 +149,37 @@ interface DecodedOptions {
 
 export class NeteaseAPI {
   constructor(private readonly client: NeteaseClient) {}
+
+  /** 账号资料缓存：避免每次点赞都打一次 /w/nuser/account/get。 */
+  private profileCache?: { userId: number; fetchedAt: number }
+  private readonly profileTTLMs = 10 * 60 * 1000
+  /** 「我喜欢的音乐」歌单 id 缓存，按 uid 区分。 */
+  private likedPlaylistCache?: { uid: number; playlistID: number }
+
+  private async loggedInUID(): Promise<number> {
+    const now = Date.now()
+    if (this.profileCache && now - this.profileCache.fetchedAt < this.profileTTLMs) {
+      return this.profileCache.userId
+    }
+    const profile = await this.userAccount()
+    if (!profile) {
+      throw new NeteaseAPIError('business', { code: -1, message: '需要登录' })
+    }
+    this.profileCache = { userId: profile.userId, fetchedAt: now }
+    return profile.userId
+  }
+
+  private async likedSongsPlaylistID(uid: number): Promise<number> {
+    const cached = this.likedPlaylistCache
+    if (cached && cached.uid === uid) return cached.playlistID
+    const playlists = await this.userPlaylists(uid)
+    const liked = playlists.find(isLikedSongsList)
+    if (!liked) {
+      throw new NeteaseAPIError('business', { code: -1, message: '没有找到「我喜欢的音乐」歌单' })
+    }
+    this.likedPlaylistCache = { uid, playlistID: liked.id }
+    return liked.id
+  }
 
   /**
    * weapi request with an automatic eapi fallback.
@@ -390,8 +422,18 @@ export class NeteaseAPI {
     })
   }
 
+  /**
+   * 收藏/取消收藏一首歌。
+   *
+   * 这里往「我喜欢的音乐」歌单里加/删（`/playlist/manipulate/tracks`），
+   * 而不是旧的 `/radio/like`：后者是私人漫游(FM)的好恶接口，点了红心
+   * 并不会进「我喜欢的音乐」——这正是「点小心心收藏不成功」的根因。
+   * 读取侧 `/song/like/get` 返回的正是这张歌单，读写口径一致。
+   */
   async likeTrack(id: number, like: boolean): Promise<void> {
-    await this.weapi(`/radio/like?alg=itembased&trackId=${id}&time=3`, { trackId: id, like })
+    const uid = await this.loggedInUID()
+    const playlistID = await this.likedSongsPlaylistID(uid)
+    await this.playlistTracks(like ? 'add' : 'del', playlistID, [id])
   }
 
   async likedAlbums(limit = 500, offset = 0): Promise<AlbumSummary[]> {
@@ -678,14 +720,20 @@ export class NeteaseAPI {
 
   async playlistTracks(op: 'add' | 'del', playlistID: number, trackIDs: number[]): Promise<void> {
     const ids = `[${trackIDs.map(String).join(',')}]`
-    const attempt = async (value: string): Promise<any> =>
-      this.client.weapi('/playlist/manipulate/tracks', {
-        op,
-        pid: playlistID,
-        trackIds: value,
-        imme: 'true'
-      })
+    // eapi 优先：这个接口的 weapi 通道经常被限流成空响应体（实测稳定空体）。
+    // 空体/失败时退回 weapi 兜底一次。
+    const attempt = async (value: string): Promise<any> => {
+      const payload = { op, pid: playlistID, trackIds: value, imme: 'true' }
+      let json = await this.client.eapi('/playlist/manipulate/tracks', payload).catch(() => undefined)
+      if (json === undefined) {
+        json = await this.client.weapiJSON('/playlist/manipulate/tracks', payload)
+      }
+      return json
+    }
     const json = await attempt(ids)
+    if (json === undefined) {
+      throw new NeteaseAPIError('decoding', { message: '/playlist/manipulate/tracks 返回了空响应' })
+    }
     if (typeof json?.code === 'number' && json.code !== 200) {
       // 512: already-in-playlist quirk — retry with doubled ids like the reference impl.
       if (json.code === 512 && op === 'add') {

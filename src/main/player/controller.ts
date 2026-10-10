@@ -38,6 +38,30 @@ interface ResolvedPlayback {
   servedNote?: string
 }
 
+/**
+ * 硬性超时：接口被限流/风控时（weapi 空体重试、第三方源无响应）单次解析
+ * 可能拖几分钟。超过上限就把这首歌判为「暂时不可播」，交给上层的
+ * 自动跳下一首逻辑，而不是让用户干等。
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} 超时（${ms}ms）`)), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (cause) => {
+        clearTimeout(timer)
+        reject(cause)
+      }
+    )
+  })
+}
+
+/** 单次音源解析（含全部回退链）的最长等待时间。 */
+const RESOLVE_TIMEOUT_MS = 20_000
+
 /** Quality tiers tried in order when the requested one is not entitled. */
 const QUALITY_LADDER: QualityLevel[] = [
   'jymaster',
@@ -118,6 +142,8 @@ interface QueueEntry {
    * 播放时跳过网易云的解析链路。
    */
   preResolved?: { url: string; sourceName: string }
+  /** 顺序播放的下一首预解析结果：切歌时直接复用，跳过整条解析链路。 */
+  preResolvedFull?: ResolvedPlayback
 }
 
 export class PlayerController extends EventEmitter {
@@ -127,6 +153,8 @@ export class PlayerController extends EventEmitter {
   private position = 0
   private duration = 0
   private muteState = false
+  /** 静音验证期间屏蔽 mpv 静音回显，防止 UI 静音键闪烁或状态被覆盖。 */
+  private suppressMuteEcho = false
   private loading = false
   private repeatMode: RepeatMode = 'off'
   private shuffle = false
@@ -191,9 +219,17 @@ export class PlayerController extends EventEmitter {
   private onMpvState(state: MpvState): void {
     this.position = state.position
     this.duration = state.duration || this.duration
-    this.muteState = state.muted
+    if (!this.suppressMuteEcho) this.muteState = state.muted
     this.volume = state.volume
     this.loading = state.loading
+    // mpv 真出声音的那一刻就当作「播放中」：播放/暂停按钮必须立刻跟着走，
+    // 不能等整条解析+验证链跑完——验证（尤其第三方音源）最长几十秒，
+    // 期间按钮会一直像「按了没反应」，用户就是这么抱怨的。
+    if (!state.idle && !state.loading && !state.paused) {
+      this.playing = true
+    } else if (state.paused) {
+      this.playing = false
+    }
     this.emitSnapshot()
   }
 
@@ -297,26 +333,75 @@ export class PlayerController extends EventEmitter {
 
     const entry = this.queue[index]
     try {
-      const resolved: ResolvedPlayback = entry.preResolved
-        ? {
-            source: entry.preResolved.url,
-            level: 'standard',
-            claimedLevel: undefined,
-            cached: false,
-            cacheVariant: 'netease',
-            servedFrom: entry.preResolved.sourceName
+      let resolved: ResolvedPlayback | undefined
+      // 版权提示音防御：第三方音源偶尔返回「当前歌曲仅支持 XX 客户端播放」的
+      // 语音占位文件（时长只有十几秒）。逐候选重试：验证失败就把该音源记入
+      // attempted，resolveSource 自然会尝试下一个音源，直到拿到真歌。
+      let verified = false
+      for (let candidate = 0; candidate < 4; candidate += 1) {
+        if (generation !== this.resolveGeneration) return
+        resolved =
+          entry.preResolvedFull
+            ? entry.preResolvedFull
+            : entry.preResolved && candidate === 0
+              ? {
+                  source: entry.preResolved.url,
+                  level: 'standard',
+                  claimedLevel: undefined,
+                  cached: false,
+                  cacheVariant: 'netease',
+                  servedFrom: entry.preResolved.sourceName
+                }
+              : await withTimeout(
+                  this.resolveSource(entry.track),
+                  RESOLVE_TIMEOUT_MS,
+                  `解析《${entry.track.name}》`
+                )
+        if (generation !== this.resolveGeneration) return
+        // 第三方音源只在码率已知时才声称音质档位；不知道就不虚报。
+        this.servedQuality = resolved.servedFrom
+          ? resolved.claimedLevel
+          : (resolved.claimedLevel ?? resolved.level)
+        this.servedBitrate = resolved.bitrate
+        this.servedFrom = resolved.servedFrom ?? resolved.servedNote
+        this.source = resolved.source
+        // 远程第三方音源先静音播放，验证时长通过后再恢复用户音量——
+        // 提示音最长只会在静音窗口里被缓冲，用户听到的永远是验证过的真歌。
+        // try/finally 保证任何失败路径（play 抛错、时长读取超时）都恢复静音，
+        // 否则 mpv 会永远保持静音，表现为「莫名其妙自己静音」。
+        const verifyMuted = !resolved.cached && !!resolved.servedFrom
+        const userMuted = this.muteState
+        if (verifyMuted) {
+          this.suppressMuteEcho = true
+          await this.deps.mpv.setMuted(true)
+        }
+        try {
+          // A local cache hit is a file path, not a stream.
+          await this.deps.mpv.play(resolved.source, 0)
+          if (verifyMuted && (await this.looksLikeNotice(entry.track))) {
+            const variant = resolved.cacheVariant
+            if (variant && variant !== 'netease') {
+              this.attemptedSources(entry.track.id).add(variant as AudioSourceID)
+            }
+            this.deps.log?.(
+              `检测到版权提示音（时长不符），换下一个音源：${entry.track.name} 来自 ${resolved.servedFrom}`
+            )
+            continue
           }
-        : await this.resolveSource(entry.track)
-      if (generation !== this.resolveGeneration) return
-      // 第三方音源只在码率已知时才声称音质档位；不知道就不虚报。
-      this.servedQuality = resolved.servedFrom
-        ? resolved.claimedLevel
-        : (resolved.claimedLevel ?? resolved.level)
-      this.servedBitrate = resolved.bitrate
-      this.servedFrom = resolved.servedFrom ?? resolved.servedNote
-      this.source = resolved.source
-      // A local cache hit is a file path, not a stream.
-      await this.deps.mpv.play(resolved.source, 0)
+          verified = true
+          break
+        } finally {
+          if (verifyMuted) {
+            await this.deps.mpv.setMuted(userMuted)
+            this.suppressMuteEcho = false
+            this.muteState = userMuted
+          }
+        }
+      }
+      // 四个候选全是提示音（或全部超时失败）时绝不把最后那个占位文件播出来。
+      if (!resolved || !verified) {
+        throw new NeteaseAPIError('business', { code: -1, message: '暂时无法播放这首歌' })
+      }
       const actual = resolved.claimedLevel ?? resolved.level
       if (actual !== this.deps.getQuality()) {
         this.deps.log?.(
@@ -328,7 +413,7 @@ export class PlayerController extends EventEmitter {
       }
       if (!resolved.cached && resolved.remoteURL) {
         // Cache in the background: the user should hear the track now, not
-        // after a full download.
+        // after a full download. 验证通过才缓存，提示音不会污染本地缓存。
         void this.cacheInBackground(
           entry.track,
           resolved.level,
@@ -341,6 +426,10 @@ export class PlayerController extends EventEmitter {
       this.consecutiveFailures = 0
       this.startPositionTimer()
       this.scrobbleStart()
+      // 顺序模式下后台预解析下一首：切歌瞬间就能出声（用户反馈「加载慢、卡顿」）。
+      if (!this.shuffle && this.repeatMode !== 'one') {
+        void this.prepareLookahead(generation)
+      }
       // 真实码率要等 mpv 把文件载入后才能读到：异步补一次，用来诚实显示音质。
       void this.refreshRealBitrate(generation)
     } catch (cause) {
@@ -395,6 +484,50 @@ export class PlayerController extends EventEmitter {
       }
       this.emitSnapshot()
       return
+    }
+  }
+
+  /**
+   * 判断正在播放的远程流是不是「版权提示音」占位文件：
+   * mpv 报出的实际时长比曲目时长短 90 秒以上基本可以断定被替换
+   * （提示语音通常 10~30 秒）。短歌（<2 分钟）不检查，避免误伤。
+   * 超时读不到时长（还在缓冲）宁可放过，不冤枉正常歌曲。
+   */
+  private async looksLikeNotice(track: Track): Promise<boolean> {
+    const expected = track.durationMS / 1000
+    if (expected < 120) return false
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      let actual: number | undefined
+      try {
+        actual = await this.deps.mpv.duration()
+      } catch {
+        // 继续等下一次
+      }
+      if (actual !== undefined) {
+        return actual < expected - 90
+      }
+    }
+    return false
+  }
+
+  /**
+   * 顺序模式下后台预解析下一首：正在播的时候把下一条的音源解析好，
+   * 切歌瞬间就能出声。失败静默——真正切歌时仍走完整解析链路。
+   */
+  private async prepareLookahead(generation: number): Promise<void> {
+    const nextIndex = this.index + 1
+    if (nextIndex >= this.queue.length) return
+    const entry = this.queue[nextIndex]
+    if (entry.preResolvedFull) return
+    try {
+      const resolved = await withTimeout(this.resolveSource(entry.track), RESOLVE_TIMEOUT_MS, `预解析《${entry.track.name}》`)
+      if (generation !== this.resolveGeneration) return
+      if (this.queue[nextIndex] !== entry) return
+      entry.preResolvedFull = resolved
+      this.deps.log?.(`已预解析下一首：${entry.track.name}`)
+    } catch {
+      // 预解析失败就等切歌时再走完整链路，绝不影响当前播放。
     }
   }
 

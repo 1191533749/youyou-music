@@ -1,9 +1,11 @@
 /**
- * 每日推荐的日期条（pages/DailyPage.tsx）。
+ * 每日推荐页自己的类（pages/DailyPage.tsx）：日期条 `.daily-dates*` 与封面卡片
+ * `.daily-card*`。
  *
- * 只放本页新增的 `.daily-dates*` 类：`.daily__banner` / `.daily__panel` / `.daily__gate`
- * 那套仍由 library.css 提供，这里不重复定义，避免两边打架。
- * 颜色全部走 tokens；玻璃材质与别的页面的次要按钮一致。
+ * 卡片本体复用全局的 `.card / .card__art / .card__title / .card__meta`（首页、
+ * 歌单网格是同一套），这里只补首页卡片没有的三样：悬停播放圈、角上的「不喜欢」、
+ * 当前播放的高亮。`.daily__banner` / `.daily__gate` 那套仍由 library.css 提供，
+ * 这里不重复定义，避免两边打架。颜色全部走 tokens；玻璃材质与别的页面一致。
  */
 
 .daily-dates {
@@ -82,6 +84,110 @@
   .daily-dates__day:hover,
   .daily-dates__day:active {
     transition: none;
+    transform: none;
+  }
+}
+
+/* --- 封面卡片 ---------------------------------------------------------- */
+
+/*
+ * 卡片本体是全局的 .card；这里只做封面上那三层覆盖。
+ * .card__art 本来就是 position: relative + overflow: hidden，所以三层都贴着封面。
+ */
+.daily-card__hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  /* 整块封面就是播放按钮：不画底色、不加内边距，视觉上仍然只是一张封面。 */
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.daily-card__hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+/* 播放圈：平时缩着、透明，悬停（或键盘聚焦）时从封面正中浮出来。 */
+.daily-card__hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background-image: var(--accent-gradient);
+  background-origin: border-box;
+  color: var(--text-on-accent);
+  box-shadow: var(--glass-shadow);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.86);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  /* 点击交给整块封面那层按钮，图标自己不吃事件。 */
+  pointer-events: none;
+}
+
+.daily-card:hover .daily-card__hint,
+.daily-card__hit:focus-visible .daily-card__hint {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* 当前播放：封面描一圈强调色 —— 和列表页选中行是同一个信号。 */
+.daily-card.is-current .card__art {
+  box-shadow: 0 0 0 2px var(--accent), var(--glass-shadow-soft);
+}
+
+/*
+ * 「不喜欢」：常驻可见（只藏在悬停里的话，用户根本不知道有这个入口），
+ * 平时收着点、悬停或聚焦时提亮。
+ */
+.daily-card__dislike {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  color: var(--text);
+  background-color: var(--glass-strong);
+  backdrop-filter: blur(var(--blur-xs));
+  -webkit-backdrop-filter: blur(var(--blur-xs));
+  opacity: 0.62;
+  transition: opacity 0.16s ease, color 0.16s ease, transform 0.14s ease;
+}
+
+.daily-card__dislike:hover,
+.daily-card__dislike:focus-visible {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.daily-card__dislike:active {
+  transform: scale(0.94);
+}
+
+/* 替换请求在路上：图标在转，这一颗不接受第二次点击。 */
+.daily-card__dislike:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-card__hint,
+  .daily-card__dislike {
+    transition: none;
+  }
+
+  .daily-card__dislike:active {
     transform: none;
   }
 }

@@ -28,6 +28,7 @@ import Cloud from './pages/Cloud'
 import Settings from './pages/Settings'
 import NowPlaying from './pages/NowPlaying'
 import {
+  IconBack,
   IconCalendar,
   IconClose,
   IconCloud,
@@ -81,8 +82,14 @@ function TopRow(): JSX.Element {
   if (!navigation.canGoBack) return <></>
   return (
     <div className="top-row">
-      <button type="button" className="top-row__back" onClick={() => navigation.back()} aria-label="返回">
-        返回
+      <button
+        type="button"
+        className="top-row__back"
+        onClick={() => navigation.back()}
+        aria-label="返回"
+        title="返回"
+      >
+        <IconBack size={16} />
       </button>
     </div>
   )
@@ -358,35 +365,15 @@ export default function App(): JSX.Element {
 
 /**
  * 更新弹窗（唯一实例）：状态来自共享模块 lib/updatePrompt，
- * 启动自动检测与设置页手动检测都会触发它；30 秒倒计时后自动更新。
+ * 启动自动检测与设置页手动检测都会触发它；更新由用户点「立即更新」触发，
+ * 不做倒计时自动安装。
  */
 function UpdatePromptDialog({ update }: { update: UpdatePromptState }): JSX.Element {
-  const [remaining, setRemaining] = useState(30)
-  const installed = useRef(false)
-
-  useEffect(() => {
-    setRemaining(30)
-    installed.current = false
-  }, [update])
-
-  useEffect(() => {
-    if (remaining <= 0) return
-    const timer = window.setTimeout(() => setRemaining((n) => n - 1), 1000)
-    return () => window.clearTimeout(timer)
-  }, [update, remaining])
-
-  useEffect(() => {
-    if (remaining > 0 || installed.current) return
-    installed.current = true
-    void installUpdateNow()
-  }, [remaining])
-
   return createPortal(
     <div className="update-prompt" role="dialog" aria-modal="true" aria-label="发现新版本">
       <div className="update-prompt__card glass">
         <div className="update-prompt__title">发现新版本 v{update.version}</div>
         {update.notes ? <div className="update-prompt__notes">{update.notes.slice(0, 320)}</div> : null}
-        <div className="update-prompt__countdown">{remaining} 秒后自动更新</div>
         <div className="update-prompt__actions">
           <button type="button" className="button glass-btn" onClick={dismissUpdatePrompt}>
             稍后更新

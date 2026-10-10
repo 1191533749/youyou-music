@@ -71,6 +71,9 @@
   pointer-events: none;
 }
 
+/* 头像框：环形渐变描边，颜色跟着当前皮肤（皮肤只换 --accent 一组，这里自动跟着变）。
+   圆环是头像背后一个略大的圆，中间被头像挡住，只露出一圈渐变 —— 所以这里不能
+   overflow: hidden，裁图片改由 img 自己的圆角负责。 */
 .library__hero-avatar {
   position: relative;
   z-index: 1;
@@ -80,15 +83,48 @@
   height: 64px;
   flex: none;
   border-radius: 50%;
-  overflow: hidden;
   background: var(--glass-weak);
   border: 2px solid var(--glass-border);
+  box-shadow: 0 8px 22px var(--accent-soft);
+}
+
+.library__hero-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  /* 负 z-index：环画在头像背后，头像照片自己盖住中间。 */
+  z-index: -1;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 140deg,
+    var(--accent-tint),
+    var(--accent-2),
+    var(--accent),
+    var(--accent-3),
+    var(--accent-tint)
+  );
+  animation: library-avatar-frame 9s linear infinite;
 }
 
 .library__hero-avatar img {
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   object-fit: cover;
+  /* 描边画在环之上，把照片与渐变环分开。 */
+  box-shadow: 0 0 0 2px var(--glass-border);
+}
+
+@keyframes library-avatar-frame {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library__hero-avatar::after {
+    animation: none;
+  }
 }
 
 .library__hero-body {
@@ -430,8 +466,8 @@
   color: var(--text);
   background: var(--glass-strong);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   box-shadow: var(--glass-shadow-soft);
   opacity: 0;
   transition: opacity 0.16s ease, color 0.16s ease;
@@ -661,34 +697,134 @@
 
 /* --- 私人漫游 ---------------------------------------------------------- */
 
+/*
+ * 私人漫游 = 深空场景。这一块不跟随明暗主题：底色永远是夜空，只有顶部染一点
+ * 当前皮肤的主色，所以文字用本节的固定亮色（--fm-ink 系），不跟 --text 走 ——
+ * 亮色主题的正文色压在黑底上根本读不出来。星星与星云全部是 CSS 渐变，
+ * 没有图片、没有 canvas，也不增加任何加载项。
+ */
 .fm {
+  --fm-ink: #f3f5ff;
+  --fm-ink-dim: #b8c0e6;
+  --fm-deep: #05060f;
   position: relative;
+  isolation: isolate;
   display: grid;
   place-items: center;
+  /* 槽位撑满内容区时铺满，撑不满也留足 460px（不用 max()：父高不定时百分比会让整条声明失效）。 */
+  flex: 1 1 auto;
   min-height: 460px;
   padding: 40px 28px;
   border-radius: var(--radius-lg);
-  background: var(--glass-weak);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--blur-strong)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(180%);
+  color: var(--fm-ink);
+  background: radial-gradient(
+    130% 100% at 50% -14%,
+    color-mix(in srgb, var(--accent) 24%, #1a1440) 0%,
+    #120e2b 46%,
+    var(--fm-deep) 100%
+  );
+  border: 1px solid color-mix(in srgb, var(--fm-ink) 18%, transparent);
   box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 
-/* 封面放大后模糊成背景；负 inset 让模糊边缘留在裁切区外。 */
+/* 星点分三层：颗粒、密度、速度都不同，漂移方向有正有反，叠起来才有纵深。 */
+.fm::before,
+.fm::after {
+  content: '';
+  position: absolute;
+  /* 层比盒子大一圈，漂移时边缘才不会露出来（余量必须大于漂移量）。 */
+  inset: -900px;
+  z-index: 1;
+  pointer-events: none;
+  background-repeat: repeat;
+  will-change: transform;
+}
+
+/* 远层：细小密点，走得最慢。 */
+.fm::before {
+  background-image:
+    radial-gradient(1.4px 1.4px at 22% 28%, rgba(255, 255, 255, 0.92), transparent),
+    radial-gradient(1.1px 1.1px at 68% 12%, rgba(214, 226, 255, 0.85), transparent),
+    radial-gradient(1.6px 1.6px at 82% 64%, rgba(255, 255, 255, 0.78), transparent),
+    radial-gradient(1px 1px at 36% 82%, rgba(255, 226, 214, 0.75), transparent),
+    radial-gradient(1.2px 1.2px at 8% 58%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 54% 36%, rgba(206, 222, 255, 0.72), transparent),
+    radial-gradient(1px 1px at 92% 40%, rgba(255, 255, 255, 0.66), transparent),
+    radial-gradient(1.2px 1.2px at 28% 6%, rgba(222, 232, 255, 0.7), transparent),
+    radial-gradient(0.9px 0.9px at 62% 88%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.1px 1.1px at 44% 62%, rgba(255, 240, 228, 0.64), transparent);
+  background-size: 240px 240px;
+  opacity: 0.82;
+  animation: fm-star-drift 72s linear infinite;
+}
+
+/* 近层：星更亮更大，反向漂移并逐个明灭（视差 + 闪烁都在这一层）。 */
+.fm::after {
+  background-image:
+    radial-gradient(2.2px 2.2px at 14% 24%, rgba(255, 255, 255, 0.95), transparent),
+    radial-gradient(1.8px 1.8px at 72% 76%, rgba(200, 220, 255, 0.88), transparent),
+    radial-gradient(1.3px 1.3px at 46% 52%, rgba(255, 255, 255, 0.68), transparent),
+    radial-gradient(1.6px 1.6px at 88% 8%, rgba(255, 236, 226, 0.8), transparent),
+    radial-gradient(1.8px 1.8px at 34% 68%, rgba(255, 255, 255, 0.82), transparent),
+    radial-gradient(1.5px 1.5px at 6% 84%, rgba(214, 226, 255, 0.76), transparent),
+    radial-gradient(2px 2px at 58% 32%, rgba(255, 255, 255, 0.86), transparent);
+  background-size: 420px 420px;
+  opacity: 0.66;
+  animation: fm-star-drift-far 96s linear infinite, fm-star-twinkle 4.6s ease-in-out infinite;
+}
+
+/* 中层：补密度用的一层碎星，速度和上下两层都不同，视差就有了第三个深度。 */
+.fm__stars {
+  position: absolute;
+  inset: -900px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-repeat: repeat;
+  background-image:
+    radial-gradient(1px 1px at 12% 44%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(0.9px 0.9px at 76% 18%, rgba(226, 234, 255, 0.72), transparent),
+    radial-gradient(1.1px 1.1px at 52% 72%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(0.9px 0.9px at 32% 92%, rgba(255, 238, 226, 0.66), transparent),
+    radial-gradient(1px 1px at 88% 58%, rgba(255, 255, 255, 0.68), transparent);
+  background-size: 240px 240px;
+  will-change: transform;
+  animation: fm-star-drift 118s linear infinite reverse;
+}
+
+/* 星云团：三层色斑跟着皮肤换色，幅度比星星大、周期最短，像气团在缓慢翻涌。 */
+.fm__nebula {
+  position: absolute;
+  inset: -18%;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.72;
+  filter: blur(10px);
+  background:
+    radial-gradient(38% 34% at 24% 30%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 78% 66%, color-mix(in srgb, var(--accent-3) 36%, transparent), transparent 72%),
+    radial-gradient(30% 26% at 62% 12%, color-mix(in srgb, var(--accent-2) 32%, transparent), transparent 74%);
+  animation: fm-nebula-move 24s ease-in-out infinite alternate;
+}
+
+/* 封面放大后模糊成一层色雾，压在最底下给整屏染上当前歌曲的颜色，并缓慢呼吸。 */
 .fm__backdrop {
   position: absolute;
   inset: -80px;
+  z-index: 0;
   background-position: center;
   background-size: cover;
   filter: blur(60px) saturate(1.6);
-  opacity: 0.32;
+  opacity: 0.34;
   pointer-events: none;
+  will-change: transform;
+  animation: fm-mist-drift 58s ease-in-out infinite alternate;
 }
 
 .fm__body {
   position: relative;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -703,15 +839,15 @@
   height: 232px;
   border-radius: var(--radius-lg);
   object-fit: cover;
-  background: var(--glass-weak);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+  background: color-mix(in srgb, var(--fm-ink) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fm-ink) 22%, transparent);
+  box-shadow: 0 26px 60px color-mix(in srgb, var(--fm-deep) 82%, transparent);
 }
 
 .fm__art--empty {
   display: grid;
   place-items: center;
-  color: var(--text-tertiary);
+  color: var(--fm-ink-dim);
 }
 
 .fm__meta {
@@ -722,6 +858,7 @@
 .fm__title {
   font-size: 22px;
   font-weight: 680;
+  color: var(--fm-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -730,7 +867,7 @@
 .fm__artist {
   margin-top: 4px;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--fm-ink-dim);
 }
 
 .fm__controls {
@@ -746,18 +883,19 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-pill);
-  color: var(--text-secondary);
-  background: var(--glass-strong);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(14px) saturate(180%);
-  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  color: var(--fm-ink-dim);
+  background: color-mix(in srgb, var(--fm-ink) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fm-ink) 22%, transparent);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   box-shadow: var(--glass-shadow-soft);
   transition: color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
 .fm__control:hover {
-  color: var(--accent);
-  box-shadow: var(--glass-shadow);
+  color: var(--fm-ink);
+  background: color-mix(in srgb, var(--fm-ink) 20%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 36%, transparent);
 }
 
 .fm__control:disabled {
@@ -773,6 +911,7 @@
 
 .fm__control--primary:hover {
   color: var(--text-on-accent);
+  background: var(--accent-gradient);
   filter: brightness(1.06);
 }
 
@@ -782,10 +921,80 @@
   gap: 6px;
   padding: 6px 14px;
   border-radius: var(--radius-pill);
-  background: var(--glass-weak);
-  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--fm-ink) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fm-ink) 18%, transparent);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--fm-ink-dim);
+}
+
+/* 占位文案（启动中 / 启动失败 / 无可漫游曲目）在夜空里也要读得出来。 */
+.fm .placeholder {
+  color: var(--fm-ink-dim);
+}
+
+.fm .placeholder__title {
+  color: var(--fm-ink);
+}
+
+/* 漂移量取背景瓦片尺寸的整数倍，循环才不会「跳」一下。 */
+@keyframes fm-star-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    /* 240px 瓦片的整数倍 */
+    transform: translate3d(-480px, -480px, 0);
+  }
+}
+
+@keyframes fm-star-drift-far {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    /* 420px 瓦片的整数倍 */
+    transform: translate3d(840px, 840px, 0);
+  }
+}
+
+@keyframes fm-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.68;
+  }
+  50% {
+    opacity: 0.26;
+  }
+}
+
+@keyframes fm-nebula-move {
+  from {
+    transform: translate3d(-7%, -4%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(7%, 6%, 0) scale(1.16);
+  }
+}
+
+/* 封面色雾：跟着歌换颜色，幅度最小、周期最长，只当背景在缓慢呼吸。 */
+@keyframes fm-mist-drift {
+  from {
+    transform: translate3d(-4%, -3%, 0) scale(1.04);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) scale(1.18);
+  }
+}
+
+/* 动效敏感的用户：星空、星云与色雾都静止（场景还在，只是不再动）。 */
+@media (prefers-reduced-motion: reduce) {
+  .fm::before,
+  .fm::after,
+  .fm__stars,
+  .fm__nebula,
+  .fm__backdrop {
+    animation: none;
+  }
 }
 
 /* --- 音乐云盘 ---------------------------------------------------------- */
@@ -797,38 +1006,7 @@
   margin-left: auto;
 }
 
-/* 容量：整条也是白卡，进度填充走强调渐变。 */
-.cloud__quota {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  border-radius: var(--radius-lg);
-  background: var(--glass-strong);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-  box-shadow: var(--glass-shadow-soft);
-}
-
-.cloud__bar {
-  flex: none;
-  width: 220px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: var(--glass-weak);
-  border: 1px solid var(--glass-border);
-  overflow: hidden;
-}
-
-.cloud__bar-fill {
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--accent-gradient);
-  transition: width 0.25s ease;
-}
-
+/* 列表末尾的提示（加载更多 / 已经到底了）。 */
 .cloud__hint {
   font-size: 12px;
   color: var(--text-secondary);
@@ -925,8 +1103,8 @@
 .glass-btn {
   background: var(--glass-weak);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(14px) saturate(180%);
-  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   box-shadow: var(--glass-shadow-soft);
 }
 
@@ -952,8 +1130,8 @@
 .library-tile__more,
 .fm__control {
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(var(--blur-lg)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(180%);
 }
 
 .library__round--primary,
@@ -972,8 +1150,8 @@
 .cloud__row .song-row__play {
   background: var(--glass-weak);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   box-shadow: var(--glass-shadow-soft);
 }
 

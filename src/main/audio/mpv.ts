@@ -425,9 +425,14 @@ export class MpvController extends EventEmitter {
     await this.command(['stop'])
   }
 
+  /** 已载入文件的时长（秒）；文件还没载入完时为 undefined。 */
+  async duration(): Promise<number | undefined> {
+    const raw = await this.command(['get_property', 'duration']).catch(() => undefined)
+    return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : undefined
+  }
+
   /** Audio parameters of the loaded file (used by the now-playing info line). */
-  async trackInfo(): Promise<MpvTrackInfo> {
-    const properties = ['duration', 'file-size', 'audio-codec', 'audio-params/channel-count', 'audio-params/samplerate', 'audio-bitrate']
+  async trackInfo(): Promise<MpvTrackInfo> {    const properties = ['duration', 'file-size', 'audio-codec', 'audio-params/channel-count', 'audio-params/samplerate', 'audio-bitrate']
     const values = await Promise.all(
       properties.map((property) => this.command(['get_property', property]).catch(() => undefined))
     )

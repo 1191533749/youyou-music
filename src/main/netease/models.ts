@@ -302,6 +302,8 @@ export function toToplistItem(raw: unknown): ToplistItem | undefined {
 export interface ArtistRef {
   id: number
   name: string
+  /** 歌手头像（可能缺）：封面缺失时播放详情页用它兜底。 */
+  picUrl?: string
 }
 
 export interface AlbumRef {
@@ -352,7 +354,11 @@ export function trackSubtitle(track: Track): string | undefined {
 
 export function toArtistRef(raw: unknown): ArtistRef {
   const c = obj(raw)
-  return { id: int(c?.id), name: str(c?.name) ?? '' }
+  return {
+    id: int(c?.id),
+    name: str(c?.name) ?? '',
+    picUrl: firstString(c?.picUrl, c?.cover, c?.avatar, c?.img1v1Url)
+  }
 }
 
 export function toAlbumRef(raw: unknown): AlbumRef {

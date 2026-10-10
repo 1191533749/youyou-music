@@ -45,7 +45,12 @@ export function toTrackDTO(track: Track, context: TrackMappingContext): TrackDTO
   return {
     id: track.id,
     name: track.name,
-    artists: track.artists.map((artist) => ({ id: artist.id, name: artist.name })),
+    // 歌手头像（可能没有）：播放详情页在封面缺失时用它兜底，不再用吉祥物占位。
+    artists: track.artists.map((artist) => ({
+      id: artist.id,
+      name: artist.name,
+      ...(artist.picUrl ? { picUrl: artist.picUrl } : {})
+    })),
     album: { id: track.album.id, name: track.album.name, picUrl: track.album.picUrl },
     durationMS: track.durationMS,
     alias: track.alias,

@@ -10,7 +10,7 @@
  * 站外结果走独立的取数与播放通道，且没有「喜欢」概念，所以不复用 SongList 组件，
  * 只复用它的样式类。
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArtCard,
   SongList,
@@ -56,8 +56,14 @@ const EXTERNAL_LIMIT = 30
 
 /** 空态头像墙：取一批热门歌手，够铺满背景（接口对 limit 不敏感，一般会给 60~100 位）。 */
 const WALL_ARTISTS = 60
-/** 头像墙的行数；相邻行方向相反，看起来更有流动感。 */
-const WALL_ROWS = 5
+/** 头像池的持久化键：只存 id 与头像地址，冷启动第一帧就能铺满，不用等接口。 */
+const WALL_STORAGE_KEY = 'youyou-search-avatars'
+/** 与 home.css 里 .avatar-wall 的尺寸对齐：头像 64px、间距 18px。 */
+const WALL_ITEM_SIZE = 64
+const WALL_GAP = 18
+const WALL_STEP = WALL_ITEM_SIZE + WALL_GAP
+/** 一行至少这么多个头像；不够就轮着用同一批，保证任何宽度都铺得满。 */
+const WALL_ROW_MIN = 16
 
 /** 站外行：序号 | 封面 | 歌名 | 歌手 | 专辑 | 时长（比 SongList 多一列封面）。 */
 const EXTERNAL_COLUMNS = '34px 40px minmax(0, 1fr) minmax(110px, 200px) minmax(120px, 220px) 60px'
@@ -104,6 +110,48 @@ function writeExternalCache(key: string, items: ExternalTrackDTO[]): void {
   }
 }
 
+/**
+ * 头像墙只关心 id 与头像地址，所以缓存和持久化也只存这两项。
+ */
+type WallArtist = Pick<ArtistSummaryDTO, 'id' | 'picUrl'>
+
+/** 会话内头像池：进过一次搜索页之后就不再等接口。 */
+let wallPool: WallArtist[] = []
+
+/** 从 localStorage 读回上次存下的头像池；坏了就当没有。 */
+function readStoredWall(): WallArtist[] {
+  try {
+    const raw = window.localStorage.getItem(WALL_STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(
+        (item): item is WallArtist =>
+          typeof item === 'object' && item !== null && typeof (item as WallArtist).id === 'number'
+      )
+      .map((item) => ({ id: item.id, picUrl: item.picUrl }))
+  } catch {
+    return []
+  }
+}
+
+/** 首帧要用的头像池：会话缓存优先，其次上次落盘的。 */
+function readWallPool(): WallArtist[] {
+  if (wallPool.length === 0) wallPool = readStoredWall()
+  return wallPool
+}
+
+/** 取回一批就写回会话缓存 + localStorage，下次冷启动秒出。 */
+function writeWallPool(list: WallArtist[]): void {
+  wallPool = list
+  try {
+    window.localStorage.setItem(WALL_STORAGE_KEY, JSON.stringify(list.slice(0, WALL_ARTISTS)))
+  } catch {
+    // 存不下就算了，会话内的池还在。
+  }
+}
+
 /** 静默刷新提示：一条 2px 的流动细条，替代整块骨架。 */
 function RefreshBar({ active }: { active: boolean }): JSX.Element | null {
   if (!active) return null
@@ -126,8 +174,10 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 
   /** 页面自己那个输入框（顶部全局搜索框已取消，这里是唯一入口）。 */
   const [input, setInput] = useState(initialKeywords ?? '')
-  /** 空态背景的歌手头像。 */
-  const [wallArtists, setWallArtists] = useState<ArtistSummaryDTO[]>([])
+  /** 空态背景的歌手头像：优先用会话缓存 / 上次落盘的池，首帧就能铺满。 */
+  const [wallArtists, setWallArtists] = useState<WallArtist[]>(() => readWallPool())
+  /** 头像池一次挂载只取一次（有缓存时属于后台静默刷新）。 */
+  const wallFetchedRef = useRef(false)
 
   // 静默兜底：网易云 0 条或结果不相关时找到的站外结果。界面不出现任何来源/条数文案，
   // 只把它当普通歌曲列表渲染；点播放失败用普通 toast 报错。
@@ -177,20 +227,23 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
     setInput(trimmed)
   }, [initialKeywords])
 
-  // 空态才需要头像墙；拿到一批就够铺满（接口对 limit 不敏感，一般会给 60~100 位）。
+  // 空态头像墙：先用缓存（会话内 / localStorage）铺满，再静默刷新一次头像池。
   useEffect(() => {
-    if (!hero || wallArtists.length > 0) return
+    if (!hero || wallFetchedRef.current) return
+    wallFetchedRef.current = true
     let cancelled = false
     void call('explore:topArtists', { limit: WALL_ARTISTS })
       .then((list) => {
-        if (!cancelled) setWallArtists(list)
+        if (cancelled || list.length === 0) return
+        const pool = list.slice(0, WALL_ARTISTS).map((artist) => ({ id: artist.id, picUrl: artist.picUrl }))
+        writeWallPool(pool)
+        setWallArtists(pool)
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hero, wallArtists.length])
+  }, [hero])
 
   // --- 搜索（网易云）----------------------------------------------------
   useEffect(() => {
@@ -661,6 +714,48 @@ function ExternalCover({ url }: { url?: string }): JSX.Element {
  *
  * 头像层是纯装饰：`aria-hidden` + `pointer-events: none`，不参与点击，也不写说明文字。
  */
+/**
+ * 空态要铺满可见区域：让 .search-hero 的下沿贴住外层滚动容器可视区的下沿。
+ *
+ * 用 rect 差算（而不是直接读 clientHeight），这样容器自己还有标题之类的
+ * 兄弟节点时也算得对；容器或自己尺寸一变就重量一次（隐藏状态下量到 0 会跳过，
+ * 等显示出来再算），所以任意窗口尺寸下都不会留缝。
+ */
+function useFillHeight(ref: React.RefObject<HTMLElement>): void {
+  useLayoutEffect(() => {
+    const node = ref.current
+    if (!node) return
+    const host = node.closest<HTMLElement>('.content') ?? node.parentElement
+    const apply = (): void => {
+      const box = host ?? node.parentElement
+      if (!box) return
+      const rect = box.getBoundingClientRect()
+      if (rect.height <= 0) return
+      const style = window.getComputedStyle(box)
+      const innerTop = rect.top + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.borderTopWidth) || 0)
+      const innerBottom = rect.bottom - (parseFloat(style.paddingBottom) || 0) - (parseFloat(style.borderBottomWidth) || 0)
+      const own = node.getBoundingClientRect()
+      const height = Math.round(innerBottom - Math.max(innerTop, own.top))
+      // 差不到 1px 就不动它，免得和 ResizeObserver 互相触发。
+      if (height > 0 && Math.abs(height - own.height) > 1) node.style.minHeight = `${height}px`
+    }
+    apply()
+    const raf = window.requestAnimationFrame(apply)
+    window.addEventListener('resize', apply)
+    let observer: ResizeObserver | undefined
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(apply)
+      observer.observe(node)
+      if (host && host !== node) observer.observe(host)
+    }
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener('resize', apply)
+      observer?.disconnect()
+    }
+  }, [ref])
+}
+
 function HeroSearch({
   value,
   artists,
@@ -668,12 +763,14 @@ function HeroSearch({
   onSubmit
 }: {
   value: string
-  artists: ArtistSummaryDTO[]
+  artists: WallArtist[]
   onChange: (value: string) => void
   onSubmit: () => void
 }): JSX.Element {
+  const heroRef = useRef<HTMLDivElement>(null)
+  useFillHeight(heroRef)
   return (
-    <div className="search-hero">
+    <div className="search-hero" ref={heroRef}>
       <AvatarWall artists={artists} />
       <div className="search-hero__box">
         <span className="search-hero__icon">
@@ -683,6 +780,7 @@ function HeroSearch({
           className="search-hero__input"
           value={value}
           autoFocus
+          placeholder="搜索歌曲、歌手"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') onSubmit()
@@ -710,24 +808,47 @@ function WallAvatar({ url }: { url?: string }): JSX.Element {
 /**
  * 背景头像墙：多行横向慢速滚动，相邻行方向相反。
  *
- * 每行渲染两份同样的头像（无缝循环靠 translateX(-50%)），数量不够就把同一批轮着用，
- * 保证任何屏幕宽度下都铺得满。
+ * 行数按可用高度算（rows = ceil(高度 / 每行步长) + 1 行缓冲），每行个数按可用宽度算，
+ * 所以任意窗口尺寸下都铺得满、不留缝；每行渲染两份同样的头像（无缝循环靠 translateX(-50%)）。
  */
-function AvatarWall({ artists }: { artists: ArtistSummaryDTO[] }): JSX.Element {
-  const rows = [...Array(WALL_ROWS).keys()].map((rowIndex) => {
-    const row: ArtistSummaryDTO[] = []
+function AvatarWall({ artists }: { artists: WallArtist[] }): JSX.Element {
+  const wallRef = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState({ width: 0, height: 0 })
+
+  // 量自己的尺寸；页面藏在 slot 里（display: none）时量到 0，显示出来会再触发一次。
+  useLayoutEffect(() => {
+    const node = wallRef.current
+    if (!node) return
+    const measure = (): void => setBox({ width: node.clientWidth, height: node.clientHeight })
+    measure()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  // 还没量到（首次渲染 / 隐藏中）就按视口估一个，别让第一帧空着。
+  const height = box.height || (typeof window === 'undefined' ? 0 : window.innerHeight)
+  const width = box.width || (typeof window === 'undefined' ? 0 : window.innerWidth)
+  const rows = Math.ceil(height / WALL_STEP) + 1
+  const perRow = Math.max(WALL_ROW_MIN, Math.ceil(width / WALL_STEP) + 2)
+
+  const lines = [...Array(rows).keys()].map((rowIndex) => {
+    const row: WallArtist[] = []
     if (artists.length === 0) return row
-    // 每行至少 14 个头像，交叉取，保证各行内容不完全一样。
-    const need = Math.max(14, Math.ceil(artists.length / WALL_ROWS) + 4)
-    for (let index = 0; index < need; index++) {
-      row.push(artists[(index * WALL_ROWS + rowIndex) % artists.length])
+    // 交叉取数，各行内容不完全一样；不够就轮着用同一批。
+    for (let index = 0; index < perRow; index++) {
+      row.push(artists[(index * rows + rowIndex) % artists.length])
     }
     return row
   })
 
   return (
-    <div className="avatar-wall" aria-hidden="true">
-      {rows.map((row, index) => (
+    <div className="avatar-wall" aria-hidden="true" ref={wallRef}>
+      {lines.map((row, index) => (
         <div key={index} className={`avatar-wall__row${index % 2 === 1 ? ' avatar-wall__row--reverse' : ''}`}>
           {[...row, ...row].map((artist, itemIndex) => (
             <span key={`${artist.id}-${itemIndex}`} className="avatar-wall__item">

@@ -1,11 +1,16 @@
 /**
  * 设计系统：液态玻璃 + 亮色调。
  *
- * 三条规则贯穿全文件：
+ * 四条规则贯穿全文件：
  *   1. 面板是「玻璃」——半透明底 + backdrop-filter 模糊 + 描边高光，而不是不透明色块。
  *      玻璃只有在背后有东西可透时才成立，所以背后永远铺着 `.backdrop` 的彩色光斑。
- *   2. 强调色统一走 --accent 及其渐变，亮色是默认，深色只是同一套令牌的另一种取值。
+ *   2. 明暗由 data-theme 决定（深色是液态纯黑）；主色、玻璃色调、底纹与标题色
+ *      由 data-skin 决定（皮肤），两者正交、互不覆盖。玻璃的模糊度由 --glass-blur
+ *      决定（设置页「背景模糊度」滑块），所有玻璃——含小控件——都引用 --blur /
+ *      --blur-strong / --blur-xs…--blur-xl 档位，不写死像素；自定义壁纸铺在
+ *      最底层 .backdrop 上。
  *   3. 所有可点元素都有 hover / active / focus-visible 三态，键盘可达。
+ *   4. 除了皮肤/主题这两处定义色值的地方，其余规则一律引用令牌，不写死颜色。
  */
 
 :root {
@@ -18,29 +23,51 @@
   --text-tertiary: #9b9ba3;
   --text-on-accent: #ffffff;
 
-  /* 强调色：与图标同一套暖橙红（橙 → 红 → 玫红） */
-  --accent: #ff4a1c;
-  --accent-2: #ff9500;
-  --accent-3: #ff2d55;
-  --accent-gradient: linear-gradient(135deg, #ffb03a 0%, #ff5a1f 52%, #ff2d55 100%);
-  --accent-soft: rgba(255, 74, 28, 0.12);
+  /* 状态色。强调色（皮肤）在下方「皮肤」区：它跟着 data-skin 换，这里的明暗基调不动。 */
   --ok: #12b76a;
   --warn: #f79009;
 
-  /* 玻璃：白卡质感，半透明 + 模糊，背后透出暖色光斑 */
-  --glass: rgba(255, 255, 255, 0.66);
-  --glass-strong: rgba(255, 255, 255, 0.86);
-  --glass-weak: rgba(255, 255, 255, 0.5);
-  --glass-border: rgba(255, 255, 255, 0.9);
+  /* 玻璃：白卡质感，半透明 + 模糊，背后透出暖色光斑。
+     `-solid` 那几个是「还没掺主色的原色」，只有主题块会改写它们；
+     --glass / --border / --bg-hover 的真正取值在下面「皮肤氛围」一节由原色与
+     当前皮肤主色混合而来 —— 于是换皮肤时整套玻璃的色调一起走，而明暗照旧由
+     主题决定（深色块换的是 --glass-solid 一组）。 */
+  --glass-solid: rgba(255, 255, 255, 0.66);
+  --glass-solid-strong: rgba(255, 255, 255, 0.86);
+  --glass-solid-weak: rgba(255, 255, 255, 0.5);
+  --glass-solid-border: rgba(255, 255, 255, 0.9);
   --glass-shadow: 0 10px 30px rgba(60, 24, 8, 0.1), 0 2px 8px rgba(60, 24, 8, 0.05);
   --glass-shadow-soft: 0 4px 16px rgba(60, 24, 8, 0.07);
-  --blur: 24px;
-  --blur-strong: 36px;
+  /* 毛玻璃模糊度：设置页的滑块写的是 0–100 的档位，由 lib/appearance.ts 换算成这
+     里的像素值（0 档仍留 5% 基线 → 2px，65 档 → 26.7px，100 档 → 40px）；
+     --blur / --blur-strong 从它推导，于是全应用的玻璃一起跟着变。 */
+  --glass-blur: 26px;
+  /* 背景透明度（0–1）：壁纸上的光斑与噪点按它淡出，同样由滑块写入，1 = 默认档。 */
+  --wallpaper-clear: 1;
+  --blur: var(--glass-blur);
+  --blur-strong: calc(var(--glass-blur) * 1.5);
+  /* 小控件（徽标、圆钮、行内按钮）用的模糊档位：同样是 --glass-blur 的倍数，
+     于是滑杆一动它们一起变，不再写死像素。括号里是默认 26px 时的实际值，
+     等于各自原来写死的那个数：xs 6.5px(6)、sm 10.4px(8/10)、md 13px(12/14)、
+     lg 15.6px(16)、xl 19.5px(20)。 */
+  --blur-xs: calc(var(--glass-blur) * 0.25);
+  --blur-sm: calc(var(--glass-blur) * 0.4);
+  --blur-md: calc(var(--glass-blur) * 0.5);
+  --blur-lg: calc(var(--glass-blur) * 0.6);
+  --blur-xl: calc(var(--glass-blur) * 0.75);
 
-  --bg-hover: rgba(22, 22, 26, 0.05);
-  --bg-active: rgba(255, 74, 28, 0.12);
-  --border: rgba(22, 22, 26, 0.09);
-  --border-strong: rgba(22, 22, 26, 0.16);
+  --hover-solid: rgba(22, 22, 26, 0.05);
+  /* 选中态底色跟着皮肤走：引用 --accent-soft，皮肤换值时它自动跟换。 */
+  --bg-active: var(--accent-soft);
+  --border-solid: rgba(22, 22, 26, 0.09);
+  --border-strong-solid: rgba(22, 22, 26, 0.16);
+
+  /* 二维码的「墨与纸」：扫码认的是固定黑白，这两种颜色不跟主题走，
+     深色下反色会直接扫不出来。所以它只在 :root 定义一次。 */
+  --qr-paper: #ffffff;
+  --qr-ink: #0d1220;
+  /* 开关滑块：亮色下是纯白圆点，深色下调暗一档（见下），免得纯黑底上刺眼。 */
+  --switch-knob: #ffffff;
 
   --radius-sm: 10px;
   --radius: 16px;
@@ -51,36 +78,233 @@
   --font: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
+/* ---------------------------------------------------------------------------
+ * 皮肤（装扮）：换一套主色，明暗照旧。
+ *
+ * 主题（data-theme）管背景、文字、玻璃；皮肤（data-skin）只管 --accent 一组。
+ * 选择器故意不写 :root —— 任何带 data-skin 的元素都能拿到这套变量，于是设置页
+ * 的色块只要自己带上 data-skin 就能预览对应皮肤，配色不必在 TS 里再抄一份。
+ * 默认那套带着 :root，保证属性还没写上时（首帧、脚本未跑）界面也是完整的。
+ * ------------------------------------------------------------------------- */
+
+:root,
+[data-skin='default'] {
+  --accent: #ff4a1c;
+  --accent-2: #ff9500;
+  --accent-3: #ff2d55;
+  --accent-tint: #ffc46b;
+  --accent-gradient: linear-gradient(135deg, #ffb03a 0%, #ff5a1f 52%, #ff2d55 100%);
+  --accent-soft: rgba(255, 74, 28, 0.12);
+  --accent-glow: rgba(255, 90, 31, 0.34);
+}
+
+/* 网易云红 */
+[data-skin='netease'] {
+  --accent: #e60026;
+  --accent-2: #ff5252;
+  --accent-3: #a80019;
+  --accent-tint: #ff9a9a;
+  --accent-gradient: linear-gradient(135deg, #ff6b6b 0%, #e60026 52%, #a3001a 100%);
+  --accent-soft: rgba(230, 0, 38, 0.12);
+  --accent-glow: rgba(230, 0, 38, 0.34);
+}
+
+/* QQ 音乐绿 */
+[data-skin='qqmusic'] {
+  --accent: #31c27c;
+  --accent-2: #6edfa4;
+  --accent-3: #0f8f57;
+  --accent-tint: #b6f0d0;
+  --accent-gradient: linear-gradient(135deg, #7ee2ab 0%, #31c27c 52%, #0e8f5a 100%);
+  --accent-soft: rgba(49, 194, 124, 0.14);
+  --accent-glow: rgba(31, 170, 104, 0.32);
+}
+
+/* 酷我黄橙 */
+[data-skin='kuwo'] {
+  --accent: #ff8a00;
+  --accent-2: #ffb340;
+  --accent-3: #e05a00;
+  --accent-tint: #ffd9a0;
+  --accent-gradient: linear-gradient(135deg, #ffc266 0%, #ff8a00 52%, #d94f00 100%);
+  --accent-soft: rgba(255, 138, 0, 0.14);
+  --accent-glow: rgba(255, 138, 0, 0.34);
+}
+
+/* 酷狗蓝 */
+[data-skin='kugou'] {
+  --accent: #0aa5ff;
+  --accent-2: #4fc3ff;
+  --accent-3: #0568d6;
+  --accent-tint: #a5e4ff;
+  --accent-gradient: linear-gradient(135deg, #69d2ff 0%, #0aa5ff 52%, #0a63cc 100%);
+  --accent-soft: rgba(10, 165, 255, 0.14);
+  --accent-glow: rgba(10, 165, 255, 0.34);
+}
+
+/* ---------------------------------------------------------------------------
+ * 深色：液态纯黑。底色是真黑，玻璃仍是「半透明 + 模糊 + 高光描边」，
+ * 只是背后不再有亮光，面板的暗度比暖紫黑时代低一档，纯黑才透得出来。
+ * 主题不碰主色，所以深色下的皮肤由下面那组规则单独负责。
+ * ------------------------------------------------------------------------- */
+
 :root[data-theme='dark'] {
   color-scheme: dark;
-  /* 深色不再是一块死黑：暖紫黑底 + 更亮的玻璃层次，光斑压暗保留呼吸感 */
-  --bg: #131019;
-  --text: #f4f0f6;
-  --text-secondary: #b9b1c0;
-  --text-tertiary: #8f8698;
+  --bg: #000000;
+  --text: #f5f5f7;
+  --text-secondary: #a6a6ad;
+  --text-tertiary: #71717a;
+  --glass-solid: rgba(30, 30, 34, 0.5);
+  --glass-solid-strong: rgba(40, 40, 46, 0.72);
+  --glass-solid-weak: rgba(22, 22, 26, 0.36);
+  --glass-solid-border: rgba(255, 255, 255, 0.16);
+  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.75), 0 2px 10px rgba(0, 0, 0, 0.55);
+  --glass-shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.6);
+  --hover-solid: rgba(255, 255, 255, 0.08);
+  --border-solid: rgba(255, 255, 255, 0.1);
+  --border-strong-solid: rgba(255, 255, 255, 0.2);
+  /* --qr-paper 不在这里覆盖：二维码的纸永远是白的。 */
+  --switch-knob: #e9e9ee;
+}
+
+/*
+ * 深色 × 皮肤：同一个色相在纯黑上要再亮一档才透亮（纯黑会吃掉亮度），
+ * 色相不变，所以皮肤叫什么名字、看着就还是什么颜色。
+ * 每条规则都带一个后代选择器形式：设置页的色块自己带 data-skin，
+ * 深色下来它预览的正是深色那一档，而不是亮色那一档。
+ */
+:root[data-theme='dark']:not([data-skin]),
+:root[data-theme='dark'][data-skin='default'],
+[data-theme='dark'] [data-skin='default'] {
   --accent: #ff6a3d;
   --accent-2: #ffab3d;
   --accent-3: #ff5c7a;
   --accent-gradient: linear-gradient(135deg, #ffb03a 0%, #ff6a3d 52%, #ff5c7a 100%);
   --accent-soft: rgba(255, 106, 61, 0.2);
-  --glass: rgba(34, 29, 44, 0.55);
-  --glass-strong: rgba(42, 36, 54, 0.8);
-  --glass-weak: rgba(34, 29, 44, 0.38);
-  --glass-border: rgba(255, 255, 255, 0.14);
-  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.35);
-  --glass-shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.4);
-  --bg-hover: rgba(255, 255, 255, 0.08);
-  --bg-active: rgba(255, 106, 61, 0.22);
-  --border: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.2);
+  --accent-glow: rgba(255, 106, 61, 0.42);
 }
 
+:root[data-theme='dark'][data-skin='netease'],
+[data-theme='dark'] [data-skin='netease'] {
+  --accent: #ff3b52;
+  --accent-2: #ff7a7a;
+  --accent-3: #e60026;
+  --accent-gradient: linear-gradient(135deg, #ff8a8a 0%, #ff3b52 52%, #c1001f 100%);
+  --accent-soft: rgba(255, 59, 82, 0.2);
+  --accent-glow: rgba(255, 59, 82, 0.4);
+}
+
+:root[data-theme='dark'][data-skin='qqmusic'],
+[data-theme='dark'] [data-skin='qqmusic'] {
+  --accent: #3ed88c;
+  --accent-2: #7ceab1;
+  --accent-3: #17a866;
+  --accent-gradient: linear-gradient(135deg, #8ef0bb 0%, #3ed88c 52%, #12a065 100%);
+  --accent-soft: rgba(62, 216, 140, 0.2);
+  --accent-glow: rgba(62, 216, 140, 0.36);
+}
+
+:root[data-theme='dark'][data-skin='kuwo'],
+[data-theme='dark'] [data-skin='kuwo'] {
+  --accent: #ffb03d;
+  --accent-2: #ffcb7a;
+  --accent-3: #f08a1e;
+  --accent-gradient: linear-gradient(135deg, #ffd08a 0%, #ffb03d 52%, #e07a12 100%);
+  --accent-soft: rgba(255, 176, 61, 0.2);
+  --accent-glow: rgba(255, 176, 61, 0.4);
+}
+
+:root[data-theme='dark'][data-skin='kugou'],
+[data-theme='dark'] [data-skin='kugou'] {
+  --accent: #47b7ff;
+  --accent-2: #7fd2ff;
+  --accent-3: #1e8ae0;
+  --accent-gradient: linear-gradient(135deg, #8ad8ff 0%, #47b7ff 52%, #1d7fd0 100%);
+  --accent-soft: rgba(71, 183, 255, 0.2);
+  --accent-glow: rgba(71, 183, 255, 0.4);
+}
+
+/* ---------------------------------------------------------------------------
+ * 皮肤氛围：皮肤不只是换主色，而是换整套观感。
+ *
+ * 这一节做两件事：
+ *   1. 把玻璃、悬停、描边从「写死的色值」改成「原色 + 当前皮肤主色」的混合。
+ *      全应用上百处引用的都是 --glass* / --border* / --bg-hover，所以不必逐条改，
+ *      换皮肤时整套界面材质一起走；混合的对象是 --glass-solid 一组，
+ *      它们在深色块里换过值，于是明暗仍由主题决定，两层互不覆盖。
+ *   2. 给每套皮肤一组氛围参数（背景色晕、底纹、标题色、正文色）。
+ *      参数只在这里被定义、在下面「落地」处被读取，新增皮肤只要加一个参数块。
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --glass: color-mix(in srgb, var(--accent) 5%, var(--glass-solid));
+  --glass-strong: color-mix(in srgb, var(--accent) 6%, var(--glass-solid-strong));
+  --glass-weak: color-mix(in srgb, var(--accent) 4%, var(--glass-solid-weak));
+  --glass-border: color-mix(in srgb, var(--accent) 18%, var(--glass-solid-border));
+  --bg-hover: color-mix(in srgb, var(--accent) 12%, var(--hover-solid));
+  --border: color-mix(in srgb, var(--accent) 10%, var(--border-solid));
+  --border-strong: color-mix(in srgb, var(--accent) 16%, var(--border-strong-solid));
+
+  /* 氛围参数：默认全部由「主题基调 + 皮肤主色」推导。 */
+  --skin-text: color-mix(in srgb, var(--accent) 6%, var(--text));
+  --skin-heading: color-mix(in srgb, var(--accent) 55%, var(--text));
+  --skin-wash:
+    radial-gradient(
+      120% 90% at 8% -12%,
+      color-mix(in srgb, var(--accent-tint) 42%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      100% 80% at 104% 4%,
+      color-mix(in srgb, var(--accent-3) 26%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      90% 80% at 50% 118%,
+      color-mix(in srgb, var(--accent-2) 24%, transparent),
+      transparent 64%
+    );
+  --skin-texture: none;
+  --skin-texture-size: auto;
+}
+
+/*
+ * 每套皮肤的性格：底纹。网易云是斜纹线、QQ 音乐是细点阵、酷我是横线、
+ * 酷狗是紫点阵，默认那套只留干净的色晕。颜色仍由主色组推导，明暗通用。
+ */
+[data-skin='netease'] {
+  --skin-texture: repeating-linear-gradient(
+    118deg,
+    color-mix(in srgb, var(--accent) 6%, transparent) 0 1px,
+    transparent 1px 15px
+  );
+}
+
+[data-skin='qqmusic'] {
+  --skin-texture: radial-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 1px, transparent 1.1px);
+  --skin-texture-size: 20px 20px;
+}
+
+[data-skin='kuwo'] {
+  --skin-texture: repeating-linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--accent) 6%, transparent) 0 1px,
+    transparent 1px 24px
+  );
+}
+
+[data-skin='kugou'] {
+  --skin-texture: radial-gradient(color-mix(in srgb, var(--accent-3) 15%, transparent) 1.2px, transparent 1.3px);
+  --skin-texture-size: 26px 26px;
+}
+
+/* 纯黑底上光斑是唯一的颜色，稍微提亮一点，玻璃才有东西可透。 */
 :root[data-theme='dark'] .backdrop__blob {
-  opacity: 0.08;
+  opacity: 0.16;
 }
 
 :root[data-theme='dark'] .backdrop__grain {
-  opacity: 0.1;
+  opacity: 0.12;
 }
 
 * {
@@ -97,7 +321,8 @@ body,
 body {
   font-family: var(--font);
   font-size: 14px;
-  color: var(--text);
+  /* 正文色也带一点皮肤主色（混合比例很低，只为氛围，不影响对比度）。 */
+  color: var(--skin-text, var(--text));
   background: var(--bg);
   overflow: hidden;
   user-select: none;
@@ -171,7 +396,10 @@ img {
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  background: var(--bg);
+  /* 底色来自主题，色晕与底纹来自皮肤：换皮肤时整块背景（连同玻璃能透到的东西）一起换。 */
+  background-color: var(--bg);
+  background-image: var(--skin-texture, none), var(--skin-wash, none);
+  background-size: var(--skin-texture-size, auto), auto;
 }
 
 .backdrop__blob {
@@ -182,12 +410,13 @@ img {
   will-change: transform;
 }
 
+/* 光斑颜色全部取自当前皮肤（--accent 组），换皮肤时整个背景一起换色。 */
 .backdrop__blob--a {
   width: 46vw;
   height: 46vw;
   left: -8vw;
   top: -12vw;
-  background: radial-gradient(circle at 30% 30%, #ffc46b, #ff7a29 70%);
+  background: radial-gradient(circle at 30% 30%, var(--accent-tint), var(--accent-2) 70%);
   animation: drift-a 26s ease-in-out infinite;
 }
 
@@ -196,7 +425,7 @@ img {
   height: 40vw;
   right: -6vw;
   top: 4vh;
-  background: radial-gradient(circle at 40% 40%, #ff9d8a, #ff4a1c 72%);
+  background: radial-gradient(circle at 40% 40%, var(--accent-2), var(--accent) 72%);
   animation: drift-b 32s ease-in-out infinite;
 }
 
@@ -205,7 +434,7 @@ img {
   height: 38vw;
   left: 18vw;
   bottom: -16vw;
-  background: radial-gradient(circle at 50% 50%, #ffa7c4, #ff2d55 72%);
+  background: radial-gradient(circle at 50% 50%, var(--accent-3), var(--accent) 72%);
   animation: drift-c 29s ease-in-out infinite;
 }
 
@@ -214,7 +443,7 @@ img {
   height: 30vw;
   right: 14vw;
   bottom: -10vw;
-  background: radial-gradient(circle at 50% 50%, #ffe08a, #ff9500 74%);
+  background: radial-gradient(circle at 50% 50%, var(--accent-tint), var(--accent-2) 74%);
   opacity: 0.4;
   animation: drift-d 35s ease-in-out infinite;
 }
@@ -226,6 +455,45 @@ img {
   background-size: 3px 3px;
   opacity: 0.22;
   mix-blend-mode: overlay;
+}
+
+/*
+ * 自定义壁纸（设置页「背景」）：图片由主进程的 youyou-wallpaper:// 协议提供，
+ * URL 写在根节点的 --wallpaper 上。铺在最底层 .backdrop 上，玻璃面板于是能把
+ * 它模糊透出来；没设壁纸时 html 上没有 data-wallpaper，下面这些规则不生效，
+ * 回退成皮肤的色晕背景。
+ */
+html[data-wallpaper='1'] .backdrop {
+  background-image: var(--wallpaper, none), var(--skin-texture, none), var(--skin-wash, none);
+  background-size: cover, var(--skin-texture-size, auto), auto;
+  background-position: center, center, center;
+  background-repeat: no-repeat, repeat, no-repeat;
+}
+
+/*
+ * 壁纸是照片，光斑与噪点压暗一点，别把照片糊住。
+ * --wallpaper-clear 跟着「背景模糊度」滑杆走（1 = 默认档，0 = 用户要的最清晰背景）：
+ * 滑到 0 时这两个叠加层一起归零，壁纸原图不再被任何东西压暗。
+ */
+html[data-wallpaper='1'] .backdrop__blob {
+  opacity: calc(0.3 * var(--wallpaper-clear, 1));
+}
+
+:root[data-theme='dark'][data-wallpaper='1'] .backdrop__blob {
+  opacity: calc(0.14 * var(--wallpaper-clear, 1));
+}
+
+/*
+ * 深色皮肤下噪点也按滑杆淡出：上面那条 `:root[data-theme='dark'] .backdrop__grain`
+ * 的权重（0,3,0）比壁纸规则（0,2,1）高，没有这一条时深色主题滑到 0 仍留着 12% 噪点，
+ * 壁纸还是被压暗 —— 用户反馈「拉到 0 还是不够透明」的最后一层就是这个。
+ */
+:root[data-theme='dark'][data-wallpaper='1'] .backdrop__grain {
+  opacity: calc(0.12 * var(--wallpaper-clear, 1));
+}
+
+html[data-wallpaper='1'] .backdrop__grain {
+  opacity: calc(0.1 * var(--wallpaper-clear, 1));
 }
 
 @keyframes drift-a {
@@ -431,7 +699,7 @@ img {
      左侧弧边就会露出渐变另一端的深红细边。统一用 border-box。 */
   background-origin: border-box;
   color: var(--text-on-accent);
-  box-shadow: 0 8px 20px rgba(255, 90, 31, 0.32);
+  box-shadow: 0 8px 20px var(--accent-glow);
 }
 
 .sidebar__footer {
@@ -530,6 +798,16 @@ img {
   display: none !important;
 }
 
+/*
+ * 私人漫游是铺满内容区的固定场景（深空），槽位要先把高度撑满，页面自己再 flex 填满；
+ * 其余页面仍按内容高度自然排布，所以用 :has() 精确圈到漫游页。
+ */
+.page-slot:has(> .fm) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 /* --- 顶部搜索条 -------------------------------------------------------- */
 
 /* 顶部一行：返回在左，搜索居中。搜索条固定在这里，不随内容滚动（用户要求）。 */
@@ -541,22 +819,50 @@ img {
   margin-bottom: 20px;
 }
 
+/* 圆形图标钮：只用箭头，不再是一枚写着「返回」的文字胶囊（用户嫌它别扭）。 */
 .top-row__back {
   justify-self: start;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
   border: 1px solid var(--glass-border);
   background: var(--glass-weak);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  backdrop-filter: blur(var(--blur-md)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(180%);
   box-shadow: var(--glass-shadow-soft);
-  font-size: 13px;
   color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.top-row__back svg {
+  display: block;
 }
 
 .top-row__back:hover:not(:disabled) {
   color: var(--accent);
   background: var(--glass-strong);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  transform: translateX(-2px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.top-row__back:active:not(:disabled) {
+  transform: translateX(-2px) scale(0.94);
+}
+
+.top-row__back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .top-row__back.is-hidden {
@@ -673,6 +979,8 @@ img {
   margin: 0;
   font-size: 17px;
   font-weight: 640;
+  /* 标题带皮肤主色（正文则几乎无色偏）。 */
+  color: var(--skin-heading, inherit);
 }
 
 .section__more {
@@ -708,8 +1016,8 @@ img {
   border-radius: var(--radius);
   background: var(--glass-weak);
   border: 1px solid transparent;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
@@ -747,8 +1055,8 @@ img {
   font-size: 11px;
   color: #fff;
   background: rgba(10, 14, 26, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--blur-xs));
+  -webkit-backdrop-filter: blur(var(--blur-xs));
 }
 
 .card__title {
@@ -935,11 +1243,18 @@ img {
   object-fit: cover;
 }
 
+/* 封面与歌手头像都没有时的中性占位：渐变底 + 音符，不做装饰性插画。 */
 .player-bar__art-placeholder {
   display: grid;
   place-items: center;
+  width: 100%;
   height: 100%;
-  color: var(--text-tertiary);
+  background: linear-gradient(135deg, var(--accent-soft), var(--glass-weak));
+  color: var(--accent);
+}
+
+.player-bar__art-placeholder svg {
+  opacity: 0.72;
 }
 
 .player-bar__meta {
@@ -1082,7 +1397,7 @@ img {
   background: var(--accent-gradient);
   background-origin: border-box;
   color: #fff;
-  box-shadow: 0 8px 22px rgba(255, 90, 31, 0.36);
+  box-shadow: 0 8px 22px var(--accent-glow);
 }
 
 .icon-button--primary:hover {
@@ -1106,7 +1421,7 @@ img {
   height: 13px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 2px 6px rgba(255, 90, 31, 0.45);
+  box-shadow: 0 2px 6px var(--accent-glow);
   cursor: pointer;
 }
 
@@ -1174,7 +1489,7 @@ img {
   background-origin: border-box;
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 10px 26px rgba(255, 90, 31, 0.34);
+  box-shadow: 0 10px 26px var(--accent-glow);
 }
 
 .button--primary:hover {
@@ -1209,8 +1524,8 @@ img {
   place-items: center;
   padding: 24px;
   background: rgba(0, 0, 0, 0.32);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(var(--blur-xs));
+  -webkit-backdrop-filter: blur(var(--blur-xs));
 }
 
 .update-prompt__card {
@@ -1234,12 +1549,6 @@ img {
   font-size: 13px;
   line-height: 1.6;
   margin-bottom: 12px;
-}
-
-.update-prompt__countdown {
-  font-size: 13px;
-  color: var(--accent);
-  margin-bottom: 14px;
 }
 
 .update-prompt__actions {

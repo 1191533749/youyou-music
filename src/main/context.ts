@@ -6,6 +6,7 @@
  */
 import type { BrowserWindow } from 'electron'
 import type { SettingsStore } from './storage/settings.js'
+import type { DailyHistoryStore } from './storage/dailyHistory.js'
 import type { NeteaseClient } from './netease/client.js'
 import type { NeteaseAPI } from './netease/api.js'
 import type { PlayerController } from './player/controller.js'
@@ -16,6 +17,7 @@ import type { CacheStore } from './storage/cache.js'
 
 export interface AppContext {
   settings: SettingsStore
+  dailyHistory: DailyHistoryStore
   client: NeteaseClient
   api: NeteaseAPI
   player: PlayerController

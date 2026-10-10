@@ -53,7 +53,7 @@
   background: var(--accent-gradient);
   border-color: transparent;
   color: var(--text-on-accent);
-  box-shadow: 0 6px 16px rgba(255, 90, 31, 0.3);
+  box-shadow: 0 6px 16px var(--accent-glow);
 }
 
 .text-input {
@@ -184,8 +184,8 @@
 
 .login__tabs button.is-active {
   background: var(--accent-gradient);
-  color: #fff;
-  box-shadow: 0 6px 16px rgba(255, 90, 31, 0.3);
+  color: var(--text-on-accent);
+  box-shadow: 0 6px 16px var(--accent-glow);
 }
 
 .login__qr-frame {
@@ -196,7 +196,8 @@
   margin: 0 auto 14px;
   padding: 12px;
   border-radius: var(--radius);
-  background: #fff;
+  /* 二维码的静默区必须是白的，任何主题下都不变，否则手机扫不出来。 */
+  background: var(--qr-paper);
   box-shadow: var(--glass-shadow-soft);
 }
 
@@ -207,11 +208,11 @@
 }
 
 .qr-grid__on {
-  background: #0d1220;
+  background: var(--qr-ink);
 }
 
 .qr-grid__off {
-  background: #fff;
+  background: var(--qr-paper);
 }
 
 .login__qr-placeholder {
@@ -292,6 +293,8 @@
 .settings__group h2 {
   margin: 0 0 4px;
   font-size: 15px;
+  /* 标题带皮肤主色，正文不带。 */
+  color: var(--skin-heading, inherit);
 }
 
 .settings__group > p {
@@ -350,6 +353,81 @@
   min-width: 120px;
 }
 
+/*
+ * 皮肤选择器：一个色块 + 一个名字。色块自己带 data-skin，global.css 里那套
+ * [data-skin] 变量就作用在它身上，于是预览色永远等于切换后的真实配色，
+ * 不必在 TS 里再抄一份颜色。
+ */
+.skin-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.skin-option {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 62px;
+  padding: 8px 8px 6px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.skin-option:hover {
+  background: var(--bg-hover);
+  border-color: var(--glass-border);
+}
+
+.skin-option.is-active {
+  background: var(--glass-strong);
+  border-color: var(--accent);
+}
+
+.skin-option__name {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.skin-option.is-active .skin-option__name {
+  color: var(--text);
+}
+
+.skin-swatch {
+  position: relative;
+  display: block;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-soft);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+/* 色块上的玻璃高光：和全局玻璃面板同一套语言。 */
+.skin-swatch::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 62%);
+  pointer-events: none;
+}
+
+.skin-option:hover .skin-swatch {
+  transform: translateY(-2px);
+}
+
+.skin-option.is-active .skin-swatch {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent), 0 6px 16px var(--accent-glow);
+}
+
 .switch {
   position: relative;
   width: 44px;
@@ -361,7 +439,7 @@
 
 .switch.is-on {
   background: var(--accent-gradient);
-  box-shadow: 0 4px 12px rgba(255, 90, 31, 0.4);
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 .switch::after {
@@ -372,7 +450,7 @@
   width: 19px;
   height: 19px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--switch-knob);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   transition: transform 0.18s ease;
 }
@@ -445,7 +523,8 @@
   height: 148px;
   object-fit: contain;
   border-radius: var(--radius-sm);
-  background: #fff;
+  /* 群二维码是「深色码点 + 白底」的图片，底衬同样要留白，扫得出来。 */
+  background: var(--qr-paper);
   padding: 6px;
   border: 1px solid var(--glass-border);
 }

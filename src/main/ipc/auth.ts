@@ -8,6 +8,7 @@
  */
 import { defineHandler } from './registry.js'
 import { NeteaseAPIError } from '../netease/client.js'
+import { setKnownUID } from '../storage/remoteDaily.js'
 import type { AppContext } from '../context.js'
 import type { QRLoginStateDTO, UserProfileDTO } from '@shared/types'
 
@@ -100,7 +101,10 @@ export function registerAuthHandlers(context: AppContext): void {
         let profile: UserProfileDTO | undefined
         try {
           const account = await context.api.userAccount()
-          if (account) profile = profileDTO(context, account)
+          if (account) {
+            setKnownUID(account.userId)
+            profile = profileDTO(context, account)
+          }
         } catch (cause) {
           context.log(`登录后获取账户信息失败: ${String(cause)}`)
         }

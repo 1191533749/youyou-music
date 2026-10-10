@@ -28,7 +28,11 @@ const UA =
 const QISHUI_AID = '386088'
 
 async function fetchJSON(url: string, headers: Record<string, string> = {}): Promise<any> {
-  const response = await fetch(url, { headers: { 'User-Agent': UA, ...headers } })
+  const response = await fetch(url, {
+    headers: { 'User-Agent': UA, ...headers },
+    // 站外接口偶发无响应会拖死搜索页兜底与播放解析，统一硬性超时。
+    signal: AbortSignal.timeout(12_000)
+  })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return response.json()
 }
@@ -171,7 +175,7 @@ export async function searchKuwo(keywords: string, limit: number): Promise<Exter
   const response = await fetch(
     `https://search.kuwo.cn/r.s?&correct=1&vipver=1&stype=comprehensive&encoding=utf8` +
       `&rformat=json&mobi=1&show_copyright_off=1&searchapi=6&all=${encodeURIComponent(keywords)}`,
-    { headers: { 'User-Agent': 'okhttp/3.10.0' } }
+    { headers: { 'User-Agent': 'okhttp/3.10.0' }, signal: AbortSignal.timeout(12_000) }
   )
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return parseKuwoSearch(normalizeKuwoJSON(await response.text()), limit)

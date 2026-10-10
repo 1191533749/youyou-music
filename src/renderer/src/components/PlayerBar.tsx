@@ -13,13 +13,16 @@ import {
 } from '../store/player'
 import { useNavigation } from '../store/navigation'
 import { useAuthStore } from '../store/auth'
-import { call } from '../lib/ipc'
+import { call, onEvent } from '../lib/ipc'
 import { clearLikeOverride, isLiked, markLike } from '../lib/likes'
+import { useFullscreenIdle } from '../lib/fullscreenIdle'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
+import { useImageReady } from './FishAvatar'
 import {
+  IconDisc,
   IconHeart,
   IconHeartFilled,
-  IconMore,
+  IconLyrics,
   IconMusic,
   IconNext,
   IconPause,
@@ -62,6 +65,47 @@ export default function PlayerBar(): JSX.Element {
   const navigation = useNavigation()
   const auth = useAuthStore()
   const { state, current } = player
+
+  /**
+   * 真全屏空闲时收起控件挂在播放条上：它是应用外壳里唯一常驻的组件，
+   * 这样不用改 App.tsx 的结构就能一直盯着全屏状态（详见 lib/fullscreenIdle.ts）。
+   */
+  useFullscreenIdle()
+
+  // 专辑封面缺席时退回歌手头像；图没加载完不渲染 <img>，因此既没有破图也没有半成品闪烁。
+  const artURL = coverUrl(current?.album.picUrl, 120) ?? coverUrl(current?.artists[0]?.picUrl, 120)
+  const artReady = useImageReady(artURL)
+
+  /**
+   * 播放/暂停要立刻有反应：主进程广播有往返延迟，先本地翻转图标与文案，
+   * 广播回来（最多 1.5 秒兜底）再交还权威状态，否则按下去像没反应。
+   */
+  const [playIntent, setPlayIntent] = useState<boolean | undefined>(undefined)
+  const intentTimer = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    setPlayIntent(undefined)
+    window.clearTimeout(intentTimer.current)
+  }, [state.playing])
+  useEffect(() => () => window.clearTimeout(intentTimer.current), [])
+  const shownPlaying = playIntent ?? state.playing
+  const togglePlayback = (): void => {
+    setPlayIntent(!shownPlaying)
+    window.clearTimeout(intentTimer.current)
+    intentTimer.current = window.setTimeout(() => setPlayIntent(undefined), 1500)
+    void player.toggle()
+  }
+
+  /**
+   * 桌面歌词的显示状态归主进程设置管，播放条只镜像一份用来点亮按钮：
+   * settings:get 取初值，settings:changed 保证在播放页或设置页改完两边同步。
+   */
+  const [desktopLyrics, setDesktopLyrics] = useState(false)
+  useEffect(() => {
+    void call('settings:get')
+      .then((next) => setDesktopLyrics(next.showDesktopLyrics))
+      .catch(() => undefined)
+    return onEvent('settings:changed', (next) => setDesktopLyrics(next.showDesktopLyrics))
+  }, [])
 
   const [liked, setLiked] = useState(false)
   const likePending = useRef(false)
@@ -122,11 +166,11 @@ export default function PlayerBar(): JSX.Element {
           title="打开播放页"
           onClick={() => navigation.push({ name: 'nowPlaying' })}
         >
-          {coverUrl(current?.album.picUrl, 120) ? (
-            <img src={coverUrl(current?.album.picUrl, 120)} alt="" />
+          {artURL && artReady ? (
+            <img src={artURL} alt="" />
           ) : (
-            <span className="player-bar__art-placeholder">
-              <IconMusic size={22} />
+            <span className="player-bar__art-placeholder" aria-hidden="true">
+              <IconMusic size={20} />
             </span>
           )}
         </button>
@@ -163,11 +207,19 @@ export default function PlayerBar(): JSX.Element {
           <button
             type="button"
             className="icon-button icon-button--primary"
-            title={state.playing ? '暂停' : '播放'}
-            aria-label={state.playing ? '暂停' : '播放'}
-            onClick={() => void player.toggle()}
+            title={shownPlaying ? '暂停' : '播放'}
+            aria-label={shownPlaying ? '暂停' : '播放'}
+            aria-pressed={shownPlaying}
+            aria-busy={state.loading}
+            onClick={togglePlayback}
           >
-            {state.loading ? <IconMore size={18} /> : state.playing ? <IconPause size={18} /> : <IconPlay size={18} />}
+            {state.loading ? (
+              <IconDisc size={18} className="spin" />
+            ) : shownPlaying ? (
+              <IconPause size={18} />
+            ) : (
+              <IconPlay size={18} />
+            )}
           </button>
           <button
             type="button"
@@ -211,6 +263,16 @@ export default function PlayerBar(): JSX.Element {
 
       <div className="player-bar__right">
         <QualityMenu player={player} />
+        <button
+          type="button"
+          className={`icon-button${desktopLyrics ? ' is-active' : ''}`}
+          title={desktopLyrics ? '隐藏桌面歌词' : '显示桌面歌词'}
+          aria-label={desktopLyrics ? '隐藏桌面歌词' : '显示桌面歌词'}
+          aria-pressed={desktopLyrics}
+          onClick={() => void call('lyrics:desktopToggle', { visible: !desktopLyrics })}
+        >
+          <IconLyrics size={18} />
+        </button>
         <button
           type="button"
           className="icon-button"

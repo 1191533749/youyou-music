@@ -5,11 +5,13 @@
  * settings), the client loads its cookie jar (so the first screen knows whether
  * to show the login page), then handler registration, then windows.
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, Tray } from 'electron'
 import * as path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import * as fs from 'node:fs'
 import { SettingsStore } from './storage/settings.js'
 import { CacheStore } from './storage/cache.js'
+import { DailyHistoryStore } from './storage/dailyHistory.js'
 import { NeteaseClient } from './netease/client.js'
 import { NeteaseAPI } from './netease/api.js'
 import { MpvController, resolveMpvBinary } from './audio/mpv.js'
@@ -122,6 +124,10 @@ function createMainWindow(): BrowserWindow {
   window.on('maximize', () => sendEvent(contextRef.value, 'window:maximized', { maximized: true }))
   window.on('unmaximize', () => sendEvent(contextRef.value, 'window:maximized', { maximized: false }))
 
+  // 系统真全屏（F11 / setFullScreen）：全屏页据此自动隐藏控件，鼠标一动即现身。
+  window.on('enter-full-screen', () => sendEvent(contextRef.value, 'window:fullscreen', { fullscreen: true }))
+  window.on('leave-full-screen', () => sendEvent(contextRef.value, 'window:fullscreen', { fullscreen: false }))
+
   window.on('close', (event) => {
     const settings = contextRef.value?.settings.current
     if (!quitting && settings?.closeToTray && settings.tray) {
@@ -183,6 +189,13 @@ function createLyricsWindow(): BrowserWindow {
     void contextRef.value?.settings.update({ desktopLyricsPosition: { x, y } })
   })
 
+  // 窗口被关闭（渲染层可以 window.close()）后必须清掉引用，
+  // 否则后续 applyLyricsVisibility 会对已销毁窗口调 showInactive，
+  // 抛出 "Object has been destroyed" 并把 settings:update 打崩。
+  window.on('closed', () => {
+    if (lyricsWindow === window) lyricsWindow = undefined
+  })
+
   if (rendererUrl) {
     void window.loadURL(`${rendererUrl}?window=lyrics`)
   } else {
@@ -203,8 +216,17 @@ function createLyricsWindow(): BrowserWindow {
  */
 function applyLyricsVisibility(visible: boolean): void {
   if (visible) {
-    lyricsWindow ??= createLyricsWindow()
-    lyricsWindow.showInactive()
+    // 双保险：引用可能指向已销毁的窗口（理论上 closed 处理器会清掉，
+    // 但任何一处漏网都不允许让设置更新抛错）。
+    if (!lyricsWindow || lyricsWindow.isDestroyed()) {
+      lyricsWindow = createLyricsWindow()
+    }
+    try {
+      lyricsWindow.showInactive()
+    } catch (cause) {
+      log(`显示桌面歌词窗口失败: ${String(cause)}`)
+      lyricsWindow = undefined
+    }
   } else {
     lyricsWindow?.hide()
   }
@@ -310,7 +332,27 @@ async function bootstrap(): Promise<void> {
   await settings.load()
   const current = settings.current
 
-  const cacheDirectory = current.cacheDirectory || path.join(userData, 'cache')
+  // 音频缓存的目录名不能叫 `cache`：Windows 文件系统不分大小写，Chromium 会把它
+  // 当成自己的 HTTP 磁盘缓存目录（`Cache`），每次启动清理时把我们的音频缓存一起
+  // 删光——这就是用户「缓存一直显示已用 0B」的真凶。改用 `audio-cache` 并迁移旧文件。
+  const legacyCacheRoot = path.join(userData, 'cache')
+  const audioCacheRoot = path.join(userData, 'audio-cache')
+  if (fs.existsSync(legacyCacheRoot)) {
+    for (const sub of ['audio', 'images']) {
+      const from = path.join(legacyCacheRoot, sub)
+      const to = path.join(audioCacheRoot, sub)
+      if (!fs.existsSync(from) || fs.existsSync(to)) continue
+      try {
+        fs.mkdirSync(audioCacheRoot, { recursive: true })
+        fs.renameSync(from, to)
+        bootLog(`缓存目录迁移：${from} → ${to}`)
+      } catch (cause) {
+        bootLog(`缓存目录迁移失败（${sub}，下次启动重试）：${String(cause)}`)
+      }
+    }
+  }
+
+  const cacheDirectory = current.cacheDirectory || audioCacheRoot
   const cache = new CacheStore({
     directory: cacheDirectory,
     limitBytes: () => settings.current.cacheLimitMB * 1024 * 1024,
@@ -394,6 +436,7 @@ async function bootstrap(): Promise<void> {
 
   const context: AppContext = {
     settings,
+    dailyHistory: new DailyHistoryStore(path.join(userData, 'daily-history')),
     client,
     api,
     player,
@@ -720,7 +763,51 @@ function toProfileDTO(profile: {
   }
 }
 
+// 自定义壁纸协议：必须在 ready 之前登记特权，否则按普通 scheme 处理
+// 无法作为 <img>/background-image 源（CSP img-src 也要放行该协议）。
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'youyou-wallpaper',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+])
+
+/**
+ * youyou-wallpaper://current?v=<n> → userData/wallpaper/ 下第一个 wallpaper.* 文件。
+ * 只读、只服务本地文件；找不到就 404（渲染层自动回退默认背景）。
+ */
+function registerWallpaperProtocol(): void {
+  protocol.handle('youyou-wallpaper', async () => {
+    try {
+      const dir = path.join(app.getPath('userData'), 'wallpaper')
+      const entries = await fs.promises.readdir(dir).catch(() => [] as string[])
+      const name = entries.find((entry) => entry.startsWith('wallpaper.'))
+      if (!name) return new Response('Not Found', { status: 404 })
+      return net.fetch(pathToFileURL(path.join(dir, name)).toString())
+    } catch (cause) {
+      log(`读取壁纸失败: ${String(cause)}`)
+      return new Response('Not Found', { status: 404 })
+    }
+  })
+}
+
+// GPU 加速开关：app.disableHardwareAcceleration() 必须在 ready 之前调用才生效，
+// SettingsStore 是异步加载来不及，所以这里在 ready 前同步读一次 settings.json。
+// 读不到或字段缺失时按默认（GPU 加速开启）处理。
+try {
+  const earlySettingsFile = path.join(app.getPath('userData'), 'settings.json')
+  const earlyRaw = fs.readFileSync(earlySettingsFile, 'utf8')
+  const earlyParsed = JSON.parse(earlyRaw) as { hardwareAcceleration?: unknown }
+  if (earlyParsed.hardwareAcceleration === false) {
+    app.disableHardwareAcceleration()
+    bootLog('settings.hardwareAcceleration=false → 已禁用 GPU 加速（软件渲染），重启生效')
+  }
+} catch {
+  // 首次启动还没有 settings.json，或文件损坏——走默认开启。
+}
+
 app.whenReady().then(() => {
+  registerWallpaperProtocol()
   void bootstrap().catch((cause) => {
     log(`启动失败: ${String(cause)}`)
     dialog.showErrorBox('启动失败', String(cause))

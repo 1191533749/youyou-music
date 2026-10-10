@@ -15,7 +15,7 @@ export type Route =
   | { name: 'playlist'; id: number; title?: string }
   | { name: 'album'; id: number; title?: string }
   | { name: 'artist'; id: number; title?: string }
-  | { name: 'daily' }
+  | { name: 'daily'; date?: string }
   | { name: 'fm' }
   | { name: 'together' }
   | { name: 'toplist'; id: number; title?: string }

@@ -50,8 +50,8 @@
 .np-fullscreen .np-fs__back {
   background: var(--glass-weak);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(14px) saturate(170%);
-  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  backdrop-filter: blur(var(--blur-md)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(170%);
   box-shadow: var(--glass-shadow-soft);
   transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
     box-shadow 0.16s ease, transform 0.16s ease;
@@ -85,8 +85,8 @@
   border-color: var(--glass-border);
   background: var(--glass-weak);
   color: var(--text-secondary);
-  backdrop-filter: blur(12px) saturate(170%);
-  -webkit-backdrop-filter: blur(12px) saturate(170%);
+  backdrop-filter: blur(var(--blur-md)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(170%);
   box-shadow: var(--glass-shadow-soft);
   transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
     box-shadow 0.16s ease, transform 0.16s ease;
@@ -170,9 +170,23 @@
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: var(--glass-weak);
-  font-size: 12px;
   color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+/* 日期是每日推荐历史的入口：hover 提亮一档，键盘聚焦给可见描边。 */
+.home-date:hover {
+  background: var(--glass-strong);
+  color: var(--text-secondary);
+}
+
+.home-date:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .home-date.is-today {
@@ -182,6 +196,10 @@
   border-color: transparent;
   color: var(--text-on-accent);
   font-weight: 600;
+}
+
+.home-date.is-today:hover {
+  color: var(--text-on-accent);
 }
 
 /* 单块板块的加载 / 空态：比整页 placeholder 轻，四块各自独立。 */
@@ -226,8 +244,8 @@
   border-radius: var(--radius-lg);
   background: var(--glass-weak);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(20px) saturate(170%);
-  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  backdrop-filter: blur(var(--blur-xl)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur-xl)) saturate(170%);
   box-shadow: var(--glass-shadow-soft);
 }
 
@@ -451,9 +469,14 @@
   outline: none;
 }
 
+.search-hero__input::placeholder {
+  color: var(--text-tertiary);
+}
+
 /*
  * 背景头像墙：多行慢速横向滚动，相邻行反向。
- * 纯装饰层：不可点、不拦事件，整体压低不透明度，四周用渐隐遮罩收边。
+ * 纯装饰层：不可点、不拦事件，整体压低不透明度，四周用渐隐遮罩收边
+ * （左右 + 上下各一层，用 intersect 叠起来，铺满时不会在上下边缘留下硬切边）。
  */
 .avatar-wall {
   position: absolute;
@@ -465,8 +488,9 @@
   gap: 18px;
   opacity: 0.26;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent),
+    linear-gradient(180deg, transparent, #000 7%, #000 93%, transparent);
+  mask-composite: intersect;
 }
 
 .avatar-wall__row {
@@ -726,8 +750,8 @@
   background: var(--glass-weak);
   color: var(--text-secondary);
   font-size: 12px;
-  backdrop-filter: blur(14px) saturate(170%);
-  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  backdrop-filter: blur(var(--blur-md)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(170%);
   box-shadow: var(--glass-shadow-soft);
   transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
     box-shadow 0.16s ease, transform 0.16s ease;
@@ -1281,22 +1305,6 @@
   color: var(--text-secondary);
 }
 
-.np-lyric__bar {
-  display: block;
-  height: 2px;
-  margin: 4px 6px 0;
-  border-radius: 1px;
-  overflow: hidden;
-  background: var(--border);
-}
-
-.np-lyric__bar-fill {
-  display: block;
-  height: 100%;
-  background: var(--accent-gradient);
-  transition: width 0.12s linear;
-}
-
 .np-lyrics__footer {
   padding: 18px 4px 0;
   font-size: 11px;
@@ -1306,7 +1314,7 @@
 
 /* --- 播放页：四种歌词特效 ----------------------------------------------- */
 
-/* 1) 卡拉OK（默认）：唯一使用逐字高亮与行内进度条的效果。 */
+/* 1) 卡拉OK（默认）：逐字高亮。行内进度条已按用户要求删除，唱过的句子转暖橙。 */
 .np-lyrics__list--karaoke .np-lyric.is-active {
   background: var(--accent-soft);
 }

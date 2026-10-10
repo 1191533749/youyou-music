@@ -16,6 +16,8 @@ resources/mpv/
 .DS_Store
 Thumbs.db
 .tmp-*
+# 真机脚本截的图（只在本地看，不进仓库）
+shots-*/
 
 # 一起听中继的运行时数据与密钥：余额/订单状态、支付宝应用私钥，绝不入库
 server/data/

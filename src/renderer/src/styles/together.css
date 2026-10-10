@@ -11,16 +11,18 @@
 
 /* --- 页面骨架 ----------------------------------------------------------- */
 
+/* 整页一屏：min-height 由 Together.tsx 的 useFillHeight 按 .content 内高写进 inline
+   （.page-slot 没有高度，百分比解析不了）。这里负责把子块竖排开、只留最小间距。 */
 .together {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 10px;
 }
 
 .together__head {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .together__sub {
@@ -35,8 +37,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 12px;
-  font-size: 16px;
+  margin: 0 0 3px;
+  font-size: 15px;
   font-weight: 640;
 }
 
@@ -44,7 +46,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 18px 0 10px;
+  margin: 6px 0 5px;
   font-size: 14px;
   font-weight: 640;
 }
@@ -58,8 +60,8 @@
 .together__connect {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 6px;
+  padding: 8px 12px;
   border-radius: var(--radius-lg);
 }
 
@@ -67,15 +69,15 @@
 .together__me {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .together__me-avatar {
   display: grid;
   place-items: center;
   flex: none;
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   overflow: hidden;
   background: var(--accent-soft);
@@ -276,20 +278,66 @@
   font-size: 12px;
 }
 
+/* 宽屏下连接卡横过来当状态条：资料 | 状态 | 余额占一行
+   （窄屏仍是竖排，见文件末尾的媒体查询），提示与错误各占一整行。 */
+@media (min-width: 1081px) {
+  .together__connect {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .together__me {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .together__actions {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .together__balance {
+    flex: none;
+    margin-left: auto;
+  }
+
+  .together__notice,
+  .together__error {
+    flex: 1 0 100%;
+  }
+}
+
 /* --- 双栏 --------------------------------------------------------------- */
 
+/* 两块面板等高铺满剩余空间：align-items 用默认的 stretch，右panel 的聊天区再吃掉余量。 */
 .together__grid {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
+  /* 单行撑满容器高度（minmax(0,…) 允许收缩）：下面的高度封顶才能真正压到面板上，
+     否则 auto 行会被内容撑高、溢出容器。 */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 宽屏一屏布局：双栏高度封顶在「整页可用高度」（324px = 窗口标题栏 + 播放条 + 页面标题 +
+   连接卡 + 各段间距，与 useFillHeight 量的口径一致；正常内容刚好等于这个高度，所以看不出
+   区别）。房间/消息再多也只会让面板内部出现滚动条，绝不把整页顶高。窄屏不封顶。 */
+@media (min-width: 1081px) {
+  .together__grid {
+    max-height: calc(100vh - 324px);
+  }
 }
 
 .together__panel {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 18px 20px;
+  min-height: 0;
+  padding: 10px 12px;
   border-radius: var(--radius-lg);
 }
 
@@ -305,7 +353,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 6px;
 }
 
 .together__create .text-input {
@@ -313,11 +361,17 @@
   min-width: 160px;
 }
 
+/* 房间会越开越多：overflow-y 让这块成为「可压缩」的 flex 项（min-height 自动降为 0），
+   空间不够时它自己变矮并在内部滚动，绝不把整页顶出滚动条；max-height 再压一道上限，
+   房间少时看不出区别。overscroll-behavior 防止滚到底后把滚动传给整页。 */
 .together__rooms {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 0 0 18px;
+  gap: 5px;
+  margin: 0 0 4px;
+  max-height: min(26vh, 168px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0;
   list-style: none;
 }
@@ -326,7 +380,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 7px 10px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background: var(--glass-weak);
@@ -357,15 +411,15 @@
 
 .together__room-meta {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .together__empty {
-  margin: 0 0 14px;
-  padding: 16px 4px;
+  margin: 0 0 8px;
+  padding: 8px 4px;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.7;
@@ -378,12 +432,16 @@
 .together__filter {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
-.together__filter .text-input {
+/* 找听友的控件压到 30px 左右一行，字号仍 >= 12px。 */
+.together__filter .text-input,
+.together__filter select {
   min-width: 0;
+  padding: 5px 10px;
+  font-size: 13px;
 }
 
 .together__listeners {
@@ -439,7 +497,7 @@
 
 .together__listener-meta {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -452,7 +510,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 7px;
 }
 
 .together__room-head .together__h2 {
@@ -468,7 +526,7 @@
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -476,8 +534,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 12px;
-  padding: 10px 12px;
+  margin: 0 0 6px;
+  padding: 6px 10px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background: var(--glass-weak);
@@ -490,7 +548,7 @@
 
 /* 跟随同步提示：紧跟在「正在播放」下面的一行小字。 */
 .together__sync {
-  margin: -4px 0 12px;
+  margin: -3px 0 6px;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.6;
@@ -499,8 +557,8 @@
 .together__members {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 14px;
+  gap: 5px;
+  margin-bottom: 6px;
 }
 
 .together__member {
@@ -514,14 +572,17 @@
 
 /* --- 聊天 --------------------------------------------------------------- */
 
-/* 固定高度 + 内部滚动：房间消息再多也不会把整页撑开。 */
+/* 弹性高度 + 内部滚动：flex-basis 用 0，聊天内容再多也不会把整页撑高
+   （消息只在框内滚）；有富余高度时 flex-grow 再把聊天区拉长。min-height 保证
+   窗口很矮时还看得见几行。 */
 .together__chat {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  height: 260px;
+  flex: 1 1 0;
+  min-height: 88px;
   overflow-y: auto;
-  padding: 12px;
+  padding: 8px 10px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background: var(--glass-weak);
@@ -557,7 +618,7 @@
 
 .together__msg-name {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .together__msg.is-mine .together__msg-name {
@@ -581,7 +642,7 @@
 .together__compose {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .together__compose .text-input {
@@ -592,21 +653,21 @@
 .together__emoji-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 3px;
+  margin-top: 2px;
 }
 
-/* 表情按钮：28px 圆角方块，hover 轻微放大。 */
+/* 表情按钮：20px 圆角方块，hover 轻微放大（18 个刚好一行）。 */
 .together__emoji {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border-radius: var(--radius-sm);
   border: 1px solid var(--glass-border);
   background: var(--glass-weak);
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1;
   transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
 }
@@ -619,37 +680,20 @@
 
 /* --- 礼物 --------------------------------------------------------------- */
 
+/* 十件礼物平铺成紧凑网格：一屏布局下比按档位竖排省一大截高度，
+   四档的区分仍由 .is-{tier} 的描边与光晕承担（鼠标悬停的 title 里也会写明档位）。 */
 .together__gifts {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.together__gift-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.together__gift-tier {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.together__gift-items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 4px 5px;
 }
 
 .together__gift {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 10px 8px;
+  gap: 0;
+  padding: 4px 5px;
   border-radius: var(--radius);
   border: 1px solid var(--border-strong);
   background: var(--glass-weak);
@@ -668,8 +712,8 @@
 }
 
 .together__gift-emoji {
-  font-size: 20px;
-  line-height: 1;
+  font-size: 15px;
+  line-height: 1.2;
 }
 
 .together__gift-name {
@@ -678,7 +722,7 @@
 
 .together__gift-price {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -708,9 +752,9 @@
 .together__gift-log {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 14px;
-  padding: 10px 12px;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 6px 8px;
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background: var(--glass-weak);
@@ -872,25 +916,26 @@
 
 .radar {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(200px, 250px);
-  gap: 16px;
+  grid-template-columns: minmax(200px, 1fr) minmax(180px, 1fr);
+  gap: 10px;
   align-items: center;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .radar__stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 3px;
   min-width: 0;
 }
 
-/* 圆盘：同心圆 + 十字轴 + 旋转扫描线，头像光点浮在上面。 */
+/* 圆盘：同心圆 + 十字轴 + 旋转扫描线，头像光点浮在上面。
+   盘径按可用高度自适应（27vh），1280×820 下约 221px、1600×1025 下约 277px，
+   两档都保持在左栏一屏内；列宽更窄时用 min() 兜住，光点按百分比定位不受影响。 */
 .radar__dish {
   position: relative;
-  width: 100%;
-  max-width: 320px;
+  width: min(100%, clamp(180px, 27vh, 300px));
   aspect-ratio: 1;
   margin: 0 auto;
   border-radius: 50%;
@@ -1000,8 +1045,8 @@
   top: calc(50% + var(--radar-y, 0%));
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 52px;
+  height: 52px;
   padding: 0;
   border: 0;
   background: none;
@@ -1051,8 +1096,8 @@
 .radar__dot {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   overflow: hidden;
   border: 1px solid var(--glass-border);
@@ -1083,7 +1128,7 @@
 
 .radar__caption {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -1155,14 +1200,7 @@
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 11px;
-}
-
-.radar__info-idle {
-  margin: 0;
-  color: var(--text-tertiary);
   font-size: 12px;
-  line-height: 1.8;
 }
 
 @media (max-width: 900px) {

@@ -124,7 +124,7 @@ export default function Radar({ listeners, onJoinRoom, joinedRoomId }: RadarProp
             >
               <span className="radar__halo" aria-hidden="true" />
               <span className="radar__dot">
-                <ListenerAvatar src={listener.avatar} size={15} />
+                <ListenerAvatar src={listener.avatar} size={22} />
               </span>
             </button>
           )
@@ -138,38 +138,33 @@ export default function Radar({ listeners, onJoinRoom, joinedRoomId }: RadarProp
         </span>
       </div>
 
-      <aside className="radar__info" aria-live="polite">
-        {active ? (
-          <>
-            <div className="radar__info-head">
-              <span className="radar__info-avatar">
-                <ListenerAvatar src={active.listener.avatar} size={20} />
-              </span>
-              <div className="radar__info-title">
-                <span className="radar__info-name">{active.listener.nickname ?? '听友'}</span>
-                <span className="radar__info-meta">{meta || '资料未公开'}</span>
-              </div>
+      {/* 没有悬停/选中的光点时整张资料卡都不渲染：留白即可，不要空卡片占高度。 */}
+      {active ? (
+        <aside className="radar__info" aria-live="polite">
+          <div className="radar__info-head">
+            <span className="radar__info-avatar">
+              <ListenerAvatar src={active.listener.avatar} size={20} />
+            </span>
+            <div className="radar__info-title">
+              <span className="radar__info-name">{active.listener.nickname ?? '听友'}</span>
+              <span className="radar__info-meta">{meta || '资料未公开'}</span>
             </div>
-            <p className={`radar__info-sign${active.listener.signature ? '' : ' is-muted'}`}>
-              {active.listener.signature || 'TA 还没有写个性签名'}
-            </p>
-            {active.listener.listening ? <span className="radar__info-tag">正在一起听</span> : null}
-            {onJoinRoom && active.listener.roomId && active.listener.roomId !== joinedRoomId ? (
-              <button
-                type="button"
-                className="button button--small button--primary"
-                onClick={() => onJoinRoom(active.listener.roomId as string)}
-              >
-                加入 TA 的房间
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <p className="radar__info-idle">
-            把鼠标移到盘上的头像光点，查看昵称、年龄、地区与个性签名；点击光点可以固定住资料。
+          </div>
+          <p className={`radar__info-sign${active.listener.signature ? '' : ' is-muted'}`}>
+            {active.listener.signature || 'TA 还没有写个性签名'}
           </p>
-        )}
-      </aside>
+          {active.listener.listening ? <span className="radar__info-tag">正在一起听</span> : null}
+          {onJoinRoom && active.listener.roomId && active.listener.roomId !== joinedRoomId ? (
+            <button
+              type="button"
+              className="button button--small button--primary"
+              onClick={() => onJoinRoom(active.listener.roomId as string)}
+            >
+              加入 TA 的房间
+            </button>
+          ) : null}
+        </aside>
+      ) : null}
     </div>
   )
 }

@@ -101,6 +101,11 @@ export default function FM(): JSX.Element {
         />
       ) : null}
 
+      {/* 纯 CSS 星空：三层星点（两层伪元素 + 这一层碎星）与一团星云，
+          不引图片、不用 canvas —— 深空需要纵深，但漫游页不该有加载项。 */}
+      <div className="fm__stars" aria-hidden="true" />
+      <div className="fm__nebula" aria-hidden="true" />
+
       <div className="fm__body">
         {starting ? (
           <div className="placeholder">正在为你挑选漫游曲目</div>

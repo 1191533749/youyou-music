@@ -107,7 +107,7 @@ const snapshot = `(() => {
     dayCount: days.length,
     labels: days.map((day) => day.textContent.trim()),
     active: active ? active.textContent.trim() : null,
-    rows: document.querySelectorAll('.song-row').length,
+    rows: document.querySelectorAll('.daily-card, .song-row').length,
     placeholder: placeholder ? placeholder.innerText.replace(/\\s+/g, ' ').trim() : null
   }
 })()`

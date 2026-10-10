@@ -1,5 +1,5 @@
 /**
- * 音乐云盘 —— 容量占用、分页列表、删除。
+ * 音乐云盘 —— 分页列表、播放与删除。
  *
  * 只有能解析出 simpleSong 的条目（track 存在）才可播放；解析不出来的仍然列
  * 出来但置灰：让用户看得见自己上传过什么，比直接隐藏更有用。
@@ -25,7 +25,8 @@ interface MenuState {
 export default function Cloud(): JSX.Element {
   const player = usePlayerStore()
   const toast = useToast()
-  const [quota, setQuota] = useState<{ used?: number; capacity?: number }>({})
+  const [pendingPlay, setPendingPlay] = useState<number | undefined>()
+  const [queuingAll, setQueuingAll] = useState(false)
   const [deleting, setDeleting] = useState<number | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [pendingDelete, setPendingDelete] = useState<CloudSongDTO | undefined>()
@@ -33,8 +34,6 @@ export default function Cloud(): JSX.Element {
 
   const loadPage = useCallback(async (offset: number, limit: number) => {
     const page = await call('library:cloud', { limit, offset })
-    // 容量只随第一页返回；翻页时不要拿它覆盖已有值（可能是 undefined）。
-    if (offset === 0) setQuota({ used: page.used, capacity: page.capacity })
     return { items: page.songs, more: page.hasMore ?? page.songs.length >= limit }
   }, [])
 
@@ -42,10 +41,24 @@ export default function Cloud(): JSX.Element {
 
   const playableTracks: TrackDTO[] = paged.items.flatMap((item) => (item.track ? [item.track] : []))
 
+  /**
+   * 播放键要立刻有反应：已经是当前这首时直接在本地切播放/暂停，不惊动主进程；
+   * 换歌时才交给主进程解析播放地址，期间按钮进入 busy 态并拒掉重复点击。
+   * 于是「按下去马上就有变化」，不会出现点了几次都没动静的感觉。
+   */
   const play = (item: CloudSongDTO): void => {
-    if (!item.track) return
-    const index = playableTracks.findIndex((track) => track.id === item.track?.id)
-    void player.playTracks(playableTracks, index < 0 ? 0 : index)
+    const track = item.track
+    if (!track || pendingPlay !== undefined) return
+    if (player.state.track?.id === track.id) {
+      void player.toggle()
+      return
+    }
+    const index = playableTracks.findIndex((entry) => entry.id === track.id)
+    setPendingPlay(track.id)
+    void player
+      .playTracks(playableTracks, index < 0 ? 0 : index)
+      .catch(() => undefined)
+      .finally(() => setPendingPlay(undefined))
   }
 
   /**
@@ -54,10 +67,11 @@ export default function Cloud(): JSX.Element {
    * player:state 广播回 store。
    */
   const playAll = (): void => {
-    if (playableTracks.length === 0) return
-    void call('player:playTracks', { tracks: playableTracks, startIndex: 0, randomStart: true }).catch(
-      () => undefined
-    )
+    if (playableTracks.length === 0 || queuingAll) return
+    setQueuingAll(true)
+    void call('player:playTracks', { tracks: playableTracks, startIndex: 0, randomStart: true })
+      .catch(() => undefined)
+      .finally(() => setQueuingAll(false))
   }
 
   const labelOf = (item: CloudSongDTO): string =>
@@ -95,17 +109,10 @@ export default function Cloud(): JSX.Element {
     })
   }
 
-  const used = quota.used ?? 0
-  const capacity = quota.capacity ?? 0
-  const percent = capacity > 0 ? Math.min(100, (used / capacity) * 100) : 0
-
   return (
     <div className="page">
       <div className="page__header">
         <h1 className="page__title">音乐云盘</h1>
-        <span className="page__subtitle">
-          {capacity > 0 ? `已使用 ${formatBytes(used)} / ${formatBytes(capacity)}` : '容量信息暂不可用'}
-        </span>
         <div className="cloud__actions">
           <button
             type="button"
@@ -118,8 +125,8 @@ export default function Cloud(): JSX.Element {
           </button>
           <button
             type="button"
-            className="button button--primary icon-label glass-btn"
-            disabled={playableTracks.length === 0}
+            className={`button button--primary icon-label glass-btn${queuingAll ? ' is-busy' : ''}`}
+            disabled={playableTracks.length === 0 || queuingAll}
             onClick={playAll}
           >
             <IconPlay size={14} />
@@ -127,18 +134,6 @@ export default function Cloud(): JSX.Element {
           </button>
         </div>
       </div>
-
-      {capacity > 0 ? (
-        <div className="cloud__quota">
-          <div className="cloud__bar">
-            <div className="cloud__bar-fill" style={{ width: `${percent}%` }} />
-          </div>
-          <span className="cloud__hint">
-            已列出 {paged.items.length} 首 · 占用 {percent.toFixed(1)}%
-            {paged.more ? '（还有更多）' : ''}
-          </span>
-        </div>
-      ) : null}
 
       {error ? <div className="page__error">{error}</div> : null}
 
@@ -165,6 +160,16 @@ export default function Cloud(): JSX.Element {
               const name = labelOf(item)
               const artist = track ? artistLine(track) : item.artist
               const current = track !== undefined && player.state.track?.id === track.id
+              const busy = track !== undefined && pendingPlay === track.id
+              const playTitle = !track
+                ? '不可播放'
+                : current
+                  ? player.state.playing
+                    ? '暂停'
+                    : '继续播放'
+                  : busy
+                    ? '正在准备播放'
+                    : '播放'
               return (
                 <div
                   key={item.songId}
@@ -177,11 +182,15 @@ export default function Cloud(): JSX.Element {
                   <div className="cloud__title">
                     <button
                       type="button"
-                      className="song-row__play glass-btn"
-                      title={track ? (current ? '正在播放' : '播放') : '不可播放'}
-                      aria-label={track ? (current ? '正在播放' : '播放') : '不可播放'}
-                      disabled={!track}
-                      onClick={() => play(item)}
+                      className={`song-row__play glass-btn${busy ? ' is-busy' : ''}`}
+                      title={playTitle}
+                      aria-label={playTitle}
+                      disabled={!track || busy}
+                      onClick={(event) => {
+                        // 行本身双击=播放：按钮自己处理掉，别让一次点击被算成两次。
+                        event.stopPropagation()
+                        play(item)
+                      }}
                     >
                       {current ? <IconPause size={14} /> : <IconPlay size={14} />}
                     </button>
@@ -202,7 +211,10 @@ export default function Cloud(): JSX.Element {
                       title="从云盘删除"
                       aria-label="从云盘删除"
                       disabled={deleting === item.songId}
-                      onClick={() => setPendingDelete(item)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setPendingDelete(item)
+                      }}
                     >
                       <IconTrash size={16} />
                     </button>

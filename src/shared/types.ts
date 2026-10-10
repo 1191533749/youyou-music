@@ -65,7 +65,8 @@ export const LYRIC_FONT_STACKS: Record<LyricFont, string> = {
 export interface TrackDTO {
   id: number
   name: string
-  artists: Array<{ id: number; name: string }>
+  /** 歌手头像（可能缺）：封面缺失时播放详情页用它兜底，不再用吉祥物占位。 */
+  artists: Array<{ id: number; name: string; picUrl?: string }>
   album: { id: number; name: string; picUrl?: string }
   durationMS: number
   alias: string[]
@@ -199,6 +200,10 @@ export interface SettingsDTO {
   theme: 'system' | 'light' | 'dark'
   /** UI language: follow the system, or force one. */
   language: 'system' | 'zh-Hans' | 'en'
+  /** 自定义壁纸已设置：渲染层通过 youyou-wallpaper:// 协议读取图片。 */
+  wallpaperSet: boolean
+  /** 每次换壁纸 +1，渲染层用它拼 URL 做缓存失效。 */
+  wallpaperVersion: number
   /** Unlock grey tracks from third-party sources. */
   unblockGreyTracks: boolean
   /**
@@ -208,6 +213,8 @@ export interface SettingsDTO {
   unblockSources: Array<'pyncmd' | 'kugou' | 'kuwo'>
   /** Keep a local copy of played tracks so they play offline. */
   offlineCacheEnabled: boolean
+  /** GPU 加速渲染；关闭后下次启动改用软件渲染（启动早期生效，需重启）。 */
+  hardwareAcceleration: boolean
 }
 
 export const DEFAULT_SETTINGS: SettingsDTO = {
@@ -230,9 +237,12 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   scrobble: true,
   theme: 'system',
   language: 'system',
+  wallpaperSet: false,
+  wallpaperVersion: 0,
   unblockGreyTracks: true,
   unblockSources: ['pyncmd', 'kugou', 'kuwo'],
-  offlineCacheEnabled: true
+  offlineCacheEnabled: true,
+  hardwareAcceleration: true
 }
 
 export interface AudioDeviceDTO {

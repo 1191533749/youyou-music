@@ -3,6 +3,7 @@
  * window control.
  */
 import { app, dialog, shell } from 'electron'
+import type { OpenDialogOptions } from 'electron'
 import { execFile } from 'node:child_process'
 import { promises as fsp } from 'node:fs'
 import * as path from 'node:path'
@@ -77,6 +78,53 @@ export function registerAppHandlers(context: AppContext): void {
       : await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
     if (result.canceled || result.filePaths.length === 0) return undefined
     return result.filePaths[0]
+  })
+
+  // --- 自定义壁纸（渲染层用 youyou-wallpaper://current?v=N 显示） ---
+
+  defineHandler('settings:pickWallpaper', async () => {
+    const window = context.mainWindow()
+    const options: OpenDialogOptions = {
+      title: '选择壁纸图片',
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
+      properties: ['openFile']
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options)
+    const current = context.settings.current
+    if (result.canceled || result.filePaths.length === 0) {
+      return { set: current.wallpaperSet, version: current.wallpaperVersion }
+    }
+    const source = result.filePaths[0]
+    const stat = await fsp.stat(source)
+    if (stat.size > 16 * 1024 * 1024) throw new Error('壁纸图片太大（最大 16MB）')
+    const dir = path.join(app.getPath('userData'), 'wallpaper')
+    await fsp.mkdir(dir, { recursive: true })
+    // 清掉旧的 wallpaper.*，只保留最新一张，协议处理器按文件名前缀找。
+    for (const entry of await fsp.readdir(dir).catch(() => [] as string[])) {
+      if (entry.startsWith('wallpaper.')) await fsp.unlink(path.join(dir, entry)).catch(() => undefined)
+    }
+    const ext = path.extname(source).toLowerCase() || '.png'
+    const target = path.join(dir, `wallpaper${ext}`)
+    await fsp.copyFile(source, target)
+    const next = await context.settings.update({
+      wallpaperSet: true,
+      wallpaperVersion: (current.wallpaperVersion ?? 0) + 1
+    })
+    return { set: next.wallpaperSet, version: next.wallpaperVersion }
+  })
+
+  defineHandler('settings:clearWallpaper', async () => {
+    const dir = path.join(app.getPath('userData'), 'wallpaper')
+    for (const entry of await fsp.readdir(dir).catch(() => [] as string[])) {
+      if (entry.startsWith('wallpaper.')) await fsp.unlink(path.join(dir, entry)).catch(() => undefined)
+    }
+    const next = await context.settings.update({
+      wallpaperSet: false,
+      wallpaperVersion: (context.settings.current.wallpaperVersion ?? 0) + 1
+    })
+    return { set: false, version: next.wallpaperVersion }
   })
 
   defineHandler('app:entitlements', async () => {

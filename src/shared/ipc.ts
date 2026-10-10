@@ -150,6 +150,8 @@ export interface IPCContract {
   // --- home / discovery ---
   'home:feed': { request: void; response: HomeFeedDTO }
   'home:dailySongs': { request: void; response: TrackDTO[] }
+  /** 首页「今日热歌」：从飙升榜/热歌榜/新歌榜里随机挑，与每日推荐、其它板块不同源。 */
+  'home:hotSongs': { request: void; response: TrackDTO[] }
   /** 历史每日推荐：{ date?: 'YYYY-MM-DD' }，不传日期取最近一周。 */
   'home:dailyHistory': { request: { date?: string }; response: TrackDTO[] }
   'home:dislikeDaily': { request: { trackID: number }; response: TrackDTO }
@@ -273,6 +275,9 @@ export interface IPCContract {
   // --- settings / app ---
   'settings:get': { request: void; response: SettingsDTO }
   'settings:update': { request: Partial<SettingsDTO>; response: SettingsDTO }
+  /** 选择本地图片作为程序背景壁纸：主进程复制到 userData 并通过自定义协议提供。 */
+  'settings:pickWallpaper': { request: void; response: { set: boolean; version: number } }
+  'settings:clearWallpaper': { request: void; response: { set: boolean; version: number } }
   'app:info': { request: void; response: AppInfoDTO }
   'app:cacheUsage': { request: void; response: CacheUsageDTO }
   'app:clearCache': { request: { what: 'audio' | 'images' | 'all' }; response: CacheUsageDTO }
@@ -305,6 +310,8 @@ export interface IPCEvents {
   'app:navigate': { route: string }
   'settings:changed': SettingsDTO
   'window:maximized': { maximized: boolean }
+  /** 主窗口系统真全屏状态变化（F11 / 全屏按钮），全屏页据此隐藏控件。 */
+  'window:fullscreen': { fullscreen: boolean }
 }
 
 export type IPCEventName = keyof IPCEvents
@@ -321,6 +328,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'auth:userDetail',
   'home:feed',
   'home:dailySongs',
+  'home:hotSongs',
   'home:dailyHistory',
   'home:dislikeDaily',
   'home:personalized',
@@ -390,6 +398,8 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'update:install',
   'settings:get',
   'settings:update',
+  'settings:pickWallpaper',
+  'settings:clearWallpaper',
   'app:info',
   'app:cacheUsage',
   'app:clearCache',
@@ -409,5 +419,6 @@ export const IPC_EVENT_NAMES: IPCEventName[] = [
   'app:error',
   'app:navigate',
   'settings:changed',
-  'window:maximized'
+  'window:maximized',
+  'window:fullscreen'
 ]

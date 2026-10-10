@@ -232,14 +232,37 @@ export default function DesktopLyrics(): JSX.Element {
     [setThrough]
   )
 
+  /**
+   * 命中测试按「拖动区矩形」判定，而不是只看事件落在哪个元素上：歌词行之间的空隙、
+   * 行尾空白同样属于可拖动区域。只按元素判定时，鼠标停在这些位置窗口会保持穿透，
+   * 按下去自然拖不动（也就是「有时拖不动」）。
+   */
+  const overDragArea = useCallback((event: ReactMouseEvent<HTMLDivElement>): boolean => {
+    const box = dragRef.current?.getBoundingClientRect()
+    if (!box) return false
+    return (
+      event.clientX >= box.left &&
+      event.clientX <= box.right &&
+      event.clientY >= box.top &&
+      event.clientY <= box.bottom
+    )
+  }, [])
+
   const handleMouseMove = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       const target = event.target instanceof Element ? event.target : null
-      const overText = matches(target, '.desktop-lyrics__drag')
+      const overText = overDragArea(event)
       // 按钮也要算可交互：否则从歌词移向按钮的一瞬间窗口就穿透了，点不中。
       const interactive = overText || matches(target, '.desktop-lyrics__controls')
 
       const now = Date.now()
+      // 从「穿透」切回「可交互」必须立刻生效，不能等节流窗口：晚这几十毫秒里按下鼠标，
+      // 按下事件已经被穿透到下面的窗口，拖拽就起不来（这是拖动时好时坏的直接原因）。
+      if (interactive && !hoveringRef.current) {
+        lastHitTestRef.current = now
+        applyHitTest(true)
+        return
+      }
       if (now - lastHitTestRef.current >= HIT_TEST_THROTTLE_MS) {
         lastHitTestRef.current = now
         applyHitTest(interactive)
@@ -254,8 +277,15 @@ export default function DesktopLyrics(): JSX.Element {
         applyHitTest(interactive)
       }, HIT_TEST_THROTTLE_MS)
     },
-    [applyHitTest]
+    [applyHitTest, overDragArea]
   )
+
+  // 按下时再保一次底：万一状态与实际不一致，先把窗口切成可交互，拖动才不会被吃掉。
+  const handleMouseDown = useCallback(() => {
+    if (locked || throughRef.current === false) return
+    throughRef.current = false
+    void call('lyrics:desktopClickThrough', { through: false }).catch(() => undefined)
+  }, [locked])
 
   // 鼠标整体离开窗口：收起按钮并恢复穿透。
   const handleMouseLeave = useCallback(() => {
@@ -327,7 +357,9 @@ export default function DesktopLyrics(): JSX.Element {
       }${hovering ? ' desktop-lyrics--hover' : ''}`}
       style={{ fontSize, opacity }}
       title={locked ? '已锁定 · 悬停歌词可解锁' : '拖动可移动 · 悬停歌词可锁定或换特效'}
+      onMouseEnter={handleMouseMove}
       onMouseMove={handleMouseMove}
+      onMouseDown={handleMouseDown}
       onMouseLeave={handleMouseLeave}
     >
       <div ref={dragRef} className="desktop-lyrics__drag">

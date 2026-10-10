@@ -21,9 +21,11 @@ import {
   onEvent,
   useNavigation,
   usePlayerStore,
-  wordProgress,
   type Route
 } from '../lib/contract'
+// 逐字卡拉OK 的时间轴工具：contract 只转出了三个歌词查询函数，
+// lyricCharTimeline 这些新加的按源文件直接引入（与 hooks 的引入方式一致）。
+import { charFillRatio, lyricCharTimeline, lyricLineWindow } from '../lib/lyricsUtils'
 // 播放模式的三个纯展示 helper 只在 store 里导出（用户只面对一个模式按钮）。
 import { currentPlayMode, cyclePlayMode, playModeLabel } from '../store/player'
 import {
@@ -48,13 +50,8 @@ import {
   IconVolume,
   IconVolumeMute
 } from '../components/Icons'
+import { useImageReady } from '../components/FishAvatar'
 import type { LyricLineDTO, LyricsDTO, SettingsDTO } from '@shared/types'
-
-interface Word {
-  text: string
-  start: number
-  duration: number
-}
 
 /** 视觉特效，数组顺序就是切换顺序，默认第一个（黑胶）。 */
 const VISUALS = [
@@ -66,11 +63,17 @@ const VISUALS = [
 
 type Visual = (typeof VISUALS)[number]['value']
 
-/** 歌词特效，默认卡拉 OK。 */
+/**
+ * 歌词特效，默认卡拉 OK。
+ *
+ * 「淡入淡出」改名为「经典」：它的做法本来就是主流播放器的那套排版（没唱到的
+ * 句子压暗、当前句清晰可读），名字与设置页里桌面歌词的「经典」也对得上。
+ * 存过的旧值（fade）会在 readStoredChoice 里失配，自动回默认档。
+ */
 const LYRIC_EFFECTS = [
   { value: 'karaoke', label: '卡拉OK' },
   { value: 'zoom', label: '渐变放大' },
-  { value: 'fade', label: '淡入淡出' },
+  { value: 'classic', label: '经典' },
   { value: 'neon', label: '霓虹' }
 ] as const
 
@@ -289,7 +292,9 @@ export default function NowPlaying(): JSX.Element {
     return activeIndexOf(lyrics, state.position)
   }, [lyrics, state.position])
 
-  const accent = useArtworkAccent(current?.album.picUrl)
+  // 视觉区、背景与取色共用一个图源：专辑封面缺席时退回歌手头像。
+  const artPic = current?.album.picUrl ?? current?.artists[0]?.picUrl
+  const accent = useArtworkAccent(artPic)
 
   // --- 歌词自动滚动 ------------------------------------------------------
 
@@ -345,7 +350,26 @@ export default function NowPlaying(): JSX.Element {
   const style = accent
     ? ({ '--np-accent': accent.color, '--np-accent-deep': accent.deep } as CSSProperties)
     : undefined
-  const cover = coverUrl(current?.album.picUrl, 640)
+  const cover = coverUrl(artPic, 640)
+
+  /**
+   * 播放/暂停按钮的即时反馈：主进程广播回来之前先按本地意图翻转图标与文案，
+   * 广播一到（或 1.5 秒兜底）就交还权威状态，免得点下去像没反应。
+   */
+  const [playIntent, setPlayIntent] = useState<boolean | undefined>(undefined)
+  const intentTimer = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    setPlayIntent(undefined)
+    window.clearTimeout(intentTimer.current)
+  }, [state.playing])
+  useEffect(() => () => window.clearTimeout(intentTimer.current), [])
+  const shownPlaying = playIntent ?? state.playing
+  const togglePlayback = (): void => {
+    setPlayIntent(!shownPlaying)
+    window.clearTimeout(intentTimer.current)
+    intentTimer.current = window.setTimeout(() => setPlayIntent(undefined), 1500)
+    void player.toggle()
+  }
 
   const visualLabel = VISUALS.find((item) => item.value === visual)?.label ?? ''
   const lyricLabel = LYRIC_EFFECTS.find((item) => item.value === lyricEffect)?.label ?? ''
@@ -396,18 +420,20 @@ export default function NowPlaying(): JSX.Element {
       </div>
 
       <header className="np-fs__bar">
-        {/* 全屏层的返回入口：按需求只留文字，不带箭头符号。 */}
-        <button type="button" className="np-fs__back" onClick={exit}>
-          返回
-        </button>
+        {/* 全屏层的返回入口：按需求只留文字，不带箭头符号；真全屏时没有返回按钮，用 ESC 退出。 */}
+        {systemFullScreen ? null : (
+          <button type="button" className="np-fs__back" onClick={exit}>
+            返回
+          </button>
+        )}
         <div className="np-fs__heading">
           <span className="np-fs__heading-title">正在播放</span>
           {current ? <span className="np-fs__heading-sub">{current.album.name}</span> : null}
         </div>
         <div className="np-fs__bar-actions">
           <span className="np-header__hint">
-            {state.playing ? <IconPause size={14} /> : <IconPlay size={14} />}
-            {state.playing ? '播放中' : current ? '已暂停' : '未在播放'}
+            {shownPlaying ? <IconPause size={14} /> : <IconPlay size={14} />}
+            {shownPlaying ? '播放中' : current ? '已暂停' : '未在播放'}
           </span>
           {/* 播放模式只有一个按钮：点一下切下一种（顺序 / 随机 / 循环全部 / 单曲循环），
               逻辑全在 store 的 cyclePlayMode/playModeLabel/currentPlayMode 里，
@@ -468,21 +494,107 @@ export default function NowPlaying(): JSX.Element {
           </button>
         </div>
       ) : (
-        <div className="np-fs__main">
-          <section className="np-fs__stage">
-            <VisualStage visual={visual} cover={cover} playing={state.playing} title={current.name} />
-          </section>
+        <>
+          <div className="np-fs__main">
+            <section className="np-fs__stage">
+              <VisualStage visual={visual} cover={cover} playing={state.playing} title={current.name} />
+            </section>
 
-          <section className="np-fs__side">
-            <div className="np-fs__meta">
-              <h1 className="np-fs__title" title={current.name}>
-                {current.name}
-              </h1>
-              <div className="np-fs__artist">{artistLine(current)}</div>
-              <div className="np-fs__album">{current.album.name}</div>
-              <div className="np-cover__badges">
-                {current.isCloud ? <span className="badge">云盘</span> : null}
+            <section className="np-fs__side">
+              <div className="np-fs__meta">
+                <h1 className="np-fs__title" title={current.name}>
+                  {current.name}
+                </h1>
+                <div className="np-fs__artist">{artistLine(current)}</div>
+                <div className="np-fs__album">{current.album.name}</div>
+                <div className="np-cover__badges">
+                  {current.isCloud ? <span className="badge">云盘</span> : null}
+                </div>
               </div>
+
+              <div className="np-lyrics np-fs__lyrics">
+                <div className="section__header np-lyrics__header">
+                  <h2 className="section__title">
+                    <IconMusic size={16} className="section__icon" />
+                    歌词
+                  </h2>
+                  {lyrics?.contributor ? <span className="section__more">贡献者：{lyrics.contributor}</span> : null}
+                </div>
+
+                {lyricsLoading ? (
+                  <div className="placeholder np-lyrics__state">
+                    <div className="loading-state">
+                      <IconDisc size={18} className="spin" />
+                      <span>正在加载歌词…</span>
+                    </div>
+                  </div>
+                ) : lyricsError ? (
+                  <div className="placeholder np-lyrics__state">
+                    <div className="placeholder__title">歌词加载失败</div>
+                    <div>{lyricsError}</div>
+                    <button type="button" className="button" onClick={() => setLyricsNonce((value) => value + 1)}>
+                      重试
+                    </button>
+                  </div>
+                ) : !lyrics || isEmptyLyrics(lyrics) ? (
+                  <div className="placeholder np-lyrics__state">
+                    {lyrics?.isInstrumental ? <IconMic size={26} className="np-lyrics__note" /> : null}
+                    <div className="placeholder__title">
+                      {lyrics?.isInstrumental ? '纯音乐，请欣赏' : '这首歌暂时没有歌词'}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className={`np-lyrics__list np-lyrics__list--${lyricEffect}`}
+                    ref={listRef}
+                    onWheel={pauseFollow}
+                    onTouchMove={pauseFollow}
+                    style={{ fontSize: lyricsFontSize }}
+                  >
+                    <ol className="np-lyrics__lines">
+                      {lyrics.lines.map((line, index) => (
+                        <LyricRow
+                          key={`${line.id}-${index}`}
+                          line={line}
+                          active={index === activeIndex}
+                          sung={activeIndex >= 0 && index < activeIndex}
+                          nextTime={lyrics.lines[index + 1]?.time}
+                          trackDuration={state.duration}
+                          position={state.position}
+                          effect={lyricEffect}
+                          onSeek={() => void player.seek(line.time)}
+                        />
+                      ))}
+                    </ol>
+                    <div className="np-lyrics__footer">
+                      {lyrics.translationContributor ? `翻译贡献者：${lyrics.translationContributor}` : ''}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* 进度条与播放控制沉到页面底部，上半部分整块留给歌词。 */}
+          <div className="np-fs__dock">
+            {/* 拖动时只更新本地显示，松手才发一次 IPC。 */}
+            <div className="np-fs__dock-progress">
+              <span className="np-fs__time">{formatDuration(shownPosition)}</span>
+              <input
+                type="range"
+                className="slider np-fs__range"
+                min={0}
+                max={durationMax}
+                value={Math.floor(shownPosition)}
+                aria-label="播放进度"
+                onChange={(event) => setDragPosition(Number(event.target.value))}
+                onPointerUp={commitSeek}
+                onKeyUp={commitSeek}
+                onBlur={commitSeek}
+              />
+              <span className="np-fs__time">{formatDuration(state.duration)}</span>
+            </div>
+            <div className="np-fs__dock-row">
               <div className="np-cover__controls">
                 <button
                   type="button"
@@ -496,11 +608,19 @@ export default function NowPlaying(): JSX.Element {
                 <button
                   type="button"
                   className="icon-button icon-button--primary"
-                  title={state.playing ? '暂停' : '播放'}
-                  aria-label={state.playing ? '暂停' : '播放'}
-                  onClick={() => void player.toggle()}
+                  title={shownPlaying ? '暂停' : '播放'}
+                  aria-label={shownPlaying ? '暂停' : '播放'}
+                  aria-pressed={shownPlaying}
+                  aria-busy={state.loading}
+                  onClick={togglePlayback}
                 >
-                  {state.playing ? <IconPause size={18} /> : <IconPlay size={18} />}
+                  {state.loading ? (
+                    <IconDisc size={18} className="spin" />
+                  ) : shownPlaying ? (
+                    <IconPause size={18} />
+                  ) : (
+                    <IconPlay size={18} />
+                  )}
                 </button>
                 <button
                   type="button"
@@ -512,112 +632,34 @@ export default function NowPlaying(): JSX.Element {
                   <IconNext size={18} />
                 </button>
               </div>
-
-              {/* 细进度条 + 音量：拖动时只更新本地显示，松手才发一次 IPC。 */}
-              <div className="np-fs__transport">
-                <div className="np-fs__progress">
-                  <span className="np-fs__time">{formatDuration(shownPosition)}</span>
-                  <input
-                    type="range"
-                    className="slider np-fs__range"
-                    min={0}
-                    max={durationMax}
-                    value={Math.floor(shownPosition)}
-                    aria-label="播放进度"
-                    onChange={(event) => setDragPosition(Number(event.target.value))}
-                    onPointerUp={commitSeek}
-                    onKeyUp={commitSeek}
-                    onBlur={commitSeek}
-                  />
-                  <span className="np-fs__time">{formatDuration(state.duration)}</span>
-                </div>
-                <div className="np-fs__volume">
-                  <button
-                    type="button"
-                    className="icon-button"
-                    title={state.muted ? '取消静音' : '静音'}
-                    aria-label={state.muted ? '取消静音' : '静音'}
-                    aria-pressed={state.muted}
-                    onClick={() => void player.setMuted(!state.muted)}
-                  >
-                    {state.muted ? <IconVolumeMute size={16} /> : <IconVolume size={16} />}
-                  </button>
-                  <input
-                    type="range"
-                    className="slider np-fs__range np-fs__range--volume"
-                    min={0}
-                    max={150}
-                    value={shownVolume}
-                    aria-label="音量"
-                    onChange={(event) => setDragVolume(Number(event.target.value))}
-                    onPointerUp={commitVolume}
-                    onKeyUp={commitVolume}
-                    onBlur={commitVolume}
-                  />
-                  <span className="np-fs__time">{Math.round(shownVolume)}%</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="np-lyrics np-fs__lyrics">
-              <div className="section__header np-lyrics__header">
-                <h2 className="section__title">
-                  <IconMusic size={16} className="section__icon" />
-                  歌词
-                </h2>
-                {lyrics?.contributor ? <span className="section__more">贡献者：{lyrics.contributor}</span> : null}
-              </div>
-
-              {lyricsLoading ? (
-                <div className="placeholder np-lyrics__state">
-                  <div className="loading-state">
-                    <IconDisc size={18} className="spin" />
-                    <span>正在加载歌词…</span>
-                  </div>
-                </div>
-              ) : lyricsError ? (
-                <div className="placeholder np-lyrics__state">
-                  <div className="placeholder__title">歌词加载失败</div>
-                  <div>{lyricsError}</div>
-                  <button type="button" className="button" onClick={() => setLyricsNonce((value) => value + 1)}>
-                    重试
-                  </button>
-                </div>
-              ) : !lyrics || isEmptyLyrics(lyrics) ? (
-                <div className="placeholder np-lyrics__state">
-                  {lyrics?.isInstrumental ? <IconMic size={26} className="np-lyrics__note" /> : null}
-                  <div className="placeholder__title">
-                    {lyrics?.isInstrumental ? '纯音乐，请欣赏' : '这首歌暂时没有歌词'}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className={`np-lyrics__list np-lyrics__list--${lyricEffect}`}
-                  ref={listRef}
-                  onWheel={pauseFollow}
-                  onTouchMove={pauseFollow}
-                  style={{ fontSize: lyricsFontSize }}
+              <div className="np-fs__volume">
+                <button
+                  type="button"
+                  className="icon-button"
+                  title={state.muted ? '取消静音' : '静音'}
+                  aria-label={state.muted ? '取消静音' : '静音'}
+                  aria-pressed={state.muted}
+                  onClick={() => void player.setMuted(!state.muted)}
                 >
-                  <ol className="np-lyrics__lines">
-                    {lyrics.lines.map((line, index) => (
-                      <LyricRow
-                        key={`${line.id}-${index}`}
-                        line={line}
-                        active={index === activeIndex}
-                        position={state.position}
-                        effect={lyricEffect}
-                        onSeek={() => void player.seek(line.time)}
-                      />
-                    ))}
-                  </ol>
-                  <div className="np-lyrics__footer">
-                    {lyrics.translationContributor ? `翻译贡献者：${lyrics.translationContributor}` : ''}
-                  </div>
-                </div>
-              )}
+                  {state.muted ? <IconVolumeMute size={16} /> : <IconVolume size={16} />}
+                </button>
+                <input
+                  type="range"
+                  className="slider np-fs__range np-fs__range--volume"
+                  min={0}
+                  max={150}
+                  value={shownVolume}
+                  aria-label="音量"
+                  onChange={(event) => setDragVolume(Number(event.target.value))}
+                  onPointerUp={commitVolume}
+                  onKeyUp={commitVolume}
+                  onBlur={commitVolume}
+                />
+                <span className="np-fs__time">{Math.round(shownVolume)}%</span>
+              </div>
             </div>
-          </section>
-        </div>
+          </div>
+        </>
       )}
 
       {/* 右下角：视觉效果与歌词特效各一个循环切换按钮，只改渲染方式。 */}
@@ -730,13 +772,16 @@ function VisualStage({
   playing: boolean
   title: string
 }): JSX.Element {
-  const art = cover ? (
-    <img src={cover} alt={`${title} 封面`} />
-  ) : (
-    <span className="card__placeholder">
-      <IconMusic size={34} />
-    </span>
-  )
+  const coverReady = useImageReady(cover)
+  // 封面没到（地址为空 / 加载中 / 加载失败）先用中性占位顶着，图一到就立刻换真图。
+  const art =
+    cover && coverReady ? (
+      <img src={cover} alt={`${title} 封面`} />
+    ) : (
+      <span className="np-art-fallback" aria-hidden="true">
+        <IconMusic size={48} />
+      </span>
+    )
   // 播放中才转/才跳：暂停时同样保留静态画面，不闪不空。
   const motion = playing ? ' is-playing' : ''
 
@@ -826,44 +871,54 @@ function VisualStage({
 /**
  * 一行歌词。
  *
- * 四种特效只是同一份数据的不同画法：卡拉 OK 用逐字时间戳切片点亮（words 存在
- * 时），其余三种按整行处理。`activeIndexOf` / `wordProgress` 的算法原样保留，
- * 这里只决定怎么把结果画出来。
+ * 四种特效只是同一份数据的不同画法：卡拉 OK 逐字点亮，其余三种整行处理。
+ * 哪一行在唱仍然由 `activeIndexOf` 决定，逐字的时间轴交给 lyricsUtils ——
+ * LRC 只有行级时间戳，所以要么用服务端给的逐字时间轴（words），要么把这一行
+ * 的时长按字数均分。
  */
 function LyricRow({
   line,
   active,
+  sung,
+  nextTime,
+  trackDuration,
   position,
   effect,
   onSeek
 }: {
   line: LyricLineDTO
   active: boolean
+  /** 这一句已经唱过去了：文字转暖橙，和还没唱到的句子区分开。 */
+  sung: boolean
+  nextTime?: number
+  trackDuration: number
   position: number
   effect: LyricEffect
   onSeek: () => void
 }): JSX.Element {
-  const words: Word[] = line.words ?? []
-  const karaoke = effect === 'karaoke' && words.length > 0
-  const progress = active && karaoke ? wordProgress(line, position) : 0
-
+  // 逐字推进不只卡拉OK用：霓虹档也要「已唱实色、未唱压暗」，所以这两档都造时间轴。
+  const perChar = effect === 'karaoke' || effect === 'neon'
+  // 只给正在唱的那一行造时间轴：其余行原样输出文字，长歌词不会白算一遍。
+  const chars = useMemo(
+    () => (perChar && active ? lyricCharTimeline(line, lyricLineWindow(line, nextTime, trackDuration).end) : null),
+    [perChar, active, line, nextTime, trackDuration]
+  )
   return (
-    <li className={`np-lyric np-lyric--${effect}${active ? ' is-active' : ''}`}>
+    <li className={`np-lyric np-lyric--${effect}${active ? ' is-active' : ''}${sung ? ' is-sung' : ''}`}>
       <button type="button" className="np-lyric__button" onClick={onSeek} title="跳到这一句">
-        {karaoke ? (
+        {chars ? (
           <span className="np-lyric__text">
-            {words.map((word, index) => {
-              const ratio = wordRatio(word, position) * 100
+            {chars.map((cell, index) => {
+              const ratio = charFillRatio(cell, position)
               return (
                 <span
-                  key={`${word.start}-${index}`}
-                  className="np-lyric__word"
-                  style={{
-                    // 已唱部分用强调色、未唱部分用次级文字色，两段拼成一条渐变。
-                    backgroundImage: `linear-gradient(90deg, var(--np-accent) ${ratio}%, var(--np-lyric-dim) ${ratio}%)`
-                  }}
+                  key={`${cell.start}-${index}`}
+                  className={`np-lyric__char${ratio > 0 && ratio < 1 ? ' is-singing' : ''}`}
+                  // 已唱到哪由这一个自定义属性决定，颜色在 CSS 里按它切两段；
+                  // 注册成 <percentage> 才能让浏览器把逐字推进插值成平滑过渡。
+                  style={{ '--np-char-fill': `${(ratio * 100).toFixed(2)}%` } as CSSProperties}
                 >
-                  {word.text}
+                  {cell.ch}
                 </span>
               )
             })}
@@ -874,19 +929,8 @@ function LyricRow({
         {line.romaji ? <span className="np-lyric__romaji">{line.romaji}</span> : null}
         {line.translation ? <span className="np-lyric__translation">{line.translation}</span> : null}
       </button>
-      {active && karaoke ? (
-        <span className="np-lyric__bar">
-          <span className="np-lyric__bar-fill" style={{ width: `${progress * 100}%` }} />
-        </span>
-      ) : null}
     </li>
   )
-}
-
-function wordRatio(word: Word, position: number): number {
-  if (position <= word.start) return 0
-  if (word.duration <= 0 || position >= word.start + word.duration) return 1
-  return (position - word.start) / word.duration
 }
 
 /**

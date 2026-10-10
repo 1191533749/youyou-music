@@ -1,11 +1,11 @@
 /**
  * 首页（内容首页排布）。
  *
- * 从上到下依次是：问候语、每日推荐（日期条 + 播放全部 + 封面网格）、
+ * 从上到下依次是：问候语、今日热歌（日期条 + 播放全部 + 封面网格）、
  * 猜你喜欢或推荐歌单、排行榜（横滑卡片，带前三预览）、热门歌手（圆形头像横滑）、
  * 精品歌单。
  *
- * 四个板块各用一条通道（`home:dailySongs` / `home:feed` / `explore:topArtists` /
+ * 四个板块各用一条通道（`home:hotSongs` / `home:feed` / `explore:topArtists` /
  * `explore:highQuality`），各自带 loading、错误重试与空态 —— 一条挂了不会让整页
  * 跟着白掉。调用一律走 contract 里的 call()，渲染进程不碰网络。
  */
@@ -49,8 +49,10 @@ export default function Home(): JSX.Element {
 
   // 每块各自取数：某一块失败只影响它自己，重试也只重试那一块。
   const feed = useAsync<HomeFeedDTO>(() => call('home:feed'), [])
-  const daily = useAsync<TrackDTO[]>(
-    () => (auth.loggedIn ? call('home:dailySongs') : Promise.resolve([])),
+  // 今日热歌：主进程从飙升榜 / 热歌榜 / 新歌榜随机洗牌取 12 首，每次进首页换一批；
+  // 未登录返回空数组，所以这里沿用「登录后再请求」的写法，省一次无用的 IPC。
+  const hot = useAsync<TrackDTO[]>(
+    () => (auth.loggedIn ? call('home:hotSongs') : Promise.resolve([])),
     [auth.loggedIn]
   )
   const artists = useAsync<ArtistSummaryDTO[]>(
@@ -74,7 +76,7 @@ export default function Home(): JSX.Element {
       : feedData.personalizedPlaylists
   }, [feedData])
 
-  const dailySongs = daily.data ?? []
+  const hotSongs = hot.data ?? []
   const nickname = auth.profile?.nickname
   const title = auth.loggedIn && nickname ? `${greeting()}，${nickname}` : '猜你喜欢'
 
@@ -94,14 +96,14 @@ export default function Home(): JSX.Element {
       <section className="page__section">
         <SectionHeader
           icon={IconCalendar}
-          title="每日推荐"
+          title="今日热歌"
           hint={`今天 ${formatDate(Date.now())}`}
           action={
-            dailySongs.length > 0 ? (
+            hotSongs.length > 0 ? (
               <button
                 type="button"
                 className="button section-action"
-                onClick={() => void player.playTracks(dailySongs, 0, { randomStart: true })}
+                onClick={() => void player.playTracks(hotSongs, 0, { randomStart: true })}
               >
                 <IconPlay size={14} />
                 播放全部
@@ -123,21 +125,21 @@ export default function Home(): JSX.Element {
           </div>
         ) : (
           <SectionShell
-            loading={auth.loading || daily.loading}
-            error={daily.error}
-            onRetry={daily.reload}
-            isEmpty={dailySongs.length === 0}
+            loading={auth.loading || hot.loading}
+            error={hot.error}
+            onRetry={hot.reload}
+            isEmpty={hotSongs.length === 0}
             emptyMessage="今天的每日推荐还没生成，过一会儿再来看看"
           >
             <div className="grid grid--playlists">
-              {dailySongs.map((track, index) => (
+              {hotSongs.map((track, index) => (
                 <ArtCard
                   key={`${track.id}-${index}`}
                   title={track.name}
                   subtitle={track.artists.map((artist) => artist.name).join(' / ')}
                   imageUrl={coverUrl(track.album.picUrl, 320)}
                   badge={formatDuration(track.durationMS / 1000)}
-                  onClick={() => void player.playTracks(dailySongs, index)}
+                  onClick={() => void player.playTracks(hotSongs, index)}
                 />
               ))}
             </div>
@@ -312,12 +314,13 @@ function SectionShell({
 }
 
 /**
- * 日期条：最近七天，只有今天是「当前」。
+ * 日期条：最近七天，点任意一天进「每日推荐」页看那天的日推。
  *
- * 日推接口只给当天的一份，所以历史日期不做成可点按钮 —— 点了也没有数据，
- * 做成按钮反而像坏了。
+ * 历史日期在主进程是按天落盘的（userData/daily-history/<日期>.json），所以过去几天
+ * 也点得动、看得到；当天高亮，和侧栏入口一样走 reset（daily 是一级页面）。
  */
 function DateStrip(): JSX.Element {
+  const navigation = useNavigation()
   const days = useMemo(() => {
     const list: Array<{ key: string; label: string; today: boolean }> = []
     for (let back = 6; back >= 0; back -= 1) {
@@ -333,11 +336,17 @@ function DateStrip(): JSX.Element {
   }, [])
 
   return (
-    <div className="home-dates" title="每日推荐只提供当天的一份">
+    <div className="home-dates">
       {days.map((day) => (
-        <span key={day.key} className={`home-date${day.today ? ' is-today' : ''}`}>
+        <button
+          key={day.key}
+          type="button"
+          className={`home-date${day.today ? ' is-today' : ''}`}
+          title={`${day.key} 的每日推荐`}
+          onClick={() => navigation.reset({ name: 'daily', date: day.key })}
+        >
           {day.label}
-        </span>
+        </button>
       ))}
     </div>
   )

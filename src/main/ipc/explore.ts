@@ -5,6 +5,8 @@
  */
 import { defineHandler } from './registry.js'
 import { searchExternal } from '../external/search.js'
+import { localDateKey } from '../storage/dailyHistory.js'
+import { fetchRemoteDaily, getKnownUID, saveRemoteDaily, setKnownUID, withTimeout } from '../storage/remoteDaily.js'
 import {
   mappingContextFrom,
   toAlbumDTO,
@@ -85,12 +87,62 @@ export function registerExploreHandlers(context: AppContext): void {
   })
 
   defineHandler('home:dailySongs', async () => {
-    return tracks(context, await context.api.dailyRecommendSongs())
+    const dtos = tracks(context, await context.api.dailyRecommendSongs())
+    // 网易云的历史日推接口已下线（weapi 空响应、eapi/明文 404），
+    // 「昨天的日推」只能靠快照：每次拿到今日列表就按日期落盘一份（本地+服务器）。
+    if (dtos.length > 0) {
+      const date = localDateKey(0)
+      context.dailyHistory.save(date, dtos)
+      void pushDailyToServer(context, date, dtos)
+    }
+    return dtos
   })
 
-  /** 历史每日推荐：可选日期（YYYY-MM-DD），不传则返回最近一周抓到的日推。 */
+  /** 首页「今日热歌」的曲库：飙升榜 / 热歌榜 / 新歌榜三张官方榜单。 */
+  const HOT_CHART_IDS = [19723756, 3778678, 3779629]
+
+  /**
+   * 首页「今日热歌」：用户要求首页内容不能和任何一个分类一样——
+   * 每日推荐（home:dailySongs）给了「今日推荐」，首页这里就从三张榜单
+   * 里随机挑 12 首（每次打开都会重新洗牌，所以叫「随机挑选今日热歌」）。
+   */
+  defineHandler('home:hotSongs', async () => {
+    const pool: Track[] = []
+    for (const id of HOT_CHART_IDS) {
+      const response = await context.api.playlistDetail(id).catch(() => undefined)
+      if (!response) continue
+      for (const track of response.playlist.tracks) pool.push(track)
+    }
+    const seen = new Set<number>()
+    const unique = pool.filter((track) => (seen.has(track.id) ? false : (seen.add(track.id), true)))
+    // Fisher–Yates 洗牌：每次进入首页都是不同的一批热歌。
+    for (let index = unique.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(Math.random() * (index + 1))
+      ;[unique[index], unique[swap]] = [unique[swap], unique[index]]
+    }
+    return tracks(context, unique.slice(0, 12))
+  })
+
+  /**
+   * 历史每日推荐：先问悠悠音乐自己的服务器（跨设备同步），拿不到就回本地快照，
+   * 最后再试网易云（个别账号/时期可能仍可用）。
+   */
   defineHandler('home:dailyHistory', async ({ date } = {}) => {
-    return tracks(context, await context.api.dailyRecommendHistory(date))
+    if (typeof date !== 'string' || date.length === 0) return []
+    const uid = await resolveUID(context)
+    if (uid !== undefined) {
+      const fromServer = await fetchRemoteDaily(uid, date)
+      if (fromServer) return fromServer
+    }
+    const local = context.dailyHistory.load(date)
+    if (local.length > 0) return local
+    const remote = tracks(context, await context.api.dailyRecommendHistory(date).catch(() => []))
+    if (remote.length > 0) {
+      context.dailyHistory.save(date, remote)
+      void pushDailyToServer(context, date, remote)
+      return remote
+    }
+    return []
   })
 
   /** 账号资料补充（性别/年龄/地区/签名），一起听的找听友需要。 */
@@ -318,4 +370,29 @@ export function stripEmoji(text: string): string {
     )
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
+
+/** 当前登录账号 uid：优先用登录时缓存的已知值，避免每次都打网易云接口。 */
+export async function resolveUID(context: AppContext): Promise<number | undefined> {
+  const known = getKnownUID()
+  if (known !== undefined) return known
+  if (!context.client.isLoggedIn) return undefined
+  try {
+    const profile = await withTimeout(context.api.userAccount(), 8000)
+    if (profile?.userId) {
+      setKnownUID(profile.userId)
+      return profile.userId
+    }
+  } catch {
+    // 网易云限流/超时：拿不到 uid 就只回本地快照，不让历史日期点击卡死。
+  }
+  return undefined
+}
+
+/** 把某天的日推上报到悠悠音乐服务器（登录了才上报；失败静默，不影响本地）。 */
+export async function pushDailyToServer(context: AppContext, date: string, dtos: ReturnType<typeof toTracksDTO>): Promise<void> {
+  const uid = await resolveUID(context)
+  if (uid === undefined) return
+  const ok = await saveRemoteDaily(uid, date, dtos)
+  context.log(ok ? `日推历史已同步到服务器 (${date}, ${dtos.length} 首)` : `日推历史同步服务器失败 (${date})`)
 }

@@ -5,17 +5,36 @@
  *   - 「今天」走原来的 home:dailySongs；
  *   - 其他日期走 home:dailyHistory({ date })，主进程按日期取那天的日推。
  *
- * 「不喜欢」不是删除：主进程会返回一首替换曲目，我们原地把那一行换掉。行号
- * 保持不变，用户能立刻看出「换了一首」，而不是列表突然短了一截。换歌只对今天
- * 有意义（历史日推是回看），所以日期不是今天时不提供这一行操作。
+ * 展示层是首页同款的封面卡片网格（.card + .grid--albums）：封面大图、歌名、歌手，
+ * 悬停出播放圈、点封面播放（正在播放的那首点一下是暂停/继续）。数据链路一行没动 ——
+ * 今天仍然是 home:dailySongs，历史日期仍然是 home:dailyHistory。
+ *
+ * 「不喜欢」不是删除：主进程会返回一首替换曲目，我们原地把那一张卡片换掉。位置
+ * 保持不变，用户能立刻看出「换了一首」，而不是网格突然少了一张。换歌只对今天
+ * 有意义（历史日推是回看），所以日期不是今天时不提供这一张卡片的操作。
  *
  * 未登录时路由也会渲染本页，所以这里自己处理未登录态：给一张轻提示卡引导去
  * 登录，而不是把整页让给二维码，也不去发注定会被拒的请求。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SongList, call, useAuthStore, useNavigation, usePlayerStore } from '../lib/contract'
+import {
+  artistLine,
+  call,
+  coverUrl,
+  useAuthStore,
+  useNavigation,
+  usePlayerStore,
+  type Route
+} from '../lib/contract'
 import { useAsync } from '../lib/hooks'
-import { IconCalendar, IconPlay, IconUser } from '../components/Icons'
+import {
+  IconCalendar,
+  IconClose,
+  IconDisc,
+  IconMusic,
+  IconPlay,
+  IconUser
+} from '../components/Icons'
 import { useToast } from '../components/Toast'
 import '../styles/daily.css'
 import type { TrackDTO } from '@shared/types'
@@ -73,6 +92,22 @@ export default function DailyPage(): JSX.Element {
   const isToday = selected === today.key
   const selectedDay = days.find((day) => day.key === selected) ?? today
 
+  /**
+   * 首页日期条会 navigation.reset({ name: 'daily', date }) 跳过来：把路由里带的日期
+   * 当成一次「点了那一天」。用 route 对象本身去重 —— 只在导航真的换了新对象时才切换，
+   * 否则用户在页面里手动改选日期之后，会被这条旧路由立刻拉回去。
+   * 切换走的还是 selected → loadHistory 那条既有链路，所以加载态（loadedDate !== selected）
+   * 与切日期完全一致。
+   */
+  const consumedRoute = useRef<Route | undefined>(undefined)
+  const route = navigation.route
+  useEffect(() => {
+    if (route.name !== 'daily' || !route.date) return
+    if (consumedRoute.current === route) return
+    consumedRoute.current = route
+    setSelected(route.date)
+  }, [route])
+
   // 未登录时不请求：主进程只会回 needLogin，页面直接用提示卡引导登录。
   const daily = useAsync<TrackDTO[]>(
     () => (auth.loggedIn ? call('home:dailySongs') : Promise.resolve([])),
@@ -83,6 +118,11 @@ export default function DailyPage(): JSX.Element {
   const [history, setHistory] = useState<TrackDTO[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | undefined>()
+  /**
+   * 已经有结果的那个历史日期。点日期时 selected 立刻变、请求还在路上，
+   * 这一个值还是上一天 —— 两者不一致就说明数据没到，界面必须停在加载态。
+   */
+  const [loadedDate, setLoadedDate] = useState<string | undefined>()
   const historyGeneration = useRef(0)
 
   const loadHistory = useCallback(
@@ -93,11 +133,14 @@ export default function DailyPage(): JSX.Element {
       setHistoryError(undefined)
       void call('home:dailyHistory', { date })
         .then((items) => {
-          if (generation === historyGeneration.current) setHistory(items)
+          if (generation !== historyGeneration.current) return
+          setHistory(items)
+          setLoadedDate(date)
         })
         .catch((cause) => {
           if (generation !== historyGeneration.current) return
           setHistory([])
+          setLoadedDate(date)
           setHistoryError(messageOf(cause))
         })
         .finally(() => {
@@ -128,7 +171,8 @@ export default function DailyPage(): JSX.Element {
 
   // 选中哪天就用哪天的数据；「播放全部」的队列自然也就是当天列表。
   const tracks = isToday ? daily.data ?? [] : history
-  const loading = isToday ? daily.loading : historyLoading
+  const historyPending = !isToday && loadedDate !== selected
+  const loading = isToday ? daily.loading : historyLoading || historyPending
   const error = isToday ? daily.error : historyError
   const retry = isToday ? daily.reload : (): void => loadHistory(selected)
 
@@ -144,6 +188,11 @@ export default function DailyPage(): JSX.Element {
     }
   }
 
+  /**
+   * 点卡片＝把当天列表当队列、从这首开始播（和首页/列表页的 onPlay 是同一套语义：
+   * 本来就正在放的这首再点一次也是从头播，不做暂停）。双击的两次点击因此都是
+   * 「播放」，不会出现点一下开始、第二下又停住的抖动。
+   */
   const play = (index: number): void => {
     void player.playTracks(tracks, index)
   }
@@ -253,25 +302,121 @@ export default function DailyPage(): JSX.Element {
         </div>
       ) : tracks.length === 0 ? (
         <div className="placeholder">
-          <div className="placeholder__title">{isToday ? '今天还没有推荐' : '这一天没有每日推荐记录'}</div>
+          <div className="placeholder__title">{isToday ? '今天还没有推荐' : '这一天没有留下记录'}</div>
+          {isToday ? null : <div>每日推荐只有当天打开过客户端才会同步到本地</div>}
         </div>
       ) : (
-        <div className="daily__panel">
-          <SongList
-            tracks={tracks}
-            currentTrackID={player.state.track?.id}
-            onPlay={play}
-            rowAction={
-              isToday
-                ? { label: '不喜欢，换一首', onSelect: (track, index) => void dislike(track, index) }
-                : undefined
-            }
-          />
+        <div className="grid grid--albums">
+          {tracks.map((track, index) => (
+            <DailyCard
+              key={`${index}-${track.id}`}
+              track={track}
+              index={index}
+              // 正在播放的那张亮起来：和列表页的选中行是同一套语义。
+              current={player.state.track?.id === track.id}
+              busy={replacing === track.id}
+              canDislike={isToday}
+              onPlay={play}
+              onDislike={dislike}
+            />
+          ))}
         </div>
       )}
 
       {toast.node}
     </div>
+  )
+}
+
+interface DailyCardProps {
+  track: TrackDTO
+  index: number
+  /** 这首就是播放条上正在放的那首：封面描一圈强调色。 */
+  current: boolean
+  /** 「不喜欢」的替换请求正在路上（只对今天有意义）。 */
+  busy: boolean
+  canDislike: boolean
+  onPlay: (index: number) => void
+  onDislike: (track: TrackDTO, index: number) => void
+}
+
+/**
+ * 一张封面卡片：封面大图（缺失时用中性占位）、歌名、歌手。
+ *
+ * 结构与首页卡片共用同一套类（.card / .card__art / .card__title / .card__meta），
+ * 这里只补三样首页卡片没有的东西：悬停播放圈（.daily-card__hint）、角上的
+ * 「不喜欢」（.daily-card__dislike）、当前播放的高亮。封面整块是一个按钮 ——
+ * 点哪儿都是播放，不用去瞄一个小图标。
+ */
+function DailyCard({
+  track,
+  index,
+  current,
+  busy,
+  canDislike,
+  onPlay,
+  onDislike
+}: DailyCardProps): JSX.Element {
+  const cover = coverUrl(track.album.picUrl, 512)
+  const [broken, setBroken] = useState(false)
+
+  // 换了一首之后封面地址会变：加载失败的标记要跟着重置，否则新封面会一直被占位图挡着。
+  useEffect(() => {
+    setBroken(false)
+  }, [cover])
+
+  const showPlaceholder = cover === undefined || broken
+
+  return (
+    <article
+      className={`card daily-card${current ? ' is-current' : ''}`}
+      // 双击卡片任意位置也是播放（和列表页 song-row 的 onDoubleClick 一致）：两次 click
+      // 都会走到 play()，同一个 index 从头再播一次，不会变成「开始又停住」。
+      onDoubleClick={() => onPlay(index)}
+    >
+      <div className="card__art">
+        {showPlaceholder ? (
+          <span className="card__placeholder">
+            <IconMusic size={28} />
+          </span>
+        ) : (
+          <img src={cover} alt="" loading="lazy" onError={() => setBroken(true)} />
+        )}
+        <button
+          type="button"
+          className="daily-card__hit"
+          aria-label={current ? `正在播放：${track.name}` : `播放 ${track.name}`}
+          title={current ? '重新播放' : '播放'}
+          onClick={() => onPlay(index)}
+        >
+          <span className="daily-card__hint" aria-hidden="true">
+            <IconPlay size={18} />
+          </span>
+        </button>
+        {canDislike ? (
+          <button
+            type="button"
+            className="daily-card__dislike"
+            aria-label={`不喜欢，换一首：${track.name}`}
+            title="不喜欢，换一首"
+            disabled={busy}
+            // 连点两下「不喜欢」不该顺带把这张卡片双击播放掉。
+            onDoubleClick={(event) => event.stopPropagation()}
+            onClick={() => onDislike(track, index)}
+          >
+            {busy ? (
+              <span className="spin">
+                <IconDisc size={13} />
+              </span>
+            ) : (
+              <IconClose size={13} />
+            )}
+          </button>
+        ) : null}
+      </div>
+      <div className="card__title">{track.name}</div>
+      <div className="card__meta">{artistLine(track)}</div>
+    </article>
   )
 }
 

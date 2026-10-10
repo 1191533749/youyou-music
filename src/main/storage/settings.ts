@@ -48,7 +48,15 @@ export class SettingsStore extends EventEmitter {
     this.settings = { ...this.settings, ...sanitise(patch) }
     const snapshot = this.settings
     this.writeQueue = this.writeQueue.then(() => this.persist(snapshot)).catch(() => undefined)
-    for (const listener of this.listeners('change') as Listener[]) listener({ ...snapshot })
+    for (const listener of this.listeners('change') as Listener[]) {
+      try {
+        listener({ ...snapshot })
+      } catch (cause) {
+        // 单个监听器异常（典型：桌面歌词窗口已被销毁仍被调用 showInactive）
+        // 绝不允许把 settings:update 打崩——否则设置页整体失灵。
+        console.error('[settings] change 监听器异常:', cause)
+      }
+    }
     return { ...snapshot }
   }
 
@@ -124,6 +132,14 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
         break
       case 'theme':
         if (value === 'system' || value === 'light' || value === 'dark') out.theme = value
+        break
+      case 'wallpaperSet':
+        if (typeof value === 'boolean') out.wallpaperSet = value
+        break
+      case 'wallpaperVersion':
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+          out.wallpaperVersion = Math.floor(value)
+        }
         break
       case 'language':
         if (value === 'system' || value === 'zh-Hans' || value === 'en') out.language = value
