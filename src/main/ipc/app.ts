@@ -10,6 +10,7 @@ import * as path from 'node:path'
 import { defineHandler } from './registry.js'
 import { toLyricsDTO } from '../lyrics/service.js'
 import { resolveMpvBinary } from '../audio/mpv.js'
+import { isPortableBuild } from '../update/service.js'
 import { encodeQR } from '../qrcode.js'
 import { setLogCollectorEnabled } from '../logCollector.js'
 import { QUALITY_OPTIONS, type SettingsDTO } from '@shared/types'
@@ -32,6 +33,7 @@ export function registerAppHandlers(context: AppContext): void {
       chrome: process.versions.chrome,
       node: process.versions.node,
       platform: process.platform,
+      portable: isPortableBuild(),
       mpv,
       mpvPath
     }

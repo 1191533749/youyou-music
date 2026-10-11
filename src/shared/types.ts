@@ -314,6 +314,11 @@ export interface AppInfoDTO {
   chrome: string
   node: string
   platform: string
+  /**
+   * 是否便携版形态（electron-builder portable 外壳）。
+   * 便携版用户多半没有代理、直连 GitHub 不稳：更新失败时要走官网手动下载兜底。
+   */
+  portable: boolean
   /** mpv version banner, when the backend was found. */
   mpv?: string
   mpvPath?: string

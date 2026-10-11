@@ -9,7 +9,7 @@
  * 资产命名约定：文件名含「便携版」→ portable，「安装版」→ installer。
  * 测试/内网场景可用环境变量 YOYOU_UPDATE_URL 指向一个 JSON 清单。
  */
-import { app } from 'electron'
+import { app, shell } from 'electron'
 import { createWriteStream, existsSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
@@ -392,6 +392,27 @@ function sha256File(file: string): string {
 /** 当前程序是不是便携版形态（electron-builder portable 会注入这两个环境变量）。 */
 export function isPortableBuild(): boolean {
   return Boolean(process.env.PORTABLE_EXECUTABLE_DIR) || /Portable/i.test(process.execPath)
+}
+
+/**
+ * 便携版更新失败时的备用线路：官网下载页。
+ * 便携版用户常常没有代理、直连 GitHub 不稳，与其让更新一直失败，
+ * 不如把官网打开让他自己下载（下载入口由站长手动维护）。
+ */
+export const FALLBACK_SITE = 'https://yy.ytw.asia/'
+
+/**
+ * 打开官网兜底。**只对便携版生效**——安装版继续走原来的更新链路。
+ * 非 Electron 环境（单测）或打开失败都只记日志，绝不抛异常影响主流程。
+ */
+export async function openSiteFallback(reason: string): Promise<void> {
+  if (!isPortableBuild()) return
+  try {
+    console.warn(`[update] 便携版更新失败，改为打开官网：${reason}`)
+    await shell?.openExternal?.(FALLBACK_SITE)
+  } catch (cause) {
+    console.warn(`[update] 打开官网失败：${describeCause(cause)}`)
+  }
 }
 
 /**

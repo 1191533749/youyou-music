@@ -747,7 +747,16 @@ export default function Settings(): JSX.Element {
                 void checkForUpdateInteractive()
                   .then((outcome) => {
                     if (outcome === 'latest') toast.show(`已是最新版本 v${info?.version ?? ''}`, 'success')
-                    else if (outcome === 'error') toast.show('检查更新失败，请稍后再试', 'error')
+                    else if (outcome === 'error') {
+                      // 便携版：直连 GitHub 不稳（没代理、网络波动）时走备用线路——
+                      // 自动打开官网，用户自己去官网下载，别让他卡在"更新失败"。
+                      if (info?.portable) {
+                        void call('app:openExternal', { url: 'https://yy.ytw.asia/' }).catch(() => undefined)
+                        toast.show('GitHub 更新不可用，已为你打开官网', 'info')
+                      } else {
+                        toast.show('检查更新失败，请稍后再试', 'error')
+                      }
+                    }
                     // 'update' 时全局弹窗出现，这里不需要再提示
                   })
                   .catch(() => toast.show('检查更新失败，请稍后再试', 'error'))

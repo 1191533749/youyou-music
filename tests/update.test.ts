@@ -5,10 +5,34 @@ import {
   checkForUpdates,
   compareVersions,
   downloadAsset,
+  isPortableBuild,
+  openSiteFallback,
   releaseToManifest,
   withGitHubHashes,
   type UpdateManifest
 } from '../src/main/update/service.js'
+
+describe('便携版更新失败的官网兜底', () => {
+  const original = process.env.PORTABLE_EXECUTABLE_DIR
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.PORTABLE_EXECUTABLE_DIR
+    else process.env.PORTABLE_EXECUTABLE_DIR = original
+  })
+
+  it('isPortableBuild 只看便携版外壳注入的环境变量（单测里 execPath 是 node，不算便携版）', () => {
+    delete process.env.PORTABLE_EXECUTABLE_DIR
+    expect(isPortableBuild()).toBe(false)
+    process.env.PORTABLE_EXECUTABLE_DIR = 'C:\\Users\\someone\\Desktop'
+    expect(isPortableBuild()).toBe(true)
+  })
+
+  it('兜底地址就是官网（下载入口由站长手动维护）', async () => {
+    // openSiteFallback 在非便携版下必须什么都不做（安装版不受影响）。
+    delete process.env.PORTABLE_EXECUTABLE_DIR
+    await expect(openSiteFallback('测试：非便携版不应触发')).resolves.toBeUndefined()
+  })
+})
 
 describe('compareVersions', () => {
   it('比较三段式版本号', () => {
