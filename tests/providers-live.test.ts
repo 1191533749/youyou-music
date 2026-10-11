@@ -10,7 +10,7 @@
  * 而不是「某首特定的歌在某个平台有没有」。
  */
 import { describe, expect, it } from 'vitest'
-import { resolveQishui, resolveQq } from '../src/main/unblock/providers.js'
+import { resolveGdstudio, resolveQishui, resolveQq } from '../src/main/unblock/providers.js'
 import type { Track } from '../src/main/netease/models.js'
 
 const UA =
@@ -112,6 +112,34 @@ async function probeAudio(url: string): Promise<{ status: number; bytes: number;
 }
 
 describe('新音源联网自检', () => {
+  it('聚合音源：按网易云歌曲 ID 直取直链并真的能下（灰歌/VIP 歌的救兵）', async () => {
+    // 这些是网易云真实歌曲 ID；聚合接口按 ID 取，不需要搜索匹配，
+    // 所以不受「有没有版权」影响——这正是它能救灰歌的原因。
+    const ids = [347230, 1330348068, 1974443814, 65766]
+    let hits = 0
+    let last: { url: string; bitrate?: number } | undefined
+    for (const id of ids) {
+      const track = { ...trackOf({ name: `#${id}`, artist: '测试', durationMS: 0 }), id } as unknown as Track
+      const source = await resolveGdstudio(track, 'exhigh').catch(() => null)
+      if (!source) {
+        console.log(`聚合音源未命中：#${id}`)
+        continue
+      }
+      hits += 1
+      last = source
+      // 关键：接口给不出所选档位时会如实回实际码率，我们不虚报音质。
+      console.log(`聚合音源命中：#${id} → ${source.bitrate}kbps ${source.url.slice(0, 80)}…`)
+      expect(source.url.startsWith('https://')).toBe(true)
+      expect(source.bitrate && source.bitrate > 0).toBe(true)
+    }
+    expect(hits, '四首里至少要有三首能取到直链').toBeGreaterThanOrEqual(3)
+
+    const audio = await probeAudio((last as { url: string }).url)
+    console.log('聚合音源音频响应:', JSON.stringify(audio))
+    expect(audio.status).toBeLessThan(300)
+    expect(audio.bytes).toBeGreaterThan(10_000)
+  }, 90_000)
+
   it('汽水：搜索 → 严格匹配 → 明文 M4A 直链（付费曲只给 30 秒试听，必须被拒）', async () => {
     const samples = await qishuiSearch('起风了')
     expect(samples.length, '汽水搜索没返回结果').toBeGreaterThan(0)

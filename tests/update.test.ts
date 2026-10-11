@@ -127,15 +127,17 @@ describe('update service 对本地清单源', () => {
   })
 
   it('检测到更高版本并给出形态；下载资产成功', async () => {
+    const { createHash } = await import('node:crypto')
     const payload = Buffer.from('悠悠音乐便携版0.9.0 假内容')
+    const payloadHash = createHash('sha256').update(payload).digest('hex')
     server = createServer((request, response) => {
       if (request.url === '/manifest.json') {
         const manifest: UpdateManifest = {
           version: '9.9.9',
           notes: '测试更新',
           assets: [
-            { name: '悠悠音乐便携版9.9.9.exe', url: `${baseURL}/portable.exe`, kind: 'portable' },
-            { name: '悠悠音乐安装版9.9.9.exe', url: `${baseURL}/installer.exe`, kind: 'installer' }
+            { name: '悠悠音乐便携版9.9.9.exe', url: `${baseURL}/portable.exe`, kind: 'portable', sha256: payloadHash },
+            { name: '悠悠音乐安装版9.9.9.exe', url: `${baseURL}/installer.exe`, kind: 'installer', sha256: payloadHash }
           ]
         }
         response.setHeader('content-type', 'application/json')
@@ -162,6 +164,47 @@ describe('update service 对本地清单源', () => {
 
     const local = await downloadAsset(result.assets[0])
     expect(local).toContain('悠悠音乐便携版9.9.9.exe')
+    delete process.env.YOYOU_UPDATE_URL
+  })
+
+  it('清单资产缺少 SHA-256 时整批拒绝（fail-closed）', async () => {
+    server = createServer((_request, response) => {
+      const manifest: UpdateManifest = {
+        version: '9.9.9',
+        notes: '无哈希清单',
+        assets: [{ name: '悠悠音乐便携版9.9.9.exe', url: 'http://127.0.0.1/x.exe', kind: 'portable' }]
+      }
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify(manifest))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('测试服务器未就绪')
+
+    process.env.YOYOU_UPDATE_URL = `http://127.0.0.1:${address.port}/manifest.json`
+    const result = await checkForUpdates('0.3.0')
+    expect(result.assets).toHaveLength(0)
+    expect(result.latest).toBeUndefined()
+    delete process.env.YOYOU_UPDATE_URL
+  })
+
+  it('GitHub Release 没有 sha256sums.txt 时同样不提供更新（fail-closed）', async () => {
+    server = createServer((_request, response) => {
+      const release = {
+        tag_name: 'v9.9.9',
+        assets: [{ name: 'YouyouMusic-Portable-9.9.9.exe', browser_download_url: 'http://127.0.0.1/p.exe' }]
+      }
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify(release))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('测试服务器未就绪')
+
+    process.env.YOYOU_UPDATE_URL = `http://127.0.0.1:${address.port}/release.json`
+    const result = await checkForUpdates('0.3.0')
+    expect(result.assets).toHaveLength(0)
+    expect(result.latest).toBeUndefined()
     delete process.env.YOYOU_UPDATE_URL
   })
 

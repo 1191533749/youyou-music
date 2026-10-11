@@ -1,10 +1,11 @@
 /**
  * 灰色/付费歌曲的第三方音源解析。
  *
- * 策略：按「歌名 + 歌手」在各平台搜索，再用严格匹配确认是同一首歌，最后换出直链。
- * 顺序：汽水 → 酷狗 → 酷我 → QQ（汽水 h5 接口免签名、约 0.8 秒且给明文 M4A 三档）。
+ * 策略分两种：能按网易云歌曲 ID 直取的（聚合音源）先取，天然就是同一首歌；
+ * 取不到再按「歌名 + 歌手」在各平台搜索，用严格匹配确认是同一首歌后换直链。
+ * 顺序：聚合音源 → 汽水 → 酷狗 → 酷我 → QQ。
  *
- * 严格匹配是这套方案能用的关键：只认时长相差 5 秒以内、标题归一化后相同、
+ * 严格匹配是搜索这条路能用的关键：只认时长相差 5 秒以内、标题归一化后相同、
  * 且「伴奏/翻唱/remix/live」等版本标记完全一致的结果。宁可返回"没找到"，
  * 也不能拿一首翻唱糊弄用户。
  */
@@ -12,11 +13,12 @@ import { QUALITY_OPTIONS, type QualityLevel } from '@shared/types'
 import type { Track } from '../netease/models.js'
 import { probeStream } from '../player/streamProbe.js'
 
-export type AudioSourceID = 'qishui' | 'kugou' | 'kuwo' | 'qq'
+export type AudioSourceID = 'gdstudio' | 'qishui' | 'kugou' | 'kuwo' | 'qq'
 
-export const AUDIO_SOURCE_IDS: AudioSourceID[] = ['qishui', 'kugou', 'kuwo', 'qq']
+export const AUDIO_SOURCE_IDS: AudioSourceID[] = ['gdstudio', 'qishui', 'kugou', 'kuwo', 'qq']
 
 export const AUDIO_SOURCE_NAMES: Record<AudioSourceID, string> = {
+  gdstudio: '聚合音源',
   qishui: '汽水音乐',
   kugou: '酷狗音乐',
   kuwo: '酷我音乐',
@@ -130,6 +132,90 @@ async function fetchText(url: string, ua = USER_AGENT): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// 聚合音源（按网易云歌曲 ID 直取）
+// ---------------------------------------------------------------------------
+
+/**
+ * 直接拿网易云歌曲 ID 换直链，**不需要搜索与匹配**，因此天然是同一首歌，
+ * 也是灰歌/VIP 歌唯一能稳定拿到完整音源的一条路（上游 kumone 把它命名为
+ * `pyncmd` 并排在所有音源之前）。返回的是网易云自己的 CDN 直链。
+ */
+const GD_API = 'https://music-api.gdstudio.xyz/api.php'
+
+/**
+ * 用户选的音质档位 → 接口的 `br` 参数。实测档位：128 / 192 / 320 kbps MP3、
+ * 999（无损 FLAC）。接口给不出所选档位时会**如实回报实际码率**，界面据此
+ * 显示真实音质，不虚报。
+ */
+const GD_BITRATE_BY_LEVEL: Record<QualityLevel, number> = {
+  standard: 128,
+  higher: 192,
+  exhigh: 320,
+  lossless: 999,
+  hires: 999,
+  jyeffect: 999,
+  sky: 999,
+  jymaster: 999
+}
+
+async function fetchGdstudio(trackID: number, bitrate: number): Promise<ResolvedAudioSource | null> {
+  const payload = await fetchJSON(
+    `${GD_API}?types=url&source=netease&id=${trackID}&br=${bitrate}`
+  )
+  const url = typeof payload?.url === 'string' ? payload.url.trim() : ''
+  const actual = Number(payload?.br ?? 0)
+  if (!url || !(actual > 0)) return null
+  return {
+    id: 'gdstudio',
+    displayName: AUDIO_SOURCE_NAMES.gdstudio,
+    url: url.replace(/^http:\/\//, 'https://'),
+    bitrate: actual
+  }
+}
+
+/**
+ * 同一首歌上刚刚「起播失败」的聚合档位。聚合接口每次请求给的 CDN 主机/路径
+ * 并不固定，所以换一档重新要一次常常就活了（低档位文件更小、更快起播）。
+ * 只在内存里记一小会儿：过了时间就当没发生过，别把一次偶发故障记一辈子。
+ */
+const gdUnplayable = new Map<number, { bitrate: number; at: number }>()
+const GD_UNPLAYABLE_TTL_MS = 10 * 60_000
+
+/** 记下「这个档位在这台机器上起播不出来」，下次解析换一档。 */
+export function noteGdstudioUnplayable(trackID: number, bitrate?: number): void {
+  if (!(trackID > 0)) return
+  gdUnplayable.set(trackID, { bitrate: bitrate && bitrate > 0 ? bitrate : 0, at: Date.now() })
+}
+
+function gdAvoided(trackID: number): number {
+  const record = gdUnplayable.get(trackID)
+  if (!record) return 0
+  if (Date.now() - record.at > GD_UNPLAYABLE_TTL_MS) {
+    gdUnplayable.delete(trackID)
+    return 0
+  }
+  return record.bitrate
+}
+
+export async function resolveGdstudio(
+  track: Track,
+  preferred?: QualityLevel
+): Promise<ResolvedAudioSource | null> {
+  if (!(track.id > 0)) return null
+  let wanted = GD_BITRATE_BY_LEVEL[preferred ?? 'exhigh']
+  // 刚失败过的那一档不再问：换成 128k——文件最小、起播最快，
+  // 对用户来说「能完整听」比「标着 320k 但卡在 0:00」重要得多。
+  const avoided = gdAvoided(track.id)
+  if (avoided && (avoided === wanted || wanted === 999)) wanted = 128
+  const first = await fetchGdstudio(track.id, wanted).catch(() => null)
+  if (first) return first
+  // 选无损/母带时接口偶尔只给 MP3 档，或干脆空手；退一档再要一次，
+  // 拿不到就交给后面的音源，绝不在这里拖时间。
+  if (wanted === 320) return null
+  return fetchGdstudio(track.id, 320).catch(() => null)
+}
+
+// ---------------------------------------------------------------------------
 // 汽水音乐（抖音）
 // ---------------------------------------------------------------------------
 
@@ -208,20 +294,24 @@ async function fetchQishuiGears(trackID: string): Promise<QishuiGear[]> {
   for (const entry of list) {
     const url = typeof entry?.main_url === 'string' ? entry.main_url : entry?.backup_url
     if (typeof url !== 'string' || !url.startsWith('http')) continue
-    // `video_meta.bitrate` 是真值；URL 里的 `br` 是取整后的值，只作兜底。
+    // 接口给的码率是 **bps**（实测 65452 = 65.4kbps，正对应汽水 65 档），
+    // 而界面/音质映射用的是 kbps：这里统一换算，否则 65kbps 的 AAC 会被
+    // 当成 65452kbps 报成「无损」。URL 里的 `br` 只作兜底。
     const meta = entry?.video_meta
-    const metaBitrate = Number(meta?.bitrate ?? 0)
-    let bitrate: number | undefined = metaBitrate > 0 ? metaBitrate : undefined
-    if (!bitrate) {
+    let rawBps = Number(meta?.bitrate ?? 0)
+    if (!(rawBps > 0)) {
       try {
-        const parsed = Number(new URL(url).searchParams.get('br') ?? 0)
-        if (parsed > 0) bitrate = parsed
+        rawBps = Number(new URL(url).searchParams.get('br') ?? 0)
       } catch {
-        bitrate = undefined
+        rawBps = 0
       }
     }
+    if (!(rawBps > 0)) continue
+    // 少数情况下该字段确实以 kbps 给出（<1000 时按 kbps 处理）。
+    const bitrate = rawBps > 1000 ? Math.round(rawBps / 1000) : Math.round(rawBps)
     const size = Number(meta?.size ?? 0)
-    const durationMS = bitrate && size > 0 ? (size * 8 * 1000) / bitrate : undefined
+    // 时长必须用原始 bps 反推：bitrate 已是 kbps，直接代入会差 1000 倍。
+    const durationMS = size > 0 ? (size * 8 * 1000) / rawBps : undefined
     gears.push({ url, bitrate, durationMS })
   }
   return gears
@@ -624,6 +714,7 @@ export type AudioSourceProvider = (
 ) => Promise<ResolvedAudioSource | null>
 
 export const PROVIDERS: Record<AudioSourceID, AudioSourceProvider> = {
+  gdstudio: resolveGdstudio,
   qishui: resolveQishui,
   kugou: resolveKugou,
   kuwo: resolveKuwo,

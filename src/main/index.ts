@@ -84,11 +84,31 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const logLines: string[] = []
+/**
+ * 打包后 console 看不见，所有 log() 同时落一份本地文件（`userData/main.log`），
+ * 出问题时能直接看回放全过程的解析/换源/失败原因。超过 1MB 只保留尾部，
+ * 避免长期运行把磁盘写满。
+ */
+const LOG_FILE_MAX_BYTES = 1_000_000
+let logFilePath: string | undefined
+function appendLogFile(line: string): void {
+  try {
+    logFilePath ??= path.join(app.getPath('userData'), 'main.log')
+    fs.appendFileSync(logFilePath, line + '\n')
+    if (fs.statSync(logFilePath).size > LOG_FILE_MAX_BYTES) {
+      const kept = fs.readFileSync(logFilePath, 'utf8').split('\n').slice(-2000).join('\n')
+      fs.writeFileSync(logFilePath, kept)
+    }
+  } catch {
+    // 写日志失败绝不能影响播放。
+  }
+}
 function log(message: string): void {
   const line = `[${new Date().toISOString()}] ${message}`
   logLines.push(line)
   if (logLines.length > 500) logLines.shift()
   if (!app.isPackaged) console.log(line)
+  appendLogFile(line)
 }
 
 let mainWindow: BrowserWindow | undefined
@@ -113,7 +133,9 @@ function createMainWindow(): BrowserWindow {
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // preload 只依赖 electron 提供的 contextBridge/ipcRenderer（其余常量随包内联），
+      // 沙箱下完全可用；渲染进程始终跑在无 Node 权限的沙箱里。
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       // Cover art and audio come from NetEase's CDN, which the renderer only
@@ -174,7 +196,7 @@ function createLyricsWindow(): BrowserWindow {
     focusable: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false
@@ -562,14 +584,24 @@ async function bootstrap(): Promise<void> {
 
   // Volume from the previous session is applied once mpv is up; a missing mpv
   // must not stop the rest of the app from working.
-  try {
-    await mpv.start()
-    await mpv.setVolume(settings.current.volume)
-  } catch (cause) {
-    log(`mpv 启动失败: ${String(cause)}`)
-    sendEvent(context, 'app:error', {
-      message: `音频后端启动失败：${String(cause)}。请确认 vendor/mpv/mpv.exe 存在。`
-    })
+  //
+  // 起不来时先自己再试两次（每次换一条新的命名管道）：第一次握手失败常常是
+  // 临时状况（自解压还没落盘、杀软拦一下）。技术原因只写日志，界面不留
+  // 「失败」字样与内部细节——用户要的是能播，不是看 ENOENT 路径。
+  let mpvReady = false
+  for (let attempt = 1; attempt <= 3 && !mpvReady; attempt += 1) {
+    try {
+      await mpv.start()
+      await mpv.setVolume(settings.current.volume)
+      mpvReady = true
+    } catch (cause) {
+      log(`mpv 启动失败（第 ${attempt}/3 次）: ${String(cause)}`)
+      await mpv.stop().catch(() => undefined)
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 900 * attempt))
+    }
+  }
+  if (!mpvReady) {
+    sendEvent(context, 'app:error', { message: '播放组件未就绪，请重启悠悠音乐' })
   }
 
   if (process.env.YOYOU_SMOKE_TEST === '1') {

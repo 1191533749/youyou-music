@@ -605,17 +605,33 @@
   background: var(--bg);
   /*
    * 窗口是无边框 + 自绘标题栏（global.css 的 .titlebar 带 -webkit-app-region: drag，
-   * 高 44px）。全屏层盖住了那条拖动区，必须显式声明 no-drag：拖动区是按元素盒子
-   * 算的，一个叠在上面的、没声明 no-drag 的层并不能取消它，于是落在顶部 44px 里的
-   * 点击会被窗口拖动吞掉 —— 表现就是顶栏按钮「只有下边缘能点」。下面三行把整层
-   * 以及顶栏、按钮全部标成不拖动。
+   * 高 44px）。全屏层盖住了那条拖动区：拖动区是按元素盒子算的，一个叠在上面的、
+   * 声明了 drag 的层会把底下按钮的点击一起吞掉（旧表现是顶栏按钮「只有下边缘能点」），
+   * 所以整层先声明 no-drag，再单独把这一页自己的顶栏做成拖动区（见下）。
    */
   -webkit-app-region: no-drag;
 }
 
-.np-fullscreen .np-fs__bar,
-.np-fullscreen .np-fs__bar * {
+/*
+ * 「正在播放」页要能拖窗口（用户反馈：这个页面拖不动窗口）。
+ * 做法是把顶栏本身当标题栏用：顶栏可拖，里面的按钮与文字各自 no-drag。
+ * 顺序有意义 —— 下面两条 no-drag 规则同为 0,2,1 权重，标题的 drag 规则必须写在最后。
+ */
+.np-fullscreen .np-fs__bar {
+  -webkit-app-region: drag;
+  -webkit-user-select: none;
+}
+
+.np-fullscreen .np-fs__bar *,
+.np-fullscreen .np-fs__tool,
+.np-fullscreen .np-fs__bar-actions,
+.np-fullscreen .back-button {
   -webkit-app-region: no-drag;
+}
+
+.np-fullscreen .np-fs__heading,
+.np-fullscreen .np-fs__heading * {
+  -webkit-app-region: drag;
 }
 
 /* 背景层：模糊放大的封面 + 玻璃遮罩。整层自带底色，不依赖下面的应用外壳。 */

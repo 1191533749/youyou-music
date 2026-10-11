@@ -12,10 +12,21 @@ import { EventEmitter } from 'node:events'
 import { NeteaseAPI, SearchType } from '../netease/api.js'
 import { NeteaseAPIError } from '../netease/client.js'
 import { playability, playabilityReason, type Track } from '../netease/models.js'
-import { matchesTrack, AUDIO_SOURCE_NAMES, type AudioSourceID } from '../unblock/providers.js'
+import {
+  matchesTrack,
+  noteGdstudioUnplayable,
+  AUDIO_SOURCE_NAMES,
+  type AudioSourceID
+} from '../unblock/providers.js'
 import type { UnblockService } from '../unblock/service.js'
 import type { MpvController, MpvState } from '../audio/mpv.js'
 import { looksLikeNoticeBySize, probeStream, type StreamProbeResult } from './streamProbe.js'
+import {
+  alternateNeteaseCDN,
+  noteNeteaseCDNHostFailed,
+  noteNeteaseCDNHostReachable,
+  preferredNeteaseCDN
+} from './cdnHost.js'
 import { toSyntheticTrack } from '../external/search.js'
 import type { ExternalTrackDTO, QualityLevel, RepeatMode, TrackDTO } from '@shared/types'
 
@@ -32,6 +43,8 @@ interface ResolvedPlayback {
   format?: string
   cached: boolean
   remoteURL?: string
+  /** 官方接口直接给出的文件体积（字节）。有它就不必再探一次流，搜索校验能快一倍。 */
+  sizeBytes?: number
   /** 缓存归档用的音源标记（netease / qishui / kugou / kuwo / qq）。 */
   cacheVariant: string
   /** 走了第三方音源时显示给用户的来源名。 */
@@ -86,6 +99,14 @@ const PREWARM_TIMEOUT_MS = 4_000
  * 解析也够新鲜（第三方直链一般至少几小时内有效，过期由 mpv 报错自动换源兜底）。
  */
 const PREFETCH_TTL_MS = 10 * 60_000
+
+/**
+ * 搜索页可播性校验的判定缓存有效期（正/负都记）。
+ * 不缓存的话，同一首「整链解析失败」的歌每次搜索都要重跑十几秒的解析链；
+ * 但也不能记太久 —— 网络抖动、音源临时挂掉都可能让一首好歌当场判死，
+ * 所以 3 分钟后允许重新判定。
+ */
+const PLAYABLE_VERDICT_TTL_MS = 3 * 60_000
 
 /**
  * 起播后过多久才开始后台整首缓存。
@@ -227,6 +248,10 @@ export class PlayerController extends EventEmitter {
   private volume = 80
   private scrobbleSent = false
   private positionTimer?: NodeJS.Timeout
+  /** 起播证据等待期间用户手动暂停了：验证成功后别把状态扶回「播放中」。 */
+  private verificationPaused = false
+  /** mpv 是否处于 idle（无载入文件）：区分「用户暂停」与「流秒挂」。 */
+  private mpvIdle = true
   /** True while we are switching tracks, so `end-file` is not treated as an end. */
   private switching = false
   /** Guards against an in-flight resolve being overtaken by a newer play(). */
@@ -238,10 +263,26 @@ export class PlayerController extends EventEmitter {
    * 几十秒的解析链），配合队列剔除保证「放不出来的歌」不会反复拦路。
    */
   private deadTracks = new Set<number>()
+  /**
+   * 官方地址「开播后卡死」过的曲目：mpv 对死流会停在 file-loaded、
+   * playing=true 但 position 恒 0（0:00 永挂）。记下来后本会话内不再
+   * 尝试官方地址，直接走站内替代/第三方，避免四个候选全撞同一条坏流。
+   */
+  private officialStalled = new Set<number>()
+  /** 已经为某首歌换过 CDN 镜像主机重试：每首歌只给一次，避免两台主机来回打转。 */
+  private twinRetried = new Set<number>()
+  /** 已经为某首歌换过聚合音源档位重试：每首歌只给一次，避免在同一首上反复换档。 */
+  private aggregateRetried = new Set<number>()
   /** 搜索时后台预解析好的第三方直链缓存：命中即跳过联网解析（尤其第三方那几秒）。 */
   private prefetchedSources = new Map<number, { resolved: ResolvedPlayback; at: number }>()
   /** 正在后台预解析中的曲目：播放命中时直接 await 它，复用同一次解析，不再开第二条链路。 */
   private prefetchInflight = new Map<number, Promise<ResolvedPlayback | undefined>>()
+  /** 搜索页可播性校验的判定缓存（见 PLAYABLE_VERDICT_TTL_MS）。 */
+  private playableVerdicts = new Map<number, { ok: boolean; at: number }>()
+  /** 同一首正在校验时复用同一条 Promise，避免并发搜索把同一首重复解析几遍。 */
+  private verifyInflight = new Map<number, Promise<boolean>>()
+  /** 站外曲目（汽水/酷狗/酷我/QQ）的可播性判定缓存，键为 `source:sourceId`。 */
+  private externalVerdicts = new Map<string, { ok: boolean; at: number }>()
   /** 后台整首缓存的串行队列：同一时刻只下载一首，避免多路抢带宽。 */
   private cacheQueue: Promise<void> = Promise.resolve()
   /**
@@ -283,7 +324,9 @@ export class PlayerController extends EventEmitter {
       this.position = 0
       this.duration = 0
       this.loading = false
-      this.error = '播放器已停止，请重新播放'
+      // 同样不给用户看失败文案（用户明确要求界面里不要再出现这类提示）：
+      // 播放器没了就把状态收成「暂停」，用户点播放会重新拉起来。
+      this.error = undefined
       this.stopPositionTimer()
       this.emitSnapshot()
     })
@@ -324,6 +367,7 @@ export class PlayerController extends EventEmitter {
     if (!this.suppressMuteEcho) this.muteState = state.muted
     this.volume = state.volume
     this.loading = state.loading
+    this.mpvIdle = state.idle
     // 队列已经空了（登出/清空队列）之后，mpv 迟到的属性推送（idle=false、
     // paused=false）不能把状态扶回「播放中」，否则会出现 track=null 但
     // playing=true 的幽灵播放态，一直冻住。
@@ -487,6 +531,7 @@ export class PlayerController extends EventEmitter {
     this.servedQuality = undefined
     this.servedBitrate = undefined
     this.servedFrom = undefined
+    this.verificationPaused = false
     this.loading = true
     // 解析还没出结果时如实呈报「未在播放」：外部源坏链要等 ~20 秒超时，
     // 之前这里沿用上一首的 playing=true，UI 会假显示「在播但进度为 0」。
@@ -542,7 +587,20 @@ export class PlayerController extends EventEmitter {
         this.servedBitrate = resolved.bitrate
         this.servedFrom = resolved.servedFrom ?? resolved.servedNote
         this.source = resolved.source
-        const remote = !resolved.cached && resolved.remoteURL ? resolved.remoteURL : undefined
+        let remote = !resolved.cached && resolved.remoteURL ? resolved.remoteURL : undefined
+        // 网易云 CDN 是一对镜像主机（mN / mNc），签名在路径里、不绑主机：
+        // 近期连不上的那台换成它的镜像，能救回「直链没问题、只是这台 CDN
+        // 在本网络不可达」的歌（上游 kumone 的 NeteaseCDNHost 同一做法）。
+        if (remote) {
+          const preferred = preferredNeteaseCDN(remote)
+          if (preferred !== remote) {
+            this.deps.log?.(`CDN 主机近期不可达，改用镜像主机：${entry.track.name}`)
+            remote = preferred
+            resolved.remoteURL = preferred
+            resolved.source = preferred
+          }
+        }
+        this.source = resolved.source
         // 第三方音源（有 servedFrom）先探测：拿不到数据就当场换源，
         // 不用等 mpv 建连超时；拿到体积就能提前识破版权提示音。
         let probe: StreamProbeResult | undefined
@@ -587,7 +645,22 @@ export class PlayerController extends EventEmitter {
             )
             continue
           }
+          // 起播证据：loadfile 返回≠有声音。死流（CDN 半死不活）会让 mpv
+          // 停在 file-loaded、playing=true 但 position 恒 0——用户看到
+          // 0:00 永远不走字。等 position 越过 0.5s 才算真出声；超时没
+          // 动静就把这个源记失败、换下一个（官方源换站内替代/第三方）。
+          const evidence = await this.waitForStartEvidence(generation)
+          if (evidence === 'abort') return
+          if (evidence === 'stalled') {
+            this.markSourceFailed(entry, resolved)
+            this.deps.log?.(
+              `起播无数据（卡在 0:00），换下一个音源：${entry.track.name} 来自 ${resolved.servedFrom ?? '网易云官方'}`
+            )
+            continue
+          }
           verified = true
+          // 真出声了：这台主机（含镜像）记成健康，撤销之前的故障判定。
+          noteNeteaseCDNHostReachable(resolved.remoteURL ?? resolved.source)
           break
         } finally {
           if (verifyMuted) {
@@ -622,7 +695,8 @@ export class PlayerController extends EventEmitter {
           resolved.cacheVariant
         )
       }
-      this.playing = true
+      // 验证期间用户手动暂停的话保持暂停态（见 waitForStartEvidence）。
+      this.playing = !this.verificationPaused
       this.loadedTrackId = entry.track.id
       this.consecutiveFailures = 0
       this.startPositionTimer()
@@ -646,6 +720,9 @@ export class PlayerController extends EventEmitter {
       const MAX_AUTO_SKIP = 5
       this.consecutiveFailures += 1
       this.deadTracks.add(entry.track.id)
+      // 反手记一条「播不了」的判定：用户下次搜索同一首时会被直接过滤掉。
+      // 这正是「搜出来的歌要能播」的兜底 —— 校验当时网络抖动放过去了，这里补记。
+      this.playableVerdicts.set(entry.track.id, { ok: false, at: Date.now() })
       const failed = entry.track
       // 站外曲目在渲染层以 `source:sourceId` 为键展示，一并带出去好定位行。
       const externalKey = entry.external ? `${entry.external.source}:${entry.external.sourceId}` : undefined
@@ -659,12 +736,13 @@ export class PlayerController extends EventEmitter {
         this.error = undefined
         void this.playIndex(0)
       } else {
-        // 连续失败给一个绝对上限：全是坏歌的极端列表最多跳 5 首就停，
-        // 不会无限滑下去，也不会把用户晾在空错误上。
+        // 连续失败给一个绝对上限：全是坏歌的极端列表最多跳 5 首就停，不会无限滑下去。
+        // 停住时**不给用户看任何失败文案**（用户明确要求界面里不要再出现
+        // 「暂时无法播放，请稍后再试」这类提示）：播得了的自动挑出来播，挑不出来就
+        // 安静停住 —— 坏歌已经在上面从队列里剔掉、并通知渲染层把行隐藏了。
         this.consecutiveFailures = 0
-        this.error = '暂时无法播放，请稍后再试'
+        this.error = undefined
         this.playing = false
-        this.deps.onError?.(this.error)
       }
       return
     } finally {
@@ -711,17 +789,85 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
+   * 等「起播证据」：position 越过 0.5 秒才算真的出声。三类结果——
+   * 'ok'：出声（或用户手动暂停）；'stalled'：流卡死（0:00 不走字）；
+   * 'abort'：期间有新的播放请求接管（generation 变了/队列被清空）。
+   *
+   * 两档超时：file-loaded 之后 8 秒还不出数据 = 明确的死流（mpv 对这类
+   * 流会一直声称 playing、永不报错，是最常见的「点了没反应」来源）；
+   * 20 秒硬上限兜住连 file-loaded 都到不了的 open 挂死。
+   */
+  private waitForStartEvidence(generation: number): Promise<'ok' | 'stalled' | 'abort'> {
+    const SOFT_MS = 8_000
+    const HARD_MS = 20_000
+    const started = Date.now()
+    return new Promise((resolve) => {
+      // 先立即查一次（本地缓存/已经出声的流零等待通过），之后每秒轮询。
+      // position 属于新文件：mpv 在 loadfile 后会推 start-file 把 position
+      // 清零，之后的推送才可能 >0.5，不存在上一首的陈旧值混进来。
+      const tick = (): void => {
+        if (generation !== this.resolveGeneration || this.queue.length === 0) {
+          clearInterval(timer)
+          resolve('abort')
+          return
+        }
+        const elapsed = Date.now() - started
+        if (this.position > 0.5) {
+          clearInterval(timer)
+          resolve('ok')
+          return
+        }
+        // 用户在这几秒里手动点了暂停：歌本身没问题，别误杀换源。
+        // 用 mpvIdle 区分「暂停」（mpv 仍有载入，idle=false）与「流秒挂」
+        // （end-file 后 mpv 回 idle）：后者不算 ok，继续等/判死。
+        if (!this.playing && !this.loading && !this.mpvIdle) {
+          this.verificationPaused = true
+          clearInterval(timer)
+          resolve('ok')
+          return
+        }
+        if (elapsed >= HARD_MS || (elapsed >= SOFT_MS && !this.loading)) {
+          clearInterval(timer)
+          resolve('stalled')
+          return
+        }
+      }
+      const timer = setInterval(tick, 1_000)
+      tick()
+    })
+  }
+
+  /**
    * 把某个换源音源记进「本会话别再撞」的集合；如果它就是预解析好的那一条，
    * 顺手作废预解析结果——否则候选循环每次都会拿到同一个坏地址重试四遍。
    */
   private markSourceFailed(entry: QueueEntry, resolved: ResolvedPlayback): void {
     const variant = resolved.cacheVariant
-    if (variant && variant !== 'netease') {
+    if (variant === 'gdstudio' && !this.aggregateRetried.has(entry.track.id)) {
+      // 聚合音源失败时先别把它整个划掉：同一首歌换一档再问一次往往就活了
+      // （接口按请求给不同的 CDN 主机/路径，低档位文件更小也更快起播）。
+      // 只多给一次机会，再失败才把它记进 attempted 去换别的平台。
+      this.aggregateRetried.add(entry.track.id)
+      noteGdstudioUnplayable(entry.track.id, resolved.bitrate)
+      this.deps.log?.(`聚合直链起播失败，换个档位重试：${entry.track.name}`)
+    } else if (variant && variant !== 'netease') {
       this.attemptedSources(entry.track.id).add(variant as AudioSourceID)
     } else if (entry.external) {
       // preResolved 没带 sourceId（旧队列路径）时，按曲目所属平台记入：
       // 至少保证下一个候选不会重复解析回同一个平台的同一条坏地址。
       this.attemptedSources(entry.track.id).add(entry.external.source)
+    } else if (variant === 'netease' || variant === undefined) {
+      // 官方源坏链：先怀疑是这台 CDN 主机在本网络不可达（同一签名在镜像
+      // 主机上可取），换镜像再给一次机会；镜像也拿不到才整会话停用官方。
+      const url = resolved.remoteURL ?? resolved.source
+      noteNeteaseCDNHostFailed(url)
+      if (alternateNeteaseCDN(url) && !this.twinRetried.has(entry.track.id)) {
+        this.twinRetried.add(entry.track.id)
+        this.deps.log?.(`官方 CDN 主机无数据，改用镜像主机重试：${entry.track.name}`)
+      } else {
+        // 官方源坏链：本会话内不再试官方地址（见 officialStalled）。
+        this.officialStalled.add(entry.track.id)
+      }
     }
     if (entry.preResolvedFull === resolved) {
       entry.preResolvedFull = undefined
@@ -874,7 +1020,7 @@ export class PlayerController extends EventEmitter {
       const tainted =
         typeof variant === 'string' && variant !== 'netease' && attempted.has(variant as AudioSourceID)
       if (Date.now() - prefetched.at < PREFETCH_TTL_MS && !tainted) {
-        this.deps.log?.(`复用预热音源：${track.name} 来自 ${prefetched.resolved.servedFrom ?? '?'}`)
+        this.deps.log?.(`复用预热音源：${track.name} 来自 ${prefetched.resolved.servedFrom ?? '网易云官方'}`)
         return prefetched.resolved
       }
       this.prefetchedSources.delete(key)
@@ -909,21 +1055,25 @@ export class PlayerController extends EventEmitter {
     }
 
     // 1. 官方地址：受版权限制时会拿不到 url 或只给试听片段。
-    try {
-      const official = await this.resolveOfficialURL(track, requested)
-      if (official && !official.trialOnly) {
-        return {
-          source: official.url,
-          level: official.level,
-          claimedLevel: official.level,
-          format: official.format,
-          cached: false,
-          remoteURL: official.url,
-          cacheVariant: 'netease'
+    //    官方流开播卡死过的曲目（officialStalled）直接跳过这一步。
+    if (!this.officialStalled.has(track.id)) {
+      try {
+        const official = await this.resolveOfficialURL(track, requested)
+        if (official && !official.trialOnly) {
+          return {
+            source: official.url,
+            level: official.level,
+            claimedLevel: official.level,
+            format: official.format,
+            cached: false,
+            remoteURL: official.url,
+            sizeBytes: official.size,
+            cacheVariant: 'netease'
+          }
         }
+      } catch (cause) {
+        this.deps.log?.(`官方音源不可用 (${track.id}): ${describeError(cause)}`)
       }
-    } catch (cause) {
-      this.deps.log?.(`官方音源不可用 (${track.id}): ${describeError(cause)}`)
     }
 
     if (!this.deps.unblock.enabled) {
@@ -948,6 +1098,7 @@ export class PlayerController extends EventEmitter {
             format: resolved.format,
             cached: false,
             remoteURL: resolved.url,
+            sizeBytes: resolved.size,
             cacheVariant: 'netease',
             servedNote: '网易云其他版本'
           }
@@ -1025,6 +1176,93 @@ export class PlayerController extends EventEmitter {
     void inflight.finally(() => this.prefetchInflight.delete(key))
   }
 
+  /**
+   * 可播性校验（不播放、不影响正在播的歌）：搜索页在**返回结果之前**逐条调用，
+   * 只有真能拿到「在传数据的音源」的曲目才展示（用户要求：放不出来的不许展示）。
+   *
+   * 判定两步缺一不可：
+   *   1. 解析 —— 走完整解析链（官方 → 站内替代 → 第三方），拿不到任何地址就是播不了；
+   *   2. 探测 —— 取一次前 96KB，确认这条流真在传数据、且不是版权提示音占位文件。
+   *      官方短签名链接「连得上但永远不动」的死流只有这一步能识破（现象是 0:00 永挂）。
+   *
+   * 结果按 PLAYABLE_VERDICT_TTL_MS 缓存（正负都记，避免每次搜索重跑十几秒的解析链）；
+   * 解析成功顺手预热直链，用户点播时直接跳过整条联网解析。绝不抛出：异常折算成 false。
+   */
+  async verifyPlayable(track: Track): Promise<boolean> {
+    const inflight = this.verifyInflight.get(track.id)
+    if (inflight) return inflight
+    const task = this.runVerifyPlayable(track).finally(() => this.verifyInflight.delete(track.id))
+    this.verifyInflight.set(track.id, task)
+    return task
+  }
+
+  private async runVerifyPlayable(track: Track): Promise<boolean> {
+    const cached = this.playableVerdicts.get(track.id)
+    if (cached && Date.now() - cached.at < PLAYABLE_VERDICT_TTL_MS) return cached.ok
+    let ok = false
+    try {
+      const resolved = await withTimeout(
+        this.resolveSource(track),
+        RESOLVE_TIMEOUT_MS,
+        `校验《${track.name}》`
+      )
+      if (resolved.cached) {
+        // 本地已有完整音频文件：一定能播，不用联网。
+        ok = true
+      } else if (resolved.remoteURL) {
+        const seconds = track.durationMS / 1000
+        const known = resolved.sizeBytes
+        if (known && known > 0) {
+          // 官方接口把文件体积一并给了：体积可信时不必再取一次流。
+          // 一次探测要 0.3–2s，搜索页一批三十首就是十几秒——这是搜索变慢的主因。
+          // 体积明显偏小（试听/版权提示音占位文件）仍然当场判死。
+          ok = !looksLikeNoticeBySize(known, seconds)
+        } else {
+          const probe = await this.probeRemote(resolved.remoteURL, PROBE_TIMEOUT_MS)
+          ok = probe.ok && !looksLikeNoticeBySize(probe.totalBytes, seconds)
+        }
+        if (ok) {
+          // 校验通过就把这条已经探活的直链留下：用户点播时直接起播，不用再联网解析一遍。
+          // 官方直链同样存（带签名，PREFETCH_TTL_MS 内有效），这是「点搜索结果立刻出声」的关键。
+          this.prefetchedSources.set(track.id, { resolved, at: Date.now() })
+          if (resolved.servedFrom) {
+            this.deps.log?.(`已预热音源：${track.name} 来自 ${resolved.servedFrom}`)
+          }
+        }
+      }
+    } catch {
+      ok = false
+    }
+    this.playableVerdicts.set(track.id, { ok, at: Date.now() })
+    return ok
+  }
+
+  /**
+   * 站外曲目（汽水/酷狗/酷我/QQ）的可播性校验：解析出直链才算数。
+   * 站外条目没有网易云 ID，走 deps.resolveExternal 那条跨平台解析链；同样带判定缓存，
+   * 免得同一批条目每次搜索都把所有平台撞一遍。绝不抛出。
+   */
+  async verifyPlayableExternal(item: ExternalTrackDTO): Promise<boolean> {
+    const key = `${item.source}:${item.sourceId}`
+    const cached = this.externalVerdicts.get(key)
+    if (cached && Date.now() - cached.at < PLAYABLE_VERDICT_TTL_MS) return cached.ok
+    let ok = false
+    try {
+      if (this.deps.resolveExternal) {
+        const resolved = await withTimeout(
+          this.deps.resolveExternal(item, new Set<AudioSourceID>()),
+          EXTERNAL_RESOLVE_TIMEOUT_MS,
+          `校验站外《${item.name}》`
+        )
+        ok = Boolean(resolved?.url)
+      }
+    } catch {
+      ok = false
+    }
+    this.externalVerdicts.set(key, { ok, at: Date.now() })
+    return ok
+  }
+
   /** 本会话内某首歌已经失败过的音源，避免反复撞同一个死源。 */
   private attemptedSources(trackID: number): Set<AudioSourceID> {
     let set = this.unblockAttempts.get(trackID)
@@ -1091,7 +1329,9 @@ export class PlayerController extends EventEmitter {
   private async resolveOfficialURL(
     track: Track,
     requested: QualityLevel
-  ): Promise<{ url: string; level: QualityLevel; format?: string; trialOnly: boolean } | undefined> {
+  ): Promise<
+    { url: string; level: QualityLevel; format?: string; size?: number; trialOnly: boolean } | undefined
+  > {
     const ladder = this.deps.autoDowngrade() ? ladderFrom(requested) : [requested]
     for (const level of ladder) {
       try {
@@ -1106,6 +1346,7 @@ export class PlayerController extends EventEmitter {
           url: httpsURL(data.url),
           level: (data.level as QualityLevel) ?? level,
           format: data.type,
+          size: data.size > 0 ? data.size : undefined,
           trialOnly: false
         }
       } catch {
@@ -1504,6 +1745,9 @@ function ladderFrom(requested: QualityLevel): QualityLevel[] {
 /** 把第三方音源报告的码率映射到我们自己的音质档位；未知返回 undefined。 */
 function qualityForBitrate(bitrate: number | undefined): QualityLevel | undefined {
   if (!bitrate || bitrate <= 0) return undefined
+  // 保险丝：真有音源把 bps 当 kbps 报（六位数）时，宁可不声称档位，
+  // 也不能把 65kbps 的 AAC 标成「无损」。
+  if (bitrate > 2000) return undefined
   if (bitrate >= 900) return 'lossless'
   if (bitrate >= 256) return 'exhigh'
   if (bitrate >= 160) return 'higher'

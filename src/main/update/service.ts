@@ -241,13 +241,17 @@ export async function checkForUpdates(currentOverride?: string): Promise<UpdateC
         ? (raw as unknown as UpdateManifest)
         : await withGitHubHashes(raw as GitHubRelease)
     if (!manifest.version || compareVersions(manifest.version, current) <= 0) return empty
+    // 完整性校验绝不降级（fail-closed）：任何拿不到 SHA-256 的资产一律拒绝安装。
+    // GitHub 源由 withGitHubHashes 挂哈希；自定义清单必须自带哈希，缺了就整批作废。
+    const assets = manifest.assets.filter((asset) => /^[0-9a-f]{64}$/i.test(asset.sha256 ?? ''))
+    if (manifest.assets.length > 0 && assets.length === 0) return empty
     return {
       current,
-      latest: manifest,
-      assets: manifest.assets,
-      updateType: manifest.assets.some((asset) => asset.kind === 'installer')
+      latest: { ...manifest, assets },
+      assets,
+      updateType: assets.some((asset) => asset.kind === 'installer')
         ? 'installer'
-        : manifest.assets.some((asset) => asset.kind === 'portable')
+        : assets.some((asset) => asset.kind === 'portable')
           ? 'portable'
           : null
     }

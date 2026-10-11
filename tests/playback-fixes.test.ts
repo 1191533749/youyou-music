@@ -36,6 +36,19 @@ class FakeMpv extends EventEmitter {
   async play(url: string, start = 0): Promise<void> {
     this.opened.push({ url, start })
     this.paused = false
+    // 模拟 mpv 真的出声：推一份 position>0.5 的状态，让「起播证据」看门狗
+    // 立刻通过（真实 mpv 也是 file-loaded 后连续推 time-pos）。
+    this.emit('state', {
+      running: true,
+      paused: false,
+      position: 1.2,
+      duration: 200,
+      volume: 80,
+      muted: false,
+      loading: false,
+      idle: false,
+      path: url
+    })
   }
 
   async setPaused(value: boolean): Promise<void> {
@@ -219,7 +232,7 @@ describe('后台整首缓存不抢播放带宽', () => {
 })
 
 describe('mpv 异常退出与幽灵播放态', () => {
-  it('mpv 进程退出时不再假装播放中，并给出可恢复的错误', async () => {
+  it('mpv 进程退出时不再假装播放中，且界面不给失败文案', async () => {
     const { player, mpv } = build({
       unblockSource: true,
       cache: {
@@ -239,7 +252,9 @@ describe('mpv 异常退出与幽灵播放态', () => {
     expect(snapshot.playing).toBe(false)
     expect(snapshot.position).toBe(0)
     expect(snapshot.loading).toBe(false)
-    expect(snapshot.error).toBe('播放器已停止，请重新播放')
+    // 用户要求（m11996）：界面里不得出现失败文案——播放器没了就静静收成暂停态，
+    // 点播放会重新拉起 mpv，而不是甩一句「播放器已停止」给用户。
+    expect(snapshot.error).toBeUndefined()
     await player.shutdown()
   })
 
@@ -362,4 +377,101 @@ describe('mpv 异常退出与幽灵播放态', () => {
     expect(resumed.playing).toBe(true)
     await player.shutdown()
   })
+})
+
+describe('死流看门狗：开播后 0:00 永挂的源自动换掉', () => {
+  it('文件载入完成但永远不出数据：8 秒后换下一个音源，出声即停', async () => {
+    class DeadMpv extends EventEmitter {
+      opened: Array<{ url: string; start: number }> = []
+      paused = true
+
+      async play(url: string, start = 0): Promise<void> {
+        this.opened.push({ url, start })
+        this.paused = false
+        // 死流：file-loaded 已到（loading=false）、mpv 声称在播（idle=false、
+        // paused=false）但 position 永远 0——正是线上「0:00 永挂」的样本。
+        const dead = url.includes('dead')
+        this.emit('state', {
+          running: true,
+          paused: false,
+          position: dead ? 0 : 1.2,
+          duration: 200,
+          volume: 80,
+          muted: false,
+          loading: false,
+          idle: false,
+          path: url
+        })
+      }
+
+      async setPaused(): Promise<void> {}
+      async setVolume(): Promise<void> {}
+      async setMuted(): Promise<void> {}
+      async seek(): Promise<void> {}
+      async unload(): Promise<void> {}
+      async stop(): Promise<void> {}
+      async trackInfo(): Promise<{ duration: number }> {
+        return { duration: 200 }
+      }
+      async duration(): Promise<number | undefined> {
+        return 200
+      }
+      async audioBitrate(): Promise<number | undefined> {
+        return 320
+      }
+    }
+
+    const mpv = new DeadMpv()
+    const api = new Proxy(
+      {},
+      { get: () => () => Promise.reject(new Error('stub: no netease')) }
+    ) as never
+    const seenAttempted: Set<string>[] = []
+    const unblock = {
+      enabled: true,
+      resolve: async (_track: Track, attempted: Set<string>) => {
+        seenAttempted.push(new Set(attempted))
+        if (attempted.has('kuwo')) {
+          return {
+            source: { id: 'kugou', url: 'https://stub/live.mp3', displayName: '酷狗音乐', bitrate: 320 },
+            attempted
+          }
+        }
+        return {
+          source: { id: 'kuwo', url: 'https://stub/dead.mp3', displayName: '酷我音乐', bitrate: 320 },
+          attempted
+        }
+      }
+    }
+    const player = new PlayerController({
+      api,
+      mpv: mpv as never,
+      unblock: unblock as never,
+      isUnblockEnabled: () => true,
+      unblockSourceIds: () => ['kuwo', 'kugou'],
+      getQuality: () => 'exhigh',
+      autoDowngrade: () => true,
+      getScrobble: () => false,
+      getLoggedIn: () => false,
+      getVipType: () => 0,
+      log: () => undefined,
+      probe: async () => ({ ok: true, totalBytes: 5_000_000, elapsedMS: 4 })
+    })
+    await player.setQueue([TRACK], 0)
+
+    const snapshot = player.snapshot()
+    console.log(
+      `结果：opened=${JSON.stringify(mpv.opened.map((o) => o.url))} servedFrom=${snapshot.servedFrom ?? '-'} ` +
+        `playing=${snapshot.playing} error=${snapshot.error ?? '-'}`
+    )
+    expect(mpv.opened.length).toBe(2)
+    expect(mpv.opened[0].url).toContain('dead')
+    expect(mpv.opened[1].url).toContain('live')
+    // 死源（酷我）必须被记进 attempted，第二次解析才拿到酷狗而不是再撞一次死链。
+    expect(seenAttempted[1]?.has('kuwo')).toBe(true)
+    expect(snapshot.servedFrom).toBe('酷狗音乐')
+    expect(snapshot.playing).toBe(true)
+    expect(snapshot.error).toBeUndefined()
+    await player.shutdown()
+  }, 30_000)
 })

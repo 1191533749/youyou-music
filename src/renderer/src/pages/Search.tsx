@@ -405,8 +405,9 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   }, [loading, keywords, tab, result])
 
   /**
-   * 点播站外曲目：主进程会严格匹配到完整音频，匹配不到直接抛错。
-   * 这里同一时刻只允许一条在途，避免连点排出一串播放请求。
+   * 点播站外曲目：主进程会严格匹配到完整音频。
+   * 匹配不到时**不弹任何失败提示**（用户明确要求界面里不要出现这类文案）：
+   * 展示前已经逐条实测过可播性，这里失败多半是瞬时网络问题，从队列静默跳过即可。
    */
   const playExternal = useCallback(
     async (item: ExternalTrackDTO): Promise<void> => {
@@ -416,8 +417,8 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
       try {
         await call('player:playExternal', { item })
         toast.show(`正在播放：${item.name}${item.artists ? ` - ${item.artists}` : ''}`, 'success')
-      } catch (cause) {
-        toast.show(cause instanceof Error ? cause.message : '播放失败，换一首试试', 'error')
+      } catch {
+        /* 静默：失败原因不摆到用户面前 */
       } finally {
         setPlayingKey(undefined)
       }

@@ -23,7 +23,7 @@ import { qishuiHasFullTrack } from '../unblock/providers.js'
 import type { AppContext } from '../context.js'
 import type { ToplistDTO } from '@shared/ipc'
 import type { ExternalTrackDTO } from '@shared/types'
-import type { Track } from '../netease/models.js'
+import type { Track, TrackPlayability } from '../netease/models.js'
 
 function ctx(context: AppContext) {
   return mappingContextFrom(context)
@@ -44,18 +44,27 @@ function tracks(context: AppContext, list: Track[]) {
 }
 
 /**
- * 发现型列表（搜索、歌手页）只展示「点了就能完整播放」的单曲：播不了的条目
- * 放在列表里，用户点了只会白等（用户反馈「搜出来的/歌手页里放不了的歌 显示它干嘛」）。
- * 判定只看原始权限，不理会换源开关——换源开关只影响灰态展示，不代表这一条
- * 一定换得到完整音源；同名同歌手的汽水版本由下方 `filterQishuiFull` 补进列表。
+ * 发现型列表（搜索、歌手页）的预筛：只丢掉「网易云已下架 / 无版权」的条目。
+ *
+ * VIP 专属、付费专辑必须留下——第三方音源（尤其聚合音源按歌曲 ID 直取）能把它们
+ * 换成完整版；以前把非 playable 一律滤掉，结果搜「孤勇者 陈奕迅」只剩一堆翻唱，
+ * 原唱根本不出现（用户反馈「搜出来的都是翻唱」）。真正能不能播由下方逐首实测决定，
+ * 实测过不了的照样不展示。
  */
-function playableTracks(context: AppContext, list: Track[]): Track[] {
+/** 预筛决策表（纯函数，便于单测）：哪些原始权限状态还值得交给第三方音源去救。 */
+export function rightsAllowUnblock(state: TrackPlayability): boolean {
+  return state !== 'noCopyright' && state !== 'delisted'
+}
+
+function canBeUnblocked(track: Track, context: AppContext): boolean {
   const mapping = ctx(context)
-  return list.filter(
-    (track) =>
-      playability(track, track.embeddedPrivilege, mapping.isLoggedIn, mapping.vipType) ===
-      'playable'
+  return rightsAllowUnblock(
+    playability(track, track.embeddedPrivilege, mapping.isLoggedIn, mapping.vipType)
   )
+}
+
+function playableTracks(context: AppContext, list: Track[]): Track[] {
+  return list.filter((track) => canBeUnblocked(track, context))
 }
 
 /**
@@ -76,6 +85,131 @@ async function filterQishuiFull(items: ExternalTrackDTO[]): Promise<ExternalTrac
     for (const item of checks) if (item) kept.push(item)
   }
   return kept
+}
+
+/** 搜索页可播性校验的并发数：太高会把第三方音源打爆并触发限流。 */
+const SEARCH_VERIFY_CONCURRENCY = 8
+/** 单次搜索整批校验的时间预算；超预算的曲目**不展示**（用户要求：放不出来的不要露头）。 */
+const SEARCH_VERIFY_BUDGET_MS = 9_000
+/**
+ * 单首曲目的校验上限。整链里最坏情况是「官方失败 + 第三方源逐个探测」，一首歌能拖十几秒；
+ * 超时同样按「没验出来」处理、不展示，只是那一首少了一行，不会拖垮整批。
+ */
+const SEARCH_VERIFY_SONG_TIMEOUT_MS = 6_000
+/** 整批失败后先等一等再复验一次：瞬时网络抖动不该让搜索结果凭空少一半。 */
+const SEARCH_VERIFY_RETRY_DELAY_MS = 1_200
+/** 复验的时间预算（只复验上一轮失败的曲目，比第一轮短）。 */
+const SEARCH_VERIFY_RETRY_BUDGET_MS = 7_000
+/**
+ * 第一轮至少要验出这么多首，才认为结果够用。
+ * 不够就说明要么整页都是灰歌、要么刚好撞上限流窗口——两种都值得再给一轮，
+ * 免得用户看到「搜出来就两首」。
+ */
+const SEARCH_VERIFY_MIN_RESULTS = 10
+/** 站外条目的校验预算（它们要跨平台撞几个源，单条就可能十几秒）。 */
+const SEARCH_EXTERNAL_BUDGET_MS = 12_000
+/**
+ * 一轮下来失败比例到这个数就补验一轮（把「瞬时抖动」和「真的没源」分开）。
+ * 注意它只决定**要不要再验一次**，不再决定「要不要放行」——放行早就没了。
+ */
+const SEARCH_VERIFY_FAILURE_RETRY_RATIO = 1
+
+/**
+ * 逐条校验可播性，并把**播不了的从结果里剔除**（用户要求：放不出来的歌不要展示）。
+ *
+ * 校验放在返回结果之前（阻塞式），而不是返回后偷偷补验：后台补验只能做事后隐藏，
+ * 用户已经看见、点过、白等了，用户明确不接受「先展示再消失」。
+ * 代价是搜索多等几秒，靠两层缓存把重复搜索压回瞬时：主进程 verifyPlayable 的判定
+ * 缓存 + 命中时顺手预热的直链缓存（点播时跳过整条联网解析链）。
+ */
+export async function verifySearchTracks(context: AppContext, songs: Track[]): Promise<Track[]> {
+  if (!songs.length) return songs
+  const kept = new Set<number>()
+
+  /** 跑一轮校验：失败返回失败数，成功的记入 kept。 */
+  const runRound = async (list: Track[], budgetMS: number): Promise<number> => {
+    if (!list.length) return 0
+    const deadline = Date.now() + budgetMS
+    let cursor = 0
+    let failed = 0
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const index = cursor
+        cursor += 1
+        if (index >= list.length) return
+        const song = list[index]
+        const ok =
+          Date.now() >= deadline
+            ? false
+            : await Promise.race([
+                context.player.verifyPlayable(song),
+                new Promise<boolean>((resolve) => {
+                  setTimeout(() => resolve(false), SEARCH_VERIFY_SONG_TIMEOUT_MS)
+                })
+              ])
+        if (ok) kept.add(song.id)
+        else failed += 1
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(SEARCH_VERIFY_CONCURRENCY, list.length) }, () => worker())
+    )
+    return failed
+  }
+
+  const firstFailed = await runRound(songs, SEARCH_VERIFY_BUDGET_MS)
+  // 两种情况下再补验一轮（等一秒，把瞬时抖动和「真的没源」分开）：
+  //   1. 整批全灭 —— 大概率是网络/接口抽风；
+  //   2. 验出来的太少（< SEARCH_VERIFY_MIN_RESULTS）—— 用户会以为搜索坏了。
+  //     （比如整页都是版权受限的翻唱，或者刚好撞上 weapi 限流窗口。）
+  const needsRetry =
+    firstFailed > 0 &&
+    (kept.size < SEARCH_VERIFY_MIN_RESULTS ||
+      firstFailed / songs.length >= SEARCH_VERIFY_FAILURE_RETRY_RATIO)
+  if (needsRetry) {
+    await new Promise((resolve) => setTimeout(resolve, SEARCH_VERIFY_RETRY_DELAY_MS))
+    await runRound(
+      songs.filter((song) => !kept.has(song.id)),
+      SEARCH_VERIFY_RETRY_BUDGET_MS
+    )
+  }
+  // 这里**绝不放行没验过的歌**：以前「整批全败就不过滤」的兜底，在灰歌成堆或接口
+  // 被限流的窗口里会把一整页播不了的歌原样端给用户（用户实测「十个里八个播不了」）。
+  // 宁可这次少给几首（甚至空列表），也不让用户点到点了播不出来的歌。
+  const dropped = songs.length - kept.size
+  if (dropped > 0) {
+    context.log(`搜索校验：${kept.size}/${songs.length} 首通过，已剔除 ${dropped} 首播不了的`)
+  }
+  return songs.filter((song) => kept.has(song.id))
+}
+
+/** 站外条目的可播性校验：同样在返回前过滤，只是并发低一些、预算短一些。 */
+export async function verifyExternalTracks(
+  context: AppContext,
+  items: ExternalTrackDTO[]
+): Promise<ExternalTrackDTO[]> {
+  if (!items.length) return items
+  const kept = new Set<string>()
+  const deadline = Date.now() + SEARCH_EXTERNAL_BUDGET_MS
+  let cursor = 0
+  let failed = 0
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor
+      cursor += 1
+      if (index >= items.length) return
+      const item = items[index]
+      const ok = Date.now() >= deadline ? false : await context.player.verifyPlayableExternal(item)
+      if (ok) kept.add(`${item.source}:${item.sourceId}`)
+      else failed += 1
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, items.length) }, () => worker()))
+  // 与单曲同理：站外条目也绝不放行没验过的（以前「整批失败不过滤」会把播不了的端上来）。
+  if (failed > 0) {
+    context.log(`站外校验：${kept.size}/${items.length} 条通过，已剔除 ${failed} 条播不了的`)
+  }
+  return items.filter((item) => kept.has(`${item.source}:${item.sourceId}`))
 }
 
 /** 一次想攒多少首漫游曲；攒满就不再打接口。 */
@@ -336,44 +470,60 @@ export function registerExploreHandlers(context: AppContext): void {
     const mapping = ctx(context)
     /*
      * 只展示「点了就能完整播放」的单曲：播不了的条目放在列表里，用户点了只会白等
-     * （用户反馈「搜出来的歌曲 既然无法播放 为什么要展示出来呢」）。判定只看原始权限，
-     * 不理会换源开关——换源开关只影响灰态展示，不代表这一条一定换得到完整音源。
-     * 全部不可播时返回空列表，渲染层会走既有兜底（汽水/酷狗/酷我）另找可播版本。
+     * （用户反馈「搜出来的歌曲 既然无法播放 为什么要展示出来呢」）。
+     * 预筛只剔下架/无版权；VIP、付费专辑留下交给下面的逐首实测——第三方音源能换到
+     * 完整版，实测不通过的自然也不会展示。全部不可播时返回空列表，渲染层会走既有
+     * 兜底（汽水/酷狗/酷我）另找可播版本。
      */
     const playableSongs = wantsSongs
-      ? (result.songs ?? []).filter(
-          (song) =>
-            playability(song, song.embeddedPrivilege, mapping.isLoggedIn, mapping.vipType) ===
-            'playable'
-        )
+      ? (result.songs ?? []).filter((song) => canBeUnblocked(song, context))
       : (result.songs ?? [])
+
+    /*
+     * 返回结果之前逐条实测：解析链接 + 取首包探测，真能播的才留在列表里。
+     * 元数据权限（playability）只能当预筛，fee=8、无 privilege、官方短签名死流
+     * 都是它看不出来的漏网，用户已经不止一次反馈「搜出来点了播不了」。
+     * 翻页同样校验：每一页展示出来的都必须是点了能播的。
+     */
+    /*
+     * 站外那条链（汽水搜索 → 校验完整档位 → 实测直链）跟网易云这边的逐首校验互不相干，
+     * 同时跑：整个搜索的等待时间等于两者里慢的那个，而不是相加（用户要的是快但要质量）。
+     * 同名同歌手的去重放在最后做，所以并进来之前先不查重。
+     */
+    const externalTask: Promise<ExternalTrackDTO[]> = wantsSongs
+      ? (async () => {
+          const fromQishui = await searchExternal('qishui', keywords, 12).catch(() => [] as ExternalTrackDTO[])
+          const full = await withTimeout(filterQishuiFull(fromQishui), 4_000).catch(() => fromQishui)
+          // 站外条目同样在展示前实测一遍：拿不到直链的不进列表（否则点开就是「播不了」）。
+          return verifyExternalTracks(context, full)
+        })()
+      : Promise.resolve([])
+
+    const songs = wantsSongs ? await verifySearchTracks(context, playableSongs) : playableSongs
 
     /*
      * 汽水那边有的版本并进单曲列表：网易云没版权/只有 VIP 版时，用户要找的往往就是
      * 这一版（用户反馈「渡情 对唱 我是在汽水音乐看到的」）。同名同歌手的条目不重复展示。
-     * 并入前逐条确认汽水给的是完整档位（付费曲只有 30 秒试听的不收，收进来点开就「跳」）。
-     * 校验限时 4 秒：超时就整批放弃并入（宁可少展示，不能把整页拖慢）。
      */
     let external: ExternalTrackDTO[] | undefined
     if (wantsSongs) {
-      const seen = new Set(playableSongs.map((song) => searchKey(song.name, song.artists[0]?.name ?? '')))
-      const fromQishui = await searchExternal('qishui', keywords, 12).catch(() => [] as ExternalTrackDTO[])
-      const deduped = fromQishui.filter(
+      const seen = new Set(songs.map((song) => searchKey(song.name, song.artists[0]?.name ?? '')))
+      const fromExternal = await externalTask
+      external = fromExternal.filter(
         (item) => !seen.has(searchKey(item.name, item.artists.split(/[/&、,，;；]/)[0] ?? ''))
       )
-      external = await withTimeout(filterQishuiFull(deduped), 4_000).catch(() => deduped)
     }
 
-    // 后台预解析顶部曲目的第三方直链：用户点第一首歌时不必再等第三方解析那几秒。
+    // 预解析顶部曲目的第三方直链：用户点第一首歌时不必再等第三方解析那几秒。
     // 只对单曲搜索生效（type 缺省也是歌曲），失败静默、不影响返回。
-    if (wantsSongs && playableSongs.length) {
-      for (const song of playableSongs.slice(0, 3)) {
+    if (wantsSongs && songs.length) {
+      for (const song of songs.slice(0, 3)) {
         void context.player.prefetchSource(song)
       }
     }
 
     return {
-      songs: tracks(context, playableSongs),
+      songs: tracks(context, songs),
       albums: result.albums?.map(toAlbumDTO),
       artists: result.artists?.map(toArtistDTO),
       playlists: result.playlists?.map(toPlaylistDTO),

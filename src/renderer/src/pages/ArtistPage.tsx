@@ -107,8 +107,8 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
   }, [hotSongs, notify, player])
 
   /**
-   * 点播站外曲目：主进程会严格匹配到完整音频，匹配不到直接抛错。
-   * 同一时刻只允许一条在途，避免连点排出一串播放请求。
+   * 点播站外曲目：主进程会严格匹配到完整音频。
+   * 匹配不到时静默（用户明确要求界面里不要再出现播放失败文案）。
    */
   const [playingKey, setPlayingKey] = useState<string | undefined>()
   const playExternal = useCallback(
@@ -119,8 +119,8 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
       try {
         await call('player:playExternal', { item })
         notify(`正在播放：${item.name}${item.artists ? ` - ${item.artists}` : ''}`, 'success')
-      } catch (cause) {
-        notify(cause instanceof Error ? cause.message : '播放失败，换一首试试', 'error')
+      } catch {
+        /* 静默：失败原因不摆到用户面前 */
       } finally {
         setPlayingKey(undefined)
       }

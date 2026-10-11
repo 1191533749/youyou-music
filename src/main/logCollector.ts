@@ -12,6 +12,7 @@
  */
 import { app } from 'electron'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { REMOTE_DAILY_BASE, REMOTE_DAILY_TOKEN } from './storage/remoteDaily'
@@ -25,7 +26,8 @@ interface LogEntry {
   platform: string
   osVersion: string
   arch: string
-  hostname: string
+  /** 匿名安装标识（首次运行随机生成，落盘在 userData/install-id），绝不传主机名。 */
+  deviceId: string
 }
 
 const UPLOAD_URL = `${REMOTE_DAILY_BASE}/logs?token=${encodeURIComponent(REMOTE_DAILY_TOKEN)}`
@@ -39,23 +41,72 @@ const CATEGORIES = new Set(['uncaught', 'unhandled', 'render-gone', 'child-gone'
 
 let enabled = false
 let pendingFile = ''
+let deviceId = 'unknown'
 let flushTimer: NodeJS.Timeout | undefined
 let flushing = false
+
+/**
+ * 异常消息/堆栈可能间接携带敏感信息：Cookie、各类 token、手机号、
+ * Windows/Unix 个人目录下的用户名。上传前统一脱敏。
+ */
+const REDACTIONS: Array<[RegExp, string]> = [
+  [/(cookie[s]?|token[s]?|access[-_]?token|authorization|password|passwd|secret|pwd)(["']?\s*[:=]\s*["']?)[^&\s"';,}]{4,}/gi, '$1$2***'],
+  [/bearer\s+[a-z0-9._~+/=-]+/gi, 'bearer ***'],
+  [/1[3-9]\d{9}/g, '1**********'],
+  [/([A-Za-z]:\\Users\\|\\Users\\|\/home\/)[^\\/]+/g, '$1***']
+]
+
+function redact(text: string): string {
+  let out = text
+  for (const [pattern, replacement] of REDACTIONS) out = out.replace(pattern, replacement)
+  return out
+}
+
+/** 匿名安装标识：一次生成永久复用，与服务端用户体系没有任何关联。 */
+function loadDeviceId(userData: string): string {
+  const file = path.join(userData, 'install-id')
+  try {
+    if (existsSync(file)) {
+      const existing = readFileSync(file, 'utf8').trim()
+      if (/^[0-9a-f]{32}$/i.test(existing)) return existing.toLowerCase()
+    }
+    const fresh = randomBytes(16).toString('hex')
+    mkdirSync(userData, { recursive: true })
+    writeFileSync(file, fresh, 'utf8')
+    return fresh
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** 关闭收集时清掉本地待传队列：用户选择退出后，历史诊断数据不再补传。 */
+function clearPending(): void {
+  try {
+    rmSync(pendingFile, { force: true })
+  } catch {
+    // 删不掉就留着，下次启动/重开开关时也不会再读它。
+  }
+}
 
 /** 在 bootstrap 里、settings.load 之后调用一次；enabled 由 collectLogs 决定。 */
 export function initLogCollector(opts: { userData: string; enabled: boolean }): void {
   enabled = opts.enabled
   pendingFile = path.join(opts.userData, 'diagnostics', 'pending.jsonl')
-  if (!enabled) return
+  deviceId = loadDeviceId(opts.userData)
+  if (!enabled) {
+    clearPending()
+    return
+  }
   installHandlers()
   void flush() // 启动时补传上次没传掉的
 }
 
-/** 设置项切换时调用：打开后立即补传本地积压。 */
+/** 设置项切换时调用：打开后立即补传本地积压；关闭时清空积压。 */
 export function setLogCollectorEnabled(next: boolean): void {
   if (next === enabled) return
   enabled = next
   if (next) void flush()
+  else clearPending()
 }
 
 /** 记录一条异常；供 mpv / IPC 等各处主动上报。关闭时是零开销空转。 */
@@ -65,14 +116,14 @@ export function recordLog(category: string, message: string, stack?: string): vo
     const entry: LogEntry = {
       at: new Date().toISOString(),
       category: CATEGORIES.has(category) ? category : 'other',
-      message: String(message).slice(0, 4000),
+      message: redact(String(message)).slice(0, 4000),
       appVersion: app.getVersion(),
       platform: process.platform,
       osVersion: `${os.type()} ${os.release()}`,
       arch: process.arch,
-      hostname: os.hostname()
+      deviceId
     }
-    if (stack) entry.stack = String(stack).slice(0, 8000)
+    if (stack) entry.stack = redact(String(stack)).slice(0, 8000)
     mkdirSync(path.dirname(pendingFile), { recursive: true })
     appendFileSync(pendingFile, `${JSON.stringify(entry)}\n`, 'utf8')
   } catch {

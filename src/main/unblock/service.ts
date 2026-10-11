@@ -50,22 +50,24 @@ export class UnblockService {
     if (!this.enabled) return { source: null, attempted: attemptedNow }
 
     const configured = new Set(this.deps.enabledSources())
-    // 先按用户配置的顺序（默认 汽水 → 酷狗 → 酷我 → QQ），再按固定顺序兜底。
+    // 先按用户配置的顺序（默认 聚合音源 → 汽水 → 酷狗 → 酷我 → QQ），再按固定顺序兜底。
+    // 聚合音源排第一是有意的：它按歌曲 ID 直取，拿到的就是同一首歌，不需要搜索匹配。
     const order = AUDIO_SOURCE_IDS.filter((id) => configured.has(id))
 
     for (const id of order) {
       if (attempted.has(id)) continue
       attemptedNow.add(id)
+      const label = trackLabel(track)
       try {
         const resolve = this.deps.providers?.[id] ?? PROVIDERS[id]
         const source = await resolve(track, preferred)
         if (source) {
-          this.deps.log?.(`换源成功：${track.name} 来自 ${AUDIO_SOURCE_NAMES[id]}`)
+          this.deps.log?.(`换源成功：${label} 来自 ${AUDIO_SOURCE_NAMES[id]}`)
           return { source, attempted: attemptedNow }
         }
-        this.deps.log?.(`换源未命中：${track.name} 在 ${AUDIO_SOURCE_NAMES[id]} 没有匹配结果`)
+        this.deps.log?.(`换源未命中：${label} 在 ${AUDIO_SOURCE_NAMES[id]} 没有匹配结果`)
       } catch (cause) {
-        this.deps.log?.(`换源失败：${track.name} @ ${AUDIO_SOURCE_NAMES[id]} — ${describe(cause)}`)
+        this.deps.log?.(`换源失败：${label} @ ${AUDIO_SOURCE_NAMES[id]} — ${describe(cause)}`)
       }
     }
     return { source: null, attempted: attemptedNow }
@@ -74,6 +76,15 @@ export class UnblockService {
 
 function describe(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
+}
+
+/** 日志里的曲目标识：歌名 + 歌手，避免同名不同人的条目在日志里分不清。 */
+function trackLabel(track: Track): string {
+  const artists = track.artists
+    ?.map((artist) => artist?.name)
+    .filter((name): name is string => Boolean(name))
+    .join('/')
+  return artists ? `${track.name} - ${artists}` : track.name
 }
 
 export { AUDIO_SOURCE_IDS, AUDIO_SOURCE_NAMES }

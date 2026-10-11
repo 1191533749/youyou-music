@@ -242,13 +242,18 @@ export interface SettingsDTO {
   /** Unlock grey tracks from third-party sources. */
   unblockGreyTracks: boolean
   /**
-   * 启用的第三方音源，顺序即尝试优先级：汽水 → 酷狗 → 酷我 → QQ。
+   * 启用的第三方音源，顺序即尝试优先级：聚合音源 → 汽水 → 酷狗 → 酷我 → QQ。
    * 任一为启用状态时，受限歌曲都会自动换源播放完整版本。
    */
-  unblockSources: Array<'qishui' | 'kugou' | 'kuwo' | 'qq'>
+  unblockSources: Array<'gdstudio' | 'qishui' | 'kugou' | 'kuwo' | 'qq'>
+  /**
+   * 一次性标记：老配置补上「上线时还不存在的音源」之后置 true。
+   * 有它才能区分「用户自己关掉了某音源」和「配置比新音源更老」，否则用户关掉后重启又会被自动打开。
+   */
+  unblockSourcesMigrated: boolean
   /** Keep a local copy of played tracks so they play offline. */
   offlineCacheEnabled: boolean
-  /** 收集本程序异常日志并上传服务器（设备/系统/版本/时间/IP/异常详情），可随时关闭。 */
+  /** 收集本程序异常日志并上传服务器（匿名标识/系统/版本/时间/IP/异常详情，凭据与个人路径已脱敏），默认关闭。 */
   collectLogs: boolean
   /** GPU 加速渲染；关闭后下次启动改用软件渲染（启动早期生效，需重启）。 */
   hardwareAcceleration: boolean
@@ -277,9 +282,10 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   wallpaperSet: false,
   wallpaperVersion: 0,
   unblockGreyTracks: true,
-  unblockSources: ['qishui', 'kugou', 'kuwo', 'qq'],
+  unblockSources: ['gdstudio', 'qishui', 'kugou', 'kuwo', 'qq'],
+  unblockSourcesMigrated: true,
   offlineCacheEnabled: true,
-  collectLogs: true,
+  collectLogs: false,
   hardwareAcceleration: true
 }
 

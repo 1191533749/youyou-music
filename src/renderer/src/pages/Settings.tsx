@@ -35,7 +35,10 @@ import { useToast } from '../components/Toast'
 import SourceAccount from '../components/SourceAccount'
 
 /** 音源开关的展示信息；与主进程 `AUDIO_SOURCE_NAMES` 保持一致。 */
-const SOURCES: Array<{ id: 'qishui' | 'kugou' | 'kuwo' | 'qq'; name: string; hint: string }> = [
+const SOURCES: Array<
+  { id: 'gdstudio' | 'qishui' | 'kugou' | 'kuwo' | 'qq'; name: string; hint: string }
+> = [
+  { id: 'gdstudio', name: '聚合音源', hint: '按歌曲 ID 直取，灰歌/VIP 歌也能拿到完整版，最准' },
   { id: 'qishui', name: '汽水音乐', hint: '抖音曲库，免登录直连，解析最快' },
   { id: 'kugou', name: '酷狗音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' },
   { id: 'kuwo', name: '酷我音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' },
@@ -265,7 +268,10 @@ export default function Settings(): JSX.Element {
     }
   }
 
-  const toggleSource = async (id: 'qishui' | 'kugou' | 'kuwo' | 'qq', enabled: boolean): Promise<void> => {
+  const toggleSource = async (
+    id: 'gdstudio' | 'qishui' | 'kugou' | 'kuwo' | 'qq',
+    enabled: boolean
+  ): Promise<void> => {
     const current = settings.unblockSources ?? []
     const next = enabled ? [...current, id] : current.filter((item) => item !== id)
     // 保持固定优先级顺序，避免用户勾选顺序影响尝试次序。
@@ -562,7 +568,7 @@ export default function Settings(): JSX.Element {
         <h2>隐私与诊断</h2>
         <SettingSwitch
           label="收集日志"
-          hint="收集程序异常日志并上传服务器，用于定位问题、改进稳定性（不含歌曲与账号信息）。"
+          hint="收集程序异常日志并上传服务器，用于定位问题、改进稳定性。默认关闭；开启后使用匿名标识，凭据与个人路径自动脱敏。"
           checked={settings.collectLogs}
           onChange={(value) => void patch({ collectLogs: value })}
         />

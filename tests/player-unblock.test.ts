@@ -34,6 +34,19 @@ class FakeMpv extends EventEmitter {
   async play(url: string): Promise<void> {
     this.opened.push(url)
     this.paused = false
+    // 模拟 mpv 真的出声：推一份 position>0.5 的状态，让「起播证据」看门狗
+    // 立刻通过（真实 mpv 也是 file-loaded 后连续推 time-pos）。
+    this.emit('state', {
+      running: true,
+      paused: false,
+      position: 1.2,
+      duration: 269,
+      volume: 80,
+      muted: false,
+      loading: false,
+      idle: false,
+      path: url
+    })
   }
 
   async setPaused(value: boolean): Promise<void> {
@@ -115,6 +128,69 @@ function buildPlayer(options: {
   return { player, mpv }
 }
 
+describe('搜索页后台可播性校验 verifyPlayable', () => {
+  /** 官方解析必失败（不存在的 id）、站内也搜不到替代版本的曲子。 */
+  function deadTrack(): Track {
+    return {
+      id: 4242424242,
+      name: 'youyou不存在之歌xyz',
+      artists: [{ id: 0, name: 'youyou测试' }],
+      album: { id: 0, name: 'youyou测试专辑' },
+      durationMS: 240_000,
+      alias: [],
+      transNames: [],
+      fee: 0,
+      mvID: 0,
+      trackNo: 1,
+      noCopyright: false,
+      isCloud: false
+    }
+  }
+
+  it('整链失败返回 false，且不抛异常', async () => {
+    const { player } = buildPlayer({
+      unblock: true,
+      providers: {
+        qishui: async () => null,
+        kugou: async () => null,
+        kuwo: async () => null
+      }
+    })
+    const ok = await player.verifyPlayable(deadTrack())
+    expect(ok).toBe(false)
+    await player.shutdown()
+  }, 60_000)
+
+  it('第三方解析成功返回 true，并把直链缓存（第二次校验不再打第三方）', async () => {
+    let kuwoCalls = 0
+    const { player } = buildPlayer({
+      unblock: true,
+      // 校验要过「真在传数据」这一步：注入体积合格的探测结果。
+      probe: async () => ({ ok: true, status: 206, totalBytes: 12_000_000, elapsedMS: 4 }),
+      providers: {
+        qishui: async () => null,
+        kugou: async () => null,
+        kuwo: async () => {
+          kuwoCalls += 1
+          return {
+            id: 'kuwo',
+            displayName: '酷我音乐',
+            url: 'https://example.com/full-audio.mp3'
+          }
+        }
+      }
+    })
+    const track = deadTrack()
+    const first = await player.verifyPlayable(track)
+    expect(first).toBe(true)
+    expect(kuwoCalls).toBe(1)
+    const second = await player.verifyPlayable(track)
+    expect(second).toBe(true)
+    expect(kuwoCalls).toBe(1) // 第二次命中 prefetchedSources 缓存
+    await player.shutdown()
+  }, 60_000)
+})
+
 describe('受限歌曲换源播放', () => {
   it('开启换源后，VIP 单曲能拿到可播放地址并标记来源', async () => {
     // 注入「体积合格」的探测结果 + 替身音源：这里只验证解析链路的接线
@@ -165,8 +241,11 @@ describe('受限歌曲换源播放', () => {
       `结果：error=${snapshot.error ?? '-'} 打开地址=${JSON.stringify(mpv.opened)}`
     )
     if (mpv.opened.length === 0) {
-      // 拦下了就必须给出中性错误，不能静默什么都不做。
-      expect(snapshot.error).toBeTruthy()
+      // 拦下了就安静停住：队列里剔掉这首、不播占位文件、界面不给任何失败文案
+      // （用户明确要求「暂时无法播放…」这类提示永远不要再出现）。
+      expect(snapshot.error).toBeUndefined()
+      expect(snapshot.playing).toBe(false)
+      expect(snapshot.queue).toHaveLength(0)
     } else {
       // 只要播了，就一定是体积合格的流（不是十几秒的提示音占位文件）。
       for (const url of mpv.opened) {
@@ -178,14 +257,17 @@ describe('受限歌曲换源播放', () => {
     await player.shutdown()
   }, 120_000)
 
-  it('关闭换源后，VIP 单曲给出明确的可行动错误，而不是静默失败', async () => {
+  it('关闭换源后，VIP 单曲安静停住：不播占位文件、界面不出现失败文案', async () => {
     const { player, mpv } = buildPlayer({ unblock: false })
     await player.setQueue([VIP_TRACK], 0)
 
     const snapshot = player.snapshot()
     console.log(`结果：error=${snapshot.error ?? '(无)'} 地址数=${mpv.opened.length}`)
     expect(mpv.opened.length).toBe(0)
-    expect(snapshot.error).toBeTruthy()
+    // 用户明确要求：拿不到音源时不要摆原因给他看，静默停住、把这首从队列里剔掉即可。
+    expect(snapshot.error).toBeUndefined()
+    expect(snapshot.playing).toBe(false)
+    expect(snapshot.queue).toHaveLength(0)
     await player.shutdown()
   }, 60_000)
 
@@ -203,6 +285,18 @@ describe('受限歌曲换源播放', () => {
       async play(url: string): Promise<void> {
         this.opened.push(url)
         this.short = url.includes('notice')
+        // 真歌出声：position>0.5 让起播证据看门狗立刻通过。
+        this.emit('state', {
+          running: true,
+          paused: false,
+          position: 1.2,
+          duration: 269,
+          volume: 80,
+          muted: false,
+          loading: false,
+          idle: false,
+          path: url
+        })
       }
 
       async duration(): Promise<number | undefined> {
@@ -353,8 +447,9 @@ describe('受限歌曲换源播放', () => {
       `结果：error=${snapshot.error ?? '-'} muted=${snapshot.muted} mpv.muted=${mpv.muted} ` +
         `setMuted 调用=${JSON.stringify(mpv.muteCalls)}`
     )
-    // 四个候选全是提示音时明确报错，绝不把占位文件当歌播出来。
-    expect(snapshot.error).toBeTruthy()
+    // 四个候选全是提示音时绝不把占位文件当歌播出来；安静停住、界面不给任何失败文案。
+    expect(snapshot.error).toBeUndefined()
+    expect(snapshot.playing).toBe(false)
     // 关键断言：音量被恢复，用户不会被留在静音窗口里。
     expect(mpv.muted).toBe(false)
     expect(snapshot.muted).toBe(false)

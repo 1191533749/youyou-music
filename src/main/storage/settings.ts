@@ -33,14 +33,39 @@ export class SettingsStore extends EventEmitter {
       // Unknown keys from a newer build are dropped, missing keys keep their
       // default, so a downgrade never produces an unusable config.
       this.settings = { ...DEFAULT_SETTINGS, ...sanitise(parsed) }
+      this.migrateSources(parsed)
     } catch {
       this.settings = { ...DEFAULT_SETTINGS }
     }
     return this.settings
   }
 
+  /**
+   * 音源是分批上线的：老配置里不可能人为关掉当时还不存在的音源，所以读到没有
+   * `unblockSourcesMigrated` 标记的配置时，把后来新增的音源补到最前并落盘标记。
+   * 有标记才让「用户自己关掉」在重启后依然生效，否则设置页会「关不掉」。
+   */
+  private migrateSources(raw: Partial<SettingsDTO>): void {
+    if (raw.unblockSourcesMigrated === true) return
+    const list = this.settings.unblockSources
+    const added = SOURCES_ADDED_AFTER_RELEASE.filter((id) => !list.includes(id))
+    this.settings = {
+      ...this.settings,
+      unblockSources: [...added, ...list],
+      unblockSourcesMigrated: true
+    }
+    const snapshot = { ...this.settings }
+    // 立刻排进写队列：迁移结果要落盘，不然用户关掉某音源后重启又会被补回来。
+    this.writeQueue = this.writeQueue.then(() => this.persist(snapshot)).catch(() => undefined)
+  }
+
   get current(): SettingsDTO {
     return { ...this.settings }
+  }
+
+  /** 等待已排队的落盘完成（退出前 / 测试里确认文件内容时用）。 */
+  async flush(): Promise<void> {
+    await this.writeQueue
   }
 
   async update(patch: Partial<SettingsDTO>): Promise<SettingsDTO> {
@@ -73,6 +98,12 @@ export class SettingsStore extends EventEmitter {
 /** 取值来自 @shared/types，避免主进程与渲染进程各维护一份枚举。 */
 const VALID_DESKTOP_LYRICS_EFFECTS = new Set<string>(DESKTOP_LYRICS_EFFECTS)
 const VALID_LYRIC_FONTS = new Set<string>(LYRIC_FONTS)
+
+/**
+ * 在「第三方音源」功能上线之后才加入的音源。老配置（不带 unblockSourcesMigrated 标记）
+ * 读到时会自动补上这些，用户不必进设置页手动打开。
+ */
+const SOURCES_ADDED_AFTER_RELEASE: Array<'gdstudio'> = ['gdstudio']
 
 const VALID_QUALITIES = new Set([
   'standard',
@@ -153,18 +184,21 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
       }
       case 'unblockSources': {
         // 只接受已知音源，且去重；顺序保留用户配置（即优先级）。
-        // 'pyncmd' 是上一版音源，已被「汽水音乐」取代，老配置里的它按汽水迁移过来。
-        const known = new Set(['qishui', 'kugou', 'kuwo', 'qq'])
-        const legacy: Record<string, string> = { pyncmd: 'qishui' }
+        // 'pyncmd' 是「聚合音源」的旧名字，老配置里的它按聚合音源迁移过来。
+        const known = new Set(['gdstudio', 'qishui', 'kugou', 'kuwo', 'qq'])
+        const legacy: Record<string, string> = { pyncmd: 'gdstudio' }
         if (Array.isArray(value)) {
-          const list: Array<'qishui' | 'kugou' | 'kuwo' | 'qq'> = []
+          const list: Array<'gdstudio' | 'qishui' | 'kugou' | 'kuwo' | 'qq'> = []
           for (const raw of value) {
             if (typeof raw !== 'string') continue
             const item = legacy[raw] ?? raw
             if (known.has(item) && !list.includes(item as never)) {
-              list.push(item as 'qishui' | 'kugou' | 'kuwo' | 'qq')
+              list.push(item as 'gdstudio' | 'qishui' | 'kugou' | 'kuwo' | 'qq')
             }
           }
+          // 音源是分批上线的：老配置里不可能人为关掉当时还不存在的音源，
+          // 所以升级后由 load() 把新增音源补到最前（见 SOURCES_ADDED_AFTER_RELEASE）。
+          // 这里只做「认识的名字 + 去重」，不改用户的选择——否则用户刚关掉又被打开。
           // 老配置里全是已被移除的音源时，不能落成「一个都不启用」。
           out.unblockSources = list.length > 0 ? list : [...DEFAULT_SETTINGS.unblockSources]
         }
@@ -172,7 +206,8 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
       }
       case 'cacheDirectory':
       case 'audioDevice':
-        if (typeof value === 'string') out[key] = value
+        // 字符串要有长度上限，防止手改配置文件塞进超长路径打爆各处拼接。
+        if (typeof value === 'string' && value.length <= 512) out[key] = value
         break
       default:
         if (typeof value === 'boolean') {
