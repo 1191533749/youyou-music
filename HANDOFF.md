@@ -47,6 +47,7 @@ npm run dist:portable              # 免安装 exe（未验证）
 node scripts/test-platforms.mjs   # 登录页（只有网易云）+ 设置→音源账号 扫码绑定
 node scripts/test-playlist.mjs    # QQ 歌单：展开曲目 → 播放全部 → 真的出声 → 解绑
 node scripts/test-speed.mjs       # 播放速度（私人漫游首声、切歌）
+node scripts/test-fm.mjs          # 私人漫游：全部由汽水音乐供曲、能出声、换曲、不喜欢
 node scripts/test-quality.mjs     # 音质切换与状态栏同步
 node scripts/test-auto-retry.mjs  # 数据加载失败静默重试
 ```
@@ -95,6 +96,12 @@ src/renderer/   lib/(contract,ipc,format,hooks,lyricsUtils) store/(player,auth,n
   设置 → 音源账号 里点歌单展开曲目（`music.srfDissInfo.DissInfo/CgiGetDiss`，带 cookie、每页 100、上限 300），
   「播放全部」或点某一行 → 整张歌单灌进播放队列；带 `songMid` 的曲目先走 `resolveQqByMid`（平台直取），
   拿不到（VIP/付费且未绑定）自动退到 汽水 → 酷狗 → 酷我，坏链继续换源。端到端实测 18/18（66 首真实出声）
+- ✅ **私人漫游 = 汽水音乐随机电台**（`src/main/external/qishuiRadio.ts` + `src/main/external/registry.ts`）：
+  用户要求「漫游的歌全部走汽水音乐、随机播放」。汽水没有个性推荐接口，所以「随机」= 词库随机取 4 个
+  （以歌手名为主，保证搜到的是真歌而不是「热歌合集」）× 搜索 → 合并去重打乱 → **逐首向汽水确认有完整档位**
+  （付费曲只给 30 秒试听，确认不过的不进队列）→ 攒进 `fmPool`（启动就预热，进页面直接取现成的）。
+  漫游曲目以「合成曲目」入队，播放走站外队列（`playExternalQueue` / `appendExternalQueue`），
+  有 track_id 直取（`resolveQishuiByID`），拿不到再按既有链路换源。端到端实测 13/13（3/3 由汽水出声）
 - ✅ **音质诚实降档**：达不到所选音质自动降档且不打扰用户；第三方音源码率已知才映射档位（`servedBitrate`）；
   界面不再显示「来自 X」或降档文字（v0.3.0 按用户要求全部去掉）
 - ✅ **随机起播**：队列为空时点分类页「播放全部」→ `randomStart: true` → 随机一首立即播放（点行不受影响）

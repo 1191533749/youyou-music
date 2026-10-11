@@ -12,6 +12,7 @@
 import type { Track } from '../netease/models.js'
 import {
   resolveQishui,
+  resolveQishuiByID,
   resolveKugou,
   resolveKuwo,
   resolveQq,
@@ -262,6 +263,15 @@ export async function resolveExternalAudio(
   const skip = hints?.skip
   const qq = hints?.qq
   const attempts: Array<{ id: AudioSourceID; run: () => Promise<ResolvedAudioSource | null> }> = [
+    // 列表本来就来自汽水（私人漫游）：直接按 track_id 取，不再搜索+匹配。
+    ...(item.source === 'qishui'
+      ? [
+          {
+            id: 'qishui' as AudioSourceID,
+            run: () => resolveQishuiByID(item.sourceId, undefined, item.durationMS)
+          }
+        ]
+      : []),
     ...(songMid ? [{ id: 'qq' as AudioSourceID, run: () => resolveQqByMid(songMid, qq) }] : []),
     { id: 'qishui' as AudioSourceID, run: () => resolveQishui(synthetic) },
     { id: 'kugou' as AudioSourceID, run: () => resolveKugou(synthetic) },

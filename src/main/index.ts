@@ -501,7 +501,8 @@ async function bootstrap(): Promise<void> {
   registerLibraryHandlers(context)
   registerExploreHandlers(context)
   // 私人漫游要「进页面就出声」：曲池得提前攒好，否则现场连打十来轮接口要二十秒。
-  if (client.isLoggedIn) warmFMPool(context)
+  // 漫游曲目现在全部来自汽水音乐（免登录直连），所以不再要求先登录网易云。
+  warmFMPool(context)
   registerAppHandlers(context)
   registerUpdateHandlers()
   // 上次更新可能留下下载缓存；启动时顺手清掉（失败也无所谓）。

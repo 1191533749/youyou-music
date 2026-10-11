@@ -11,8 +11,9 @@ import { mappingContextFrom, toTracksDTO } from './mappers.js'
 import { localDateKey } from '../storage/dailyHistory.js'
 import { pushDailyToServer } from './explore.js'
 import { resolveExternalAudio, toSyntheticTrack } from '../external/search.js'
+import { recallExternal } from '../external/registry.js'
 import type { AppContext } from '../context.js'
-import type { QualityLevel, AudioDeviceDTO } from '@shared/types'
+import type { QualityLevel, AudioDeviceDTO, ExternalTrackDTO } from '@shared/types'
 import type { Track } from '../netease/models.js'
 
 const VALID_QUALITIES: QualityLevel[] = [
@@ -149,7 +150,19 @@ export function registerPlayerHandlers(context: AppContext): void {
     return context.player.snapshot()
   })
 
+  /**
+   * 私人漫游的曲目全部来自汽水音乐：主进程先出列表（`track:fm`），渲染层把**同一批**
+   * DTO 原样回传到这里，所以用 `recallExternal` 按负 id 认出它们、交给站外队列播放。
+   * 认不出来的一律走原来的网易云路径（其它页面不受影响）。
+   */
   defineHandler('player:playFMTracks', async ({ tracks }) => {
+    const external = tracks
+      .map((dto) => recallExternal(dto.id))
+      .filter((item): item is ExternalTrackDTO => Boolean(item))
+    if (external.length > 0 && external.length === tracks.length) {
+      await context.player.playExternalQueue(external, 0)
+      return context.player.snapshot()
+    }
     const hydrated = tracks.length > 0 ? tracks.map(trackFromDTO) : await context.api.personalFM()
     await context.player.setQueue(hydrated as Track[], 0)
     return context.player.snapshot()
@@ -220,7 +233,16 @@ export function registerPlayerHandlers(context: AppContext): void {
   })
 
   defineHandler('player:append', async ({ tracks }) => {
-    await context.player.append(tracks.map(trackFromDTO) as Track[])
+    // 漫游补货走的是站外队列（见 player:playFMTracks）：把两类分开，各走各的入队逻辑。
+    const external: ExternalTrackDTO[] = []
+    const normal: Track[] = []
+    for (const dto of tracks) {
+      const item = recallExternal(dto.id)
+      if (item) external.push(item)
+      else normal.push(trackFromDTO(dto) as Track)
+    }
+    if (external.length > 0) await context.player.appendExternalQueue(external)
+    if (normal.length > 0) await context.player.append(normal)
     return context.player.snapshot()
   })
 

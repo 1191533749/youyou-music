@@ -349,6 +349,20 @@ export class PlayerController extends EventEmitter {
   }
 
   /**
+   * 站外曲目批量入队（私人漫游补货）：整批追加到队尾，不打断当前播放。
+   * 与 `playExternalQueue` 的差别只在于「追加」而不是「替换整条队列」。
+   */
+  async appendExternalQueue(items: ExternalTrackDTO[]): Promise<void> {
+    let added = 0
+    for (const item of items) {
+      if (!item?.sourceId || !item?.name) continue
+      this.queue.push({ track: toSyntheticTrack(item), playability: 'playable', external: item })
+      added += 1
+    }
+    if (added > 0) this.emitSnapshot()
+  }
+
+  /**
    * 播放一整串站外曲目（平台歌单）：整条入队，逐首解析音频。
    * 某一首的四个音源都拿不到时由现有逻辑自动跳下一首，不把原因摆到用户面前。
    */

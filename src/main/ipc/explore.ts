@@ -5,6 +5,8 @@
  */
 import { defineHandler } from './registry.js'
 import { searchExternal } from '../external/search.js'
+import { qishuiRadio } from '../external/qishuiRadio.js'
+import { rememberExternalTracks } from '../external/registry.js'
 import { localDateKey } from '../storage/dailyHistory.js'
 import { fetchRemoteDaily, getKnownUID, saveRemoteDaily, setKnownUID, withTimeout } from '../storage/remoteDaily.js'
 import {
@@ -18,6 +20,7 @@ import {
 import { SearchType } from '../netease/api.js'
 import type { AppContext } from '../context.js'
 import type { ToplistDTO } from '@shared/ipc'
+import type { ExternalTrackDTO } from '@shared/types'
 import type { Track } from '../netease/models.js'
 
 function ctx(context: AppContext) {
@@ -33,19 +36,20 @@ function tracks(context: AppContext, list: Track[]) {
 const FM_TARGET = 30
 /** 单次填充最多打几轮接口（轮与轮之间留一口气，别把限流窗口顶穿）。 */
 const FM_MAX_ROUNDS = 12
-/** 去重表超过这个规模就清空，免得听得久了再也攒不到「新」歌。 */
-const FM_SEEN_LIMIT = 200
 
 /**
- * 私人漫游曲池。
+ * 私人漫游曲池（**全部来自汽水音乐**）。
  *
- * 漫游接口一次只给 2~3 首、单次要 1 秒以上，现场连打十来次凑 30 首要二十秒
- * （用户反馈「半天了还是 正在为你挑选漫游曲目」，要求最迟 1.5 秒出声）。
- * 所以改成后台慢慢攒：进页面直接取现成的，取完立刻在后台接着攒下一批。
+ * 用户要求：漫游里放的全部是汽水的歌、而且是随机的。汽水没有可用的个性推荐接口，
+ * 所以「随机」由 `qishuiRadio` 用「随机风格词 × 搜索」造；这里只负责把曲池攒厚。
+ *
+ * 漫游的网易云接口一次只给 2~3 首、单次要 1 秒以上，现场连打十来次凑 30 首要二十秒
+ * （用户反馈「半天了还是 正在为你挑选漫游曲目」）。所以仍然是后台慢慢攒：
+ * 进页面直接取现成的，取完立刻在后台接着攒下一批。
  */
 const fmPool = {
-  tracks: [] as Track[],
-  seen: new Set<number>(),
+  items: [] as ExternalTrackDTO[],
+  seen: new Set<string>(),
   filling: undefined as Promise<void> | undefined
 }
 
@@ -55,16 +59,11 @@ function fillFMPool(context: AppContext, rounds: number): Promise<void> {
   if (ongoing) return ongoing
   const task = (async () => {
     for (let round = 0; round < rounds; round += 1) {
-      if (fmPool.tracks.length >= FM_TARGET) break
-      const batch = await context.api.personalFM()
-      const fresh = batch.filter((track) => !fmPool.seen.has(track.id))
-      if (fresh.length === 0) break
-      for (const track of fresh) {
-        if (fmPool.seen.size >= FM_SEEN_LIMIT) fmPool.seen.clear()
-        fmPool.seen.add(track.id)
-        fmPool.tracks.push(track)
-      }
-      if (fmPool.tracks.length >= FM_TARGET) break
+      if (fmPool.items.length >= FM_TARGET) break
+      const batch = await qishuiRadio(FM_TARGET - fmPool.items.length, fmPool.seen)
+      if (batch.length === 0) break
+      fmPool.items.push(...batch)
+      if (fmPool.items.length >= FM_TARGET) break
       await new Promise((resolve) => setTimeout(resolve, 150))
     }
   })()
@@ -400,18 +399,22 @@ export function registerExploreHandlers(context: AppContext): void {
   })
 
   /**
-   * 私人漫游：从预热好的曲池里取一批就走，不在请求里等十来轮接口。
-   * 池子空了才现场等一轮（约 1 秒多），取完立刻在后台把池子补回来，
-   * 供「队列快见底时补货」和下次进入使用。
+   * 私人漫游：从预热好的汽水曲池里取一批就走，不在请求里等十来轮接口。
+   * 池子空了才现场等一轮，取完立刻在后台把池子补回来，供「队列快见底时补货」和下次进入使用。
+   * 返回的是「合成曲目」的 DTO（id 为负），`player:playFMTracks` / `player:append`
+   * 会用 `recallExternal` 认出它们并把整批交给站外队列。
    */
   defineHandler('track:fm', async () => {
-    if (fmPool.tracks.length === 0) await fillFMPool(context, 1)
-    const take = fmPool.tracks.splice(0, fmPool.tracks.length)
+    if (fmPool.items.length === 0) await fillFMPool(context, 1)
+    const take = fmPool.items.splice(0, fmPool.items.length)
     void fillFMPool(context, FM_MAX_ROUNDS)
-    return tracks(context, take)
+    return tracks(context, rememberExternalTracks(take))
   })
 
   defineHandler('track:fmTrash', async ({ id }) => {
+    // 漫游曲目来自汽水音乐，负 id 是本地合成 id：网易云的「不喜欢」对它们没有意义，
+    // 直接返回，让界面照常换下一首。
+    if (id < 0) return
     await context.api.fmTrash(id)
   })
 

@@ -270,6 +270,48 @@ export async function resolveQishui(
 }
 
 /**
+ * 已知汽水 `track_id` 时直接取地址（私人漫游这类「列表本来就是汽水自己的」场景）：
+ * 省掉一次搜索 + 严格匹配，起播快一截。
+ * `expectedDurationMS` 用来识破付费曲只给 30 秒试听的情况，传 0 表示不校验。
+ */
+export async function resolveQishuiByID(
+  trackID: string,
+  preferred?: QualityLevel,
+  expectedDurationMS = 0
+): Promise<ResolvedAudioSource | null> {
+  if (!trackID) return null
+  const gears = await fetchQishuiGears(trackID)
+  const playable = gears.filter(
+    (gear) =>
+      gear.durationMS === undefined || expectedDurationMS <= 0 || gear.durationMS >= expectedDurationMS * 0.8
+  )
+  if (playable.length === 0) return null
+  const gear = pickQishuiGear(playable, preferred)
+  if (!gear) return null
+  return {
+    id: 'qishui',
+    displayName: AUDIO_SOURCE_NAMES.qishui,
+    url: gear.url,
+    bitrate: gear.bitrate
+  }
+}
+
+/**
+ * 汽水这首歌能不能**完整播放**：付费曲只给一档 30 秒试听，那种不算。
+ * 私人漫游用它筛选曲目——只挑汽水给全曲的歌，漫游才不会一路换源到别的平台。
+ * 只做判断、不返回地址；真正播放时再取一次（地址是有时效的）。
+ */
+export async function qishuiHasFullTrack(trackID: string, expectedDurationMS = 0): Promise<boolean> {
+  if (!trackID) return false
+  const gears = await fetchQishuiGears(trackID)
+  if (gears.length === 0) return false
+  return gears.some(
+    (gear) =>
+      gear.durationMS === undefined || expectedDurationMS <= 0 || gear.durationMS >= expectedDurationMS * 0.8
+  )
+}
+
+/**
  * 酷狗：搜索 → 时长/歌名/歌手严格匹配 → 用 hash 换直链。
  *
  * 换链走 `m.kugou.com/app/i/getSongInfo.php?cmd=playInfo`：老的
