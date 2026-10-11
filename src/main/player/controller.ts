@@ -90,6 +90,14 @@ const EXTERNAL_RESOLVE_TIMEOUT_MS = 32_000
 /** 起播前探测第三方音源（连通性 + 体积）的超时。 */
 const PROBE_TIMEOUT_MS = 5_000
 
+/**
+ * 一首歌在播放路径上失败后「原地重试同一首」的次数与间隔。
+ * 用户硬要求（m01001）：搜出来/推荐出来的歌必须完整可播，
+ * **绝不允许失败自动跳下一首**——失败就换音源/换档位/换 CDN 主机重新解析再来一遍。
+ */
+const MAX_SAME_TRACK_RETRIES = 3
+const SAME_TRACK_RETRY_DELAY_MS = 1_200
+
 /** 预解析成功后的预热探测：只要连通性和 CDN 边缘，超时给短一点。 */
 const PREWARM_TIMEOUT_MS = 4_000
 
@@ -239,10 +247,11 @@ export class PlayerController extends EventEmitter {
   private servedBitrate?: number
   private error?: string
   /**
-   * 连续失败计数：某首歌所有音源都拿不到时自动跳下一首。
-   * 上限为队列长度，避免整张列表都放不出来时无限跳。
+   * 每首歌「原地重试」的次数（用户硬要求 m01001：绝不允许失败自动跳下一首）。
+   * 一首歌播不出来就在这里换音源/换档位/换 CDN 主机重新解析重试，用户点的是
+   * 哪一首就一直是哪一首；重试到上限也只是安静停住，不换歌、不从列表里拿掉。
    */
-  private consecutiveFailures = 0
+  private playRetries = new Map<number, number>()
   private source?: string
   private servedFrom?: string
   private volume = 80
@@ -426,7 +435,6 @@ export class PlayerController extends EventEmitter {
   ): Promise<void> {
     this.queue = [{ track, playability: 'playable', preResolved: resolved }]
     this.index = 0
-    this.consecutiveFailures = 0
     this.emitSnapshot()
     await this.playIndex(0, { keepQueue: true })
   }
@@ -458,13 +466,13 @@ export class PlayerController extends EventEmitter {
     if (entries.length === 0) return
     this.queue = entries
     this.index = Math.max(0, Math.min(Math.floor(startIndex) || 0, entries.length - 1))
-    this.consecutiveFailures = 0
     this.shuffleNext = undefined
     this.emitSnapshot()
     await this.playIndex(this.index, { keepQueue: true })
   }
 
-  async append(tracks: Track[]): Promise<void> {    const existing = new Set(this.queue.map((entry) => entry.track.id))
+  async append(tracks: Track[]): Promise<void> {
+    const existing = new Set(this.queue.map((entry) => entry.track.id))
     const added = tracks.filter((track) => !existing.has(track.id))
     if (added.length === 0) return
     this.queue.push(...added.map((track) => this.toEntry(track)))
@@ -698,7 +706,8 @@ export class PlayerController extends EventEmitter {
       // 验证期间用户手动暂停的话保持暂停态（见 waitForStartEvidence）。
       this.playing = !this.verificationPaused
       this.loadedTrackId = entry.track.id
-      this.consecutiveFailures = 0
+      // 这首歌这次真的出声了：清掉它的重试计数，下次点它还是全新状态。
+      this.playRetries.delete(entry.track.id)
       this.startPositionTimer()
       this.scrobbleStart()
       // 后台预解析下一首（顺序 + 随机都做）：切歌瞬间就能出声（用户反馈「加载慢、卡顿」）。
@@ -711,38 +720,48 @@ export class PlayerController extends EventEmitter {
       if (generation !== this.resolveGeneration) return
       const message = describeError(cause)
       this.deps.log?.(`播放失败: ${message}`)
-      // 换音质失败不能像正常播放那样「自动跳下一首」：用户只是想换个档位，
-      // 歌还是那一首。抛回去由 reloadCurrentTrack 退回原来那一档。
+      // 换音质失败不能像正常播放那样重试：用户只是想换个档位，歌还是那一首。
+      // 抛回去由 reloadCurrentTrack 退回原来那一档。
       if (options.qualityReload) throw cause
-      // 拿不到可播版本时**自动跳下一首**，不要把「版权/受限」这类原因摆到用户面前。
-      // 失败这首无论有没有下一首都先从队列剔除：本批不会再碰到，渲染层收到
-      // player:trackFailed 把行隐藏（搜出来放不了？那就别再展示它）。
-      const MAX_AUTO_SKIP = 5
-      this.consecutiveFailures += 1
-      this.deadTracks.add(entry.track.id)
-      // 反手记一条「播不了」的判定：用户下次搜索同一首时会被直接过滤掉。
-      // 这正是「搜出来的歌要能播」的兜底 —— 校验当时网络抖动放过去了，这里补记。
-      this.playableVerdicts.set(entry.track.id, { ok: false, at: Date.now() })
-      const failed = entry.track
-      // 站外曲目在渲染层以 `source:sourceId` 为键展示，一并带出去好定位行。
-      const externalKey = entry.external ? `${entry.external.source}:${entry.external.sourceId}` : undefined
-      this.queue.splice(this.index, 1)
-      this.deps.onTrackFailed?.(failed, externalKey)
-      if (this.index < this.queue.length && this.consecutiveFailures < MAX_AUTO_SKIP) {
-        // 队列少了一位，index 原地正好就是「下一首」。
-        this.error = undefined
+      // 用户硬要求（m01001）：**绝不允许失败自动跳下一首**。搜出来/推荐出来的歌
+      // 必须完整可播，所以这里既不从队列剔除、也不通知渲染层隐藏行、更不切歌：
+      // 一首歌失败就原地重试同一首——清掉失败记忆（音源 attempted、坏链判定、
+      // 预解析缓存）后重新走一遍解析，换音源 / 换档位 / 换 CDN 镜像主机再试。
+      const attempt = (this.playRetries.get(entry.track.id) ?? 0) + 1
+      this.playRetries.set(entry.track.id, attempt)
+      // 只保留最近若干首，避免长会话里无限增长。
+      if (this.playRetries.size > 200) {
+        const oldest = this.playRetries.keys().next().value
+        if (oldest !== undefined) this.playRetries.delete(oldest)
+      }
+      this.error = undefined
+      this.playing = false
+      // 预解析结果很可能是刚刚那条坏地址：作废它，下一次候选从头解析。
+      entry.preResolvedFull = undefined
+      entry.preProbe = undefined
+      entry.preResolved = undefined
+      if (attempt <= MAX_SAME_TRACK_RETRIES) {
+        this.attemptedSources(entry.track.id).clear()
+        this.deadTracks.delete(entry.track.id)
+        this.officialStalled.delete(entry.track.id)
+        this.twinRetried.delete(entry.track.id)
+        this.aggregateRetried.delete(entry.track.id)
+        this.prefetchedSources.delete(entry.track.id)
+        this.prefetchInflight.delete(entry.track.id)
+        // 上一次判定的「播不了」是被网络抖动冤枉的，撤掉，别让它污染下次搜索。
+        if (this.playableVerdicts.get(entry.track.id)?.ok === false) {
+          this.playableVerdicts.delete(entry.track.id)
+        }
+        this.deps.log?.(
+          `原地重试同一首（第 ${attempt}/${MAX_SAME_TRACK_RETRIES} 次，换音源/换档位/换主机）：${entry.track.name}`
+        )
+        await new Promise((resolve) => setTimeout(resolve, SAME_TRACK_RETRY_DELAY_MS * attempt))
+        if (generation !== this.resolveGeneration) return
         void this.playIndex(this.index)
-      } else if (this.repeatMode === 'all' && this.queue.length > 0 && this.consecutiveFailures < MAX_AUTO_SKIP) {
-        this.error = undefined
-        void this.playIndex(0)
       } else {
-        // 连续失败给一个绝对上限：全是坏歌的极端列表最多跳 5 首就停，不会无限滑下去。
-        // 停住时**不给用户看任何失败文案**（用户明确要求界面里不要再出现
-        // 「暂时无法播放，请稍后再试」这类提示）：播得了的自动挑出来播，挑不出来就
-        // 安静停住 —— 坏歌已经在上面从队列里剔掉、并通知渲染层把行隐藏了。
-        this.consecutiveFailures = 0
-        this.error = undefined
-        this.playing = false
+        // 重试到上限：安静停住（界面不出现任何失败文案），仍然**不换歌**、
+        // 不把这首歌从列表里去掉 —— 用户点的还是这一首，可以自己再点一次。
+        this.deps.log?.(`同一首原地重试 ${MAX_SAME_TRACK_RETRIES} 次仍失败，停在这一首不跳歌：${entry.track.name}`)
       }
       return
     } finally {
@@ -785,7 +804,13 @@ export class PlayerController extends EventEmitter {
 
   /** 探测一条远程音频流（测试可注入替身，默认走真实实现）。 */
   private probeRemote(url: string, timeoutMS = PROBE_TIMEOUT_MS): Promise<StreamProbeResult> {
-    return (this.deps.probe ?? probeStream)(url, timeoutMS)
+    return (this.deps.probe ?? probeStream)(url, timeoutMS).then((result) => {
+      // 探测成功＝这台主机此刻真的在给数据，当场撤销它的故障判定。否则起播时会被
+      // 无谓地换到镜像主机（镜像可能更慢、甚至卡死），这正是「校验通过、点开却
+      // 卡在 0:00」的一条真实成因（同一签名在两台主机上的表现并不总是等价的）。
+      if (result.ok) noteNeteaseCDNHostReachable(url)
+      return result
+    })
   }
 
   /**

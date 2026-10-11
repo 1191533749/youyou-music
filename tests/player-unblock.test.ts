@@ -241,11 +241,13 @@ describe('受限歌曲换源播放', () => {
       `结果：error=${snapshot.error ?? '-'} 打开地址=${JSON.stringify(mpv.opened)}`
     )
     if (mpv.opened.length === 0) {
-      // 拦下了就安静停住：队列里剔掉这首、不播占位文件、界面不给任何失败文案
-      // （用户明确要求「暂时无法播放…」这类提示永远不要再出现）。
+      // 拦下了就安静停住：不播占位文件、界面不给任何失败文案，而且这首歌**仍然
+      // 留在队列里**——用户硬要求（m01001）：绝不允许失败自动跳下一首，
+      // 用户点的是哪一首就一直是哪一首（可以自己再点一次重试）。
       expect(snapshot.error).toBeUndefined()
       expect(snapshot.playing).toBe(false)
-      expect(snapshot.queue).toHaveLength(0)
+      // snapshot().queue 是 TrackDTO 列表（controller 内部 `this.queue.map(toTrackDTO)`）。
+      expect(snapshot.queue.map((item) => item.id)).toEqual([VIP_TRACK.id])
     } else {
       // 只要播了，就一定是体积合格的流（不是十几秒的提示音占位文件）。
       for (const url of mpv.opened) {
@@ -264,10 +266,12 @@ describe('受限歌曲换源播放', () => {
     const snapshot = player.snapshot()
     console.log(`结果：error=${snapshot.error ?? '(无)'} 地址数=${mpv.opened.length}`)
     expect(mpv.opened.length).toBe(0)
-    // 用户明确要求：拿不到音源时不要摆原因给他看，静默停住、把这首从队列里剔掉即可。
+    // 用户明确要求：拿不到音源时不要摆原因给他看，静默停住即可；但**不许**
+    // 把这首从队列里剔掉、更不许自动跳下一首（m01001）。
     expect(snapshot.error).toBeUndefined()
     expect(snapshot.playing).toBe(false)
-    expect(snapshot.queue).toHaveLength(0)
+    expect(snapshot.queue.map((item) => item.id)).toEqual([VIP_TRACK.id])
+    expect(snapshot.index).toBe(0)
     await player.shutdown()
   }, 60_000)
 
