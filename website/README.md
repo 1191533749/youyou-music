@@ -26,9 +26,9 @@ website/
 2. **手动**：把 `autoDetect` 改成 `false`，并直接改这两行：
 
    ```js
-   installerUrl: 'https://你的地址/悠悠音乐安装版0.3.8.exe',
-   portableUrl:  'https://你的地址/悠悠音乐便携版0.3.8.exe',
-   version: '0.3.8'
+   installerUrl: 'https://你的地址/悠悠音乐安装版0.4.2.exe',
+   portableUrl:  'https://你的地址/悠悠音乐便携版0.4.2.exe',
+   version: '0.4.2'
    ```
 
    也可以保留 `autoDetect = true`，仅在 GitHub 不可达时作为兜底链接。
