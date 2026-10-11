@@ -184,3 +184,8 @@ node scripts/pull-website.mjs       # 把服务器上的官网拉回工作区（
 - 官方网站：<https://yy.ytw.asia>（源码在 `website/`，纯静态，含两个版本的下载入口）
 - 源码与 Release：<https://github.com/1191533749/youyou-music>
 - 内置更新从该仓库的 Releases 拉取；新版本经确认后打包发布。
+
+## 微信公众号
+
+<img width="280" height="280" alt="gzh" src="https://github.com/user-attachments/assets/a4dc29e5-69a5-4ab8-9f9a-cd88e053c154" />
+
