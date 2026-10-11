@@ -39,7 +39,10 @@ describe('汽水音乐搜索解析', () => {
   it('封面模板拼接正确', () => {
     expect(
       qishuiCover({ urls: ['https://p3.douyinpic.com/img/'], uri: 'abc/def', template_prefix: 'tplv-x' })
-    ).toBe('https://p3.douyinpic.com/img/abc/def~tplv-x.image')
+    ).toBe('https://p3.douyinpic.com/img/abc/def~tplv-dy-cropcenter:540:540.webp')
+    expect(qishuiCover({ urls: ['https://p3.douyinpic.com/img'], uri: '/abc', template_prefix: 'tplv-x' })).toBe(
+      'https://p3.douyinpic.com/img/abc~tplv-dy-cropcenter:540:540.webp'
+    )
     expect(qishuiCover(undefined)).toBeUndefined()
   })
 })

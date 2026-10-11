@@ -50,19 +50,54 @@ async function fetchJSON(url: string, headers: Record<string, string> = {}): Pro
 
 // --- 汽水音乐 --------------------------------------------------------------
 
-/** 汽水封面地址：图片 CDN 需要一个 `~template.image` 后缀。 */
+/**
+ * 汽水封面所用的 imagex 内置模板。
+ *
+ * `url_cover.template_prefix`（实测固定为 `tplv-b829550vbb`）是汽水**私有的服务模板**，
+ * 外部匿名请求一律 400 `{"code":2002,"error":"fail to get template"}`，不能直接当模板名用。
+ * 换成 VeImageX 内置模板即可：`tplv-dy-cropcenter:<w>:<h>.webp` 任意 douyinpic 域名都认，
+ * 实测 44/44 首成功，平均 30.8KB、540×540 方形（源图更小时保持原尺寸不放大）。
+ */
+const QISHUI_COVER_TEMPLATE = 'tplv-dy-cropcenter:540:540.webp'
+
+/**
+ * 汽水专辑封面地址：输入是搜索响应里 `track.album.url_cover` 的原始对象
+ * `{ uri, urls: ['https://p3-luna.douyinpic.com/img/', …], template_prefix }`，
+ * 输出形如 `…/img/<uri>~tplv-dy-cropcenter:540:540.webp`。
+ * 纯函数、不需要任何请求头（Referer/UA 实测无关）；任何异常返回 undefined。
+ */
 export function qishuiCover(urlCover: any): string | undefined {
-  const base = urlCover?.urls?.[0]
-  const uri = urlCover?.uri
-  const template = urlCover?.template_prefix
-  if (typeof base !== 'string' || typeof uri !== 'string' || typeof template !== 'string') return undefined
-  return `${base}${uri}~${template}.image`
+  return qishuiCoverWith(urlCover, QISHUI_COVER_TEMPLATE)
+}
+
+/** 需要大图时（播放页 ≥720px）用内置原图模板；体积大：实测平均 ~1.7MB、最大 4MB。 */
+export function qishuiCoverLarge(urlCover: any): string | undefined {
+  return qishuiCoverWith(urlCover, 'tplv-obj.image')
+}
+
+function qishuiCoverWith(urlCover: any, template: string): string | undefined {
+  try {
+    const uri = urlCover?.uri
+    if (typeof uri !== 'string' || uri.length === 0) return undefined
+
+    const urls = urlCover?.urls
+    const base = Array.isArray(urls)
+      ? urls.find((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
+      : undefined
+    if (typeof base !== 'string') return undefined
+
+    // base 必须以 / 结尾（少了会 403 `fail to get resource`），uri 不能以 / 开头。
+    const head = base.endsWith('/') ? base : `${base}/`
+    const tail = uri.startsWith('/') ? uri.slice(1) : uri
+    return `${head}${tail}~${template}`
+  } catch {
+    return undefined
+  }
 }
 
 /**
- * 汽水歌手头像：搜索响应里 `user_info.medium_avatar_url.urls` 是**可直接访问的完整地址**
- * （实测 HTTP 200）。专辑封面只有 uri+模板，拼出来的地址在图片 CDN 上 404（实测过
- * 48 种组合），所以封面的兜底方案是歌手的头像。
+ * 汽水歌手头像兜底：搜索响应里 `user_info.medium_avatar_url.urls` 是**可直接访问的完整地址**
+ * （实测 HTTP 200）。有些条目不带 user_info，此时退回 undefined，由渲染层图标兜底。
  */
 export function qishuiArtistAvatar(track: any): string | undefined {
   const artist = track?.artists?.[0]
@@ -90,7 +125,7 @@ export function parseQishuiSearch(payload: any, limit: number): ExternalTrack[] 
         .join(' / ') || '未知歌手',
       album: typeof track.album?.name === 'string' ? track.album.name : undefined,
       durationMS: Number(track.duration ?? 0),
-      // 专辑封面拼不出来时退回歌手头像（头像 URL 实测可加载）。
+      // 专辑封面按 `-image:540:540` 模板拼，拼不出来时退回歌手头像。
       coverUrl: qishuiCover(track.album?.url_cover) ?? qishuiArtistAvatar(track)
     })
     if (result.length >= limit) break

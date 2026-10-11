@@ -81,6 +81,11 @@ export interface SearchResultDTO {
   albums?: AlbumSummaryDTO[]
   artists?: ArtistSummaryDTO[]
   playlists?: PlaylistSummaryDTO[]
+  /**
+   * 站外（汽水音乐）里同一关键词下的曲目：网易云没有版权或只有 VIP 版本时，
+   * 用户要找的往往就是这一版，所以并进同一页列表里直接可播。
+   */
+  external?: ExternalTrackDTO[]
   songCount?: number
   albumCount?: number
   artistCount?: number

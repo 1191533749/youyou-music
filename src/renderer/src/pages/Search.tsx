@@ -453,6 +453,8 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   const playlists = result?.playlists ?? []
   const overview = tab === 'comprehensive'
   const loaded = songs.length + artists.length + albums.length + playlists.length
+  /** 并进单曲列表的汽水曲目（主进程已按「同名同歌手不重复」过滤）。 */
+  const mergedExternal = !fallbackActive ? (result?.external ?? []) : []
 
   return (
     <div className={`page search${hero ? ' search--hero' : ''}`}>
@@ -534,47 +536,12 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 
       {external && external.length > 0 ? (
         <section className="page__section">
-          <div className="song-list">
-            {external.map((item, index) => {
-              const key = `${item.source}:${item.sourceId}`
-              // 主进程播放的是由站外曲目合成的曲目，歌名保持一致，用它来标当前行。
-              const current = !!player.current && player.current.name === item.name
-              const busy = playingKey === key
-              return (
-                <div
-                  key={key}
-                  className={`song-row song-row--external${current ? ' is-current' : ''}`}
-                  style={{ gridTemplateColumns: EXTERNAL_COLUMNS }}
-                  onDoubleClick={() => void playExternal(item)}
-                  title={`${item.name} — ${item.artists}`}
-                >
-                  <div className="song-row__index">{index + 1}</div>
-                  <div className="ext-row__cover">
-                    <ExternalCover url={item.coverUrl} />
-                  </div>
-                  <div className="song-row__title">
-                    <button
-                      type="button"
-                      className="song-row__play"
-                      disabled={busy}
-                      onClick={() => void playExternal(item)}
-                      title={busy ? '正在匹配完整音源' : '播放'}
-                      aria-label={busy ? '正在匹配完整音源' : `播放 ${item.name}`}
-                    >
-                      {busy ? <IconDisc size={14} className="spin" /> : <IconPlay size={14} />}
-                    </button>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="song-row__name">{item.name}</div>
-                      <div className="song-row__sub">{item.artists}</div>
-                    </div>
-                  </div>
-                  <div className="song-row__artist">{item.artists}</div>
-                  <div className="song-row__album">{item.album ?? '—'}</div>
-                  <div className="song-row__duration">{formatDuration(item.durationMS / 1000)}</div>
-                </div>
-              )
-            })}
-          </div>
+          <ExternalRows
+            items={external}
+            playingKey={playingKey}
+            currentName={player.current?.name}
+            onPlay={(item) => void playExternal(item)}
+          />
         </section>
       ) : null}
 
@@ -585,6 +552,7 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
       {!loading &&
       !fallbackLoading &&
       !(external && external.length > 0) &&
+      mergedExternal.length === 0 &&
       keywords &&
       !error &&
       (loaded === 0 || fallbackActive) ? (
@@ -597,35 +565,67 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
       {/* 判为不相关且兜底找到内容时，整段不渲染网易云那批结果。 */}
       {!loading && result && !(fallbackActive && (external?.length ?? 0) > 0) ? (
         <div className={refreshing ? 'is-refreshing' : undefined}>
-          {songs.length > 0 ? (
+          {songs.length > 0 || mergedExternal.length > 0 ? (
             <section className="page__section">
-              <SectionHeader
-                icon={IconMusic}
-                title="单曲"
-                // 整块播放入口：随机起播；点具体某一首仍然从那一首开始。
-                onPlayAll={() => void player.playTracks(songs, 0, { randomStart: true })}
-                action={overview ? { label: '查看全部', onClick: () => setTab('songs') } : undefined}
-              />
+              {songs.length > 0 ? (
+                <SectionHeader
+                  icon={IconMusic}
+                  title="单曲"
+                  // 整块播放入口：随机起播；点具体某一首仍然从那一首开始。
+                  onPlayAll={() => void player.playTracks(songs, 0, { randomStart: true })}
+                  action={overview ? { label: '查看全部', onClick: () => setTab('songs') } : undefined}
+                />
+              ) : null}
               {/* 综合页这里只是四类结果各取一小批的预览，用卡片网格与下面「歌手/专辑」两栏一致；
                   单曲页要看完整列表（时长、专辑列），继续用行列表。 */}
               {overview ? (
-                <div className="grid grid--albums">
-                  {songs.map((track, index) => (
-                    <ArtCard
-                      key={track.id}
-                      title={track.name}
-                      subtitle={artistLine(track)}
-                      imageUrl={coverUrl(track.album?.picUrl, 320)}
-                      onClick={() => void player.playTracks(songs, index)}
+                <>
+                  {songs.length > 0 ? (
+                    <div className="grid grid--albums">
+                      {songs.map((track, index) => (
+                        <ArtCard
+                          key={track.id}
+                          title={track.name}
+                          subtitle={artistLine(track)}
+                          imageUrl={coverUrl(track.album?.picUrl, 320)}
+                          onClick={() => void player.playTracks(songs, index)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {/* 汽水那边有的版本并进同一页：网易云没版权/只有 VIP 版时，
+                      用户要找的往往就是这一版，直接点就能放。 */}
+                  {mergedExternal.length > 0 ? (
+                    <ExternalRows
+                      items={mergedExternal.slice(0, 8)}
+                      offset={songs.length}
+                      playingKey={playingKey}
+                      currentName={player.current?.name}
+                      onPlay={(item) => void playExternal(item)}
                     />
-                  ))}
-                </div>
+                  ) : null}
+                </>
               ) : (
-                <SongList
-                  tracks={songs}
-                  currentTrackID={player.current?.id}
-                  onPlay={(index) => void player.playTracks(songs, index)}
-                />
+                <>
+                  {songs.length > 0 ? (
+                    <SongList
+                      tracks={songs}
+                      currentTrackID={player.current?.id}
+                      onPlay={(index) => void player.playTracks(songs, index)}
+                    />
+                  ) : null}
+                  {/* 汽水那边有的版本并进同一张列表：网易云没版权/只有 VIP 版时，
+                      用户要找的往往就是这一版，直接点就能放。 */}
+                  {mergedExternal.length > 0 ? (
+                    <ExternalRows
+                      items={mergedExternal}
+                      offset={songs.length}
+                      playingKey={playingKey}
+                      currentName={player.current?.name}
+                      onPlay={(item) => void playExternal(item)}
+                    />
+                  ) : null}
+                </>
               )}
             </section>
           ) : null}
@@ -708,6 +708,63 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
 
       {/* 点播站外曲目成功/失败的提示（主进程匹配不到完整音源时会带文案抛错）。 */}
       {toast.node}
+    </div>
+  )
+}
+
+/**
+ * 站外曲目行列表：兜底结果与「并进单曲列表的汽水曲目」共用同一套行。
+ * `offset` 让并进列表的行号接着网易云的序号往下排。
+ */
+function ExternalRows(props: {
+  items: ExternalTrackDTO[]
+  offset?: number
+  playingKey?: string
+  currentName?: string
+  onPlay: (item: ExternalTrackDTO) => void
+}): JSX.Element {
+  const { items, offset = 0, playingKey, currentName, onPlay } = props
+  return (
+    <div className="song-list">
+      {items.map((item, index) => {
+        const key = `${item.source}:${item.sourceId}`
+        // 主进程播放的是由站外曲目合成的曲目，歌名保持一致，用它来标当前行。
+        const current = !!currentName && currentName === item.name
+        const busy = playingKey === key
+        return (
+          <div
+            key={key}
+            className={`song-row song-row--external${current ? ' is-current' : ''}`}
+            style={{ gridTemplateColumns: EXTERNAL_COLUMNS }}
+            onDoubleClick={() => onPlay(item)}
+            title={`${item.name} — ${item.artists}`}
+          >
+            <div className="song-row__index">{offset + index + 1}</div>
+            <div className="ext-row__cover">
+              <ExternalCover url={item.coverUrl} />
+            </div>
+            <div className="song-row__title">
+              <button
+                type="button"
+                className="song-row__play"
+                disabled={busy}
+                onClick={() => onPlay(item)}
+                title={busy ? '正在匹配完整音源' : '播放'}
+                aria-label={busy ? '正在匹配完整音源' : `播放 ${item.name}`}
+              >
+                {busy ? <IconDisc size={14} className="spin" /> : <IconPlay size={14} />}
+              </button>
+              <div style={{ minWidth: 0 }}>
+                <div className="song-row__name">{item.name}</div>
+                <div className="song-row__sub">{item.artists}</div>
+              </div>
+            </div>
+            <div className="song-row__artist">{item.artists}</div>
+            <div className="song-row__album">{item.album ?? '—'}</div>
+            <div className="song-row__duration">{formatDuration(item.durationMS / 1000)}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }

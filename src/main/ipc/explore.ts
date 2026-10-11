@@ -18,6 +18,7 @@ import {
   toTracksDTO
 } from './mappers.js'
 import { SearchType } from '../netease/api.js'
+import { playability } from '../netease/models.js'
 import type { AppContext } from '../context.js'
 import type { ToplistDTO } from '@shared/ipc'
 import type { ExternalTrackDTO } from '@shared/types'
@@ -25,6 +26,15 @@ import type { Track } from '../netease/models.js'
 
 function ctx(context: AppContext) {
   return mappingContextFrom(context)
+}
+
+/** 同名同歌手归一化：并进搜索结果的汽水曲目按它去重。 */
+function searchKey(name: string, artist: string): string {
+  return `${name}${artist}`
+    .toLowerCase()
+    .replace(/[\s\u00a0]+/g, '')
+    .replace(/[（(].*?[)）]/g, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
 }
 
 /** Tracks that are unplayable are kept, but flagged — the UI greys them out. */
@@ -286,19 +296,49 @@ export function registerExploreHandlers(context: AppContext): void {
             : SearchType.playlists
     const result = await context.api.search(keywords, searchType, limit ?? 30, offset ?? 0)
 
+    const wantsSongs = type === undefined || type === 'songs'
+    const mapping = ctx(context)
+    /*
+     * 只展示「点了就能完整播放」的单曲：播不了的条目放在列表里，用户点了只会白等
+     * （用户反馈「搜出来的歌曲 既然无法播放 为什么要展示出来呢」）。判定只看原始权限，
+     * 不理会换源开关——换源开关只影响灰态展示，不代表这一条一定换得到完整音源。
+     * 全部不可播时返回空列表，渲染层会走既有兜底（汽水/酷狗/酷我）另找可播版本。
+     */
+    const playableSongs = wantsSongs
+      ? (result.songs ?? []).filter(
+          (song) =>
+            playability(song, song.embeddedPrivilege, mapping.isLoggedIn, mapping.vipType) ===
+            'playable'
+        )
+      : (result.songs ?? [])
+
+    /*
+     * 汽水那边有的版本并进单曲列表：网易云没版权/只有 VIP 版时，用户要找的往往就是
+     * 这一版（用户反馈「渡情 对唱 我是在汽水音乐看到的」）。同名同歌手的条目不重复展示。
+     */
+    let external: ExternalTrackDTO[] | undefined
+    if (wantsSongs) {
+      const seen = new Set(playableSongs.map((song) => searchKey(song.name, song.artists[0]?.name ?? '')))
+      const fromQishui = await searchExternal('qishui', keywords, 12).catch(() => [] as ExternalTrackDTO[])
+      external = fromQishui.filter(
+        (item) => !seen.has(searchKey(item.name, item.artists.split(/[/&、,，;；]/)[0] ?? ''))
+      )
+    }
+
     // 后台预解析顶部曲目的第三方直链：用户点第一首歌时不必再等第三方解析那几秒。
     // 只对单曲搜索生效（type 缺省也是歌曲），失败静默、不影响返回。
-    if ((type === undefined || type === 'songs') && result.songs?.length) {
-      for (const song of result.songs.slice(0, 3)) {
+    if (wantsSongs && playableSongs.length) {
+      for (const song of playableSongs.slice(0, 3)) {
         void context.player.prefetchSource(song)
       }
     }
 
     return {
-      songs: result.songs ? tracks(context, result.songs) : undefined,
+      songs: tracks(context, playableSongs),
       albums: result.albums?.map(toAlbumDTO),
       artists: result.artists?.map(toArtistDTO),
       playlists: result.playlists?.map(toPlaylistDTO),
+      external,
       songCount: result.songCount,
       albumCount: result.albumCount,
       artistCount: result.artistCount,
