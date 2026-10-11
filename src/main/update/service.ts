@@ -395,21 +395,26 @@ export function isPortableBuild(): boolean {
 }
 
 /**
- * 便携版更新失败时的备用线路：官网下载页。
- * 便携版用户常常没有代理、直连 GitHub 不稳，与其让更新一直失败，
+ * 更新失败时的备用线路：官网下载页。
+ * 用户多半没有代理、直连 GitHub 不稳，与其让更新一直失败，
  * 不如把官网打开让他自己下载（下载入口由站长手动维护）。
  */
 export const FALLBACK_SITE = 'https://yy.ytw.asia/'
 
+/** 默认打开方式：交给系统浏览器；非 Electron 环境（单测）下 shell 不存在，静默跳过。 */
+async function openInBrowser(url: string): Promise<void> {
+  await shell?.openExternal?.(url)
+}
+
 /**
- * 打开官网兜底。**只对便携版生效**——安装版继续走原来的更新链路。
- * 非 Electron 环境（单测）或打开失败都只记日志，绝不抛异常影响主流程。
+ * 打开官网兜底：**便携版与安装版都走这条路**（用户 0.4.2 后追加要求）。
+ * 只在「用户有意更新却没成功」时调用（点安装 / 点检查更新），启动时静默检查失败不打扰。
+ * 打开失败只记日志，绝不抛异常影响主流程。
  */
-export async function openSiteFallback(reason: string): Promise<void> {
-  if (!isPortableBuild()) return
+export async function openSiteFallback(reason: string, open: (url: string) => Promise<void> = openInBrowser): Promise<void> {
   try {
-    console.warn(`[update] 便携版更新失败，改为打开官网：${reason}`)
-    await shell?.openExternal?.(FALLBACK_SITE)
+    console.warn(`[update] 更新失败，改为打开官网：${reason}`)
+    await open(FALLBACK_SITE)
   } catch (cause) {
     console.warn(`[update] 打开官网失败：${describeCause(cause)}`)
   }

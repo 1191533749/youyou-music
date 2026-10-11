@@ -12,7 +12,7 @@ import {
   type UpdateManifest
 } from '../src/main/update/service.js'
 
-describe('便携版更新失败的官网兜底', () => {
+describe('更新失败的官网兜底', () => {
   const original = process.env.PORTABLE_EXECUTABLE_DIR
 
   afterEach(() => {
@@ -27,10 +27,24 @@ describe('便携版更新失败的官网兜底', () => {
     expect(isPortableBuild()).toBe(true)
   })
 
-  it('兜底地址就是官网（下载入口由站长手动维护）', async () => {
-    // openSiteFallback 在非便携版下必须什么都不做（安装版不受影响）。
+  it('便携版与安装版更新失败都会打开官网（下载入口由站长手动维护）', async () => {
+    const opened: string[] = []
+    const open = async (url: string) => {
+      opened.push(url)
+    }
+    process.env.PORTABLE_EXECUTABLE_DIR = 'C:\\Users\\someone\\Desktop'
+    await openSiteFallback('便携版：下载失败', open)
     delete process.env.PORTABLE_EXECUTABLE_DIR
-    await expect(openSiteFallback('测试：非便携版不应触发')).resolves.toBeUndefined()
+    await openSiteFallback('安装版：下载失败', open)
+    expect(opened).toEqual(['https://yy.ytw.asia/', 'https://yy.ytw.asia/'])
+  })
+
+  it('打开官网失败也不抛异常（不能因为兜底把主流程带崩）', async () => {
+    await expect(
+      openSiteFallback('浏览器打不开', async () => {
+        throw new Error('no browser')
+      })
+    ).resolves.toBeUndefined()
   })
 })
 

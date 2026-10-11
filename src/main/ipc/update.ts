@@ -5,8 +5,8 @@
  * 然后退出应用。开发模式（未打包且没有 YOYOU_UPDATE_URL）下 check 直接返回无更新，
  * 避免每次 npm run dev 都去敲 GitHub。
  *
- * 便携版的备用线路：这类用户多半没有代理、直连 GitHub 不稳，更新（检查/下载）失败时
- * 自动打开官网，让他自己去官网下载最新版；安装版不受影响。
+ * 备用线路：更新（检查/下载/安装）失败时自动打开官网，让用户自己去官网下载最新版。
+ * 便携版与安装版同样适用；启动时的静默检查失败不会触发（那是没人在等结果的后台行为）。
  */
 import { app } from 'electron'
 import { writeFileSync } from 'node:fs'
@@ -70,8 +70,8 @@ export function registerUpdateHandlers(): void {
       trace('youyou-install-start.log', `downloaded=${localPath}`)
       applyUpdate(pick, localPath)
     } catch (cause) {
-      // 便携版用户在没代理 / 网络波动时拿不到 GitHub：失败就自动打开官网，
-      // 让用户自己下载安装包。安装版这条路保持原样。
+      // 没代理 / 网络波动时拿不到 GitHub：失败就自动打开官网，让用户自己下载安装包。
+      // 便携版与安装版都走这条兜底（用户 0.4.2 后追加要求），真正的安装/替换逻辑不变。
       await openSiteFallback(String(cause))
       throw cause
     }
