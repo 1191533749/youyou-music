@@ -1,0 +1,2645 @@
+[user]
+<acp tokens="85" type="text">m00001</acp>
+<system-reminder>
+You are teammate "qa-bug-hunter".
+Your Team Lead is named "lead".
+Use list_agents({}) to find your teammates and their names.
+To message your Team Lead, use send_message({ target: "lead", message: "..." }).
+To message another teammate, use send_message({ target: "<teammate name>", message: "..." }).
+</system-reminder>
+
+
+
+[user]
+<acp tokens="643" type="text">m00002</acp>
+你是悠悠音乐（Electron 33 网易云客户端）的专职 bug 猎手（交叉测试 + 稳定测试）。工作目录 E:\deepseek 工作区\kumone-windows。你的任务：专走刁钻路径，把 bug 报告给 Lead（send_message 发给 lead 目标，中文）。
+
+刁钻路径清单（至少覆盖，欢迎加码）：
+1. 播放中狂点切歌、快速切换上一首/下一首 20 次 → 是否卡死/声音错乱/进度错乱。
+2. 播放中切换音质（128→320→无损来回切）→ 是否停播/回零/报错。
+3. 播放中退出登录、播放中登录另一个账号 → 播放器状态。
+4. 断网重连：播放中拔网线 15 秒再恢复（可用 pwsh 禁网卡或改 DNS 模拟，或直接测无网启动）→ 是否挂死。
+5. 杀进程强退再启动 → 数据是否完好。
+6. 同一账号开两个实例（一个用真实数据目录、一个用副本）→ 一起听/播放状态是否互相顶。
+7. 搜索特殊输入：emoji、单字符「爱」、超长词、空格、纯符号 → 是否报错/崩溃。
+8. 列表点播失败的歌：点一首播放失败自动跳过的歌，看跳过是否卡很久（用户投诉「好几首就是跳过」）→ 记录每首失败等待的秒数。
+9. 私人漫游：不喜欢按钮连点、队列换到剩 0 首。
+10. 一起听：进出房间、创建房间、改房名、送礼按钮、被顶号（第二个实例进同一账号）。
+11. 设置页：主题/音质/缓存目录来回切。
+12. 窗口：最小化恢复、桌面歌词开/关、全屏。
+
+真机测试方法（先读 scripts/test-fm.mjs 学 CDP 探针模式）：探针脚本只写 scripts/test-qa-bug-*.mjs；启动 `electron out/main/index.js --remote-debugging-port=9393`，环境变量 YOYOU_USER_DATA 指向临时目录（要登录态就复制真实 cookies，参考 scripts/test-*.mjs）；先杀端口 9393 旧实例（按 Name -eq 'electron.exe' 过滤）；`Runtime.evaluate` 带 `awaitPromise:true`。每轮测完杀掉 electron。若启动失败（Lead 可能在重建 out/），等 10 秒重试。
+
+报告格式：每条 bug 一行：路径 → 操作 → 现象（附证据日志/耗时）→ 严重度（崩溃>挂死>数据错乱>体验差）。分批发，别攒。不许改 src/ 任何文件，修复由 Lead 统一做。
+
+[user]
+<acp tokens="66" type="text">m00003</acp>
+Time sampled while preparing turn 1, step 1: 2026-10-11T10:01:30+08:00[Asia/Shanghai]
+Browser time zone for this request: unavailable. Ask the user to clarify otherwise-unqualified dates and times.
+Elapsed since the preceding model-visible message: unavailable.
+
+[assistant]
+Let me start by understanding my task. I'm "qa-bug-hunter", a teammate in a team led by "lead". My job is to test the 悠悠音乐 (Electron 33 NetEase Cloud Music client) for bugs, going down tricky paths, and report bugs to the lead via send_message.
+
+Let me first look at the working directory structure and read the reference scripts (test-fm.mjs) to learn the CDP probe pattern.
+
+Let me start by exploring the workspace.
+
+[assistant • pwsh]
+{"command":"Get-ChildItem \"E:\\deepseek 工作区\\kumone-windows\" | Select-Object Name, Mode | Format-Table -AutoSize; Write-Host \"---scripts---\"; Get-ChildItem \"E:\\deepseek 工作区\\kumone-windows\\scripts\" -ErrorAction SilentlyContinue | Select-Object Name | Format-Table -AutoSize","description":"List project and scripts directory"}
+
+[assistant • list_agents]
+{}
+
+[tool • pwsh]
+
+Name                    Mode
+----                    ----
+build                   d----
+node_modules            d----
+out                     d----
+release                 d----
+resources               d----
+scripts                 d----
+server                  d----
+shots-9items            d----
+src                     d----
+tests                   d----
+vendor                  d----
+website                 d----
+.gitignore              -a---
+悠悠音乐安装版0.4.2.exe -a---
+悠悠音乐便携版0.4.2.exe -a---
+COPYING                 -a---
+electron-builder.yml    -a---
+electron.vite.config.ts -a---
+HANDOFF.md              -a---
+LICENSE                 -a---
+package-lock.json       -a---
+package.json            -a---
+README.md               -a---
+THIRD-PARTY-NOTICES.txt -a---
+tsconfig.json           -a---
+tsconfig.node.json      -a---
+tsconfig.web.json       -a---
+vitest.config.ts        -a---
+
+---scripts---
+
+Name
+----
+after-pack.cjs
+alipay-probe.mjs
+deploy-relay.mjs
+diag-playback.mjs
+diag-stutter.mjs
+fetch-mpv.ps1
+fetch-rcedit.ps1
+github-release.mjs
+live-stutter.mjs
+make-icon.py
+package.mjs
+probe-perf.mjs
+probe-top-artists.mjs
+pull-website.mjs
+relay-ssh.mjs
+run-debug.mjs
+shot-ui.mjs
+shot-website.cjs
+smoke.mjs
+test-auto-retry.mjs
+test-back-and-quality.mjs
+test-daily-dates.mjs
+test-daily-ui.mjs
+test-fm.mjs
+test-home-artists.mjs
+test-log-upload.mjs
+test-nowplaying-ui.mjs
+test-optimize.mjs
+test-page-keepalive.mjs
+test-platforms.mjs
+test-playlist.mjs
+test-prefetch.mjs
+test-quality.mjs
+test-relay-public.mjs
+test-relay.mjs
+test-round2.mjs
+test-round3.mjs
+test-round4.mjs
+test-round5.mjs
+test-round6.mjs
+test-settings-update.mjs
+test-sources.mjs
+test-speed.mjs
+test-together-ui.mjs
+test-top-search.mjs
+test-update-e2e.mjs
+verify-integrity.mjs
+verify-packaged.mjs
+verify-server.mjs
+watch-mpv.mjs
+
+
+
+[tool • list_agents]
+[{"target":"lead","role":"lead","status":"running","model":"deepseek-v4-pro","diagnostics":[]},{"target":"ui-home","role":"teammate","status":"inactive","description":"实现首页/发现/搜索/播放页四个页面","provider":"spawn","context":"fresh","model":"deepseek-v4-pro","diagnostics":[]},{"target":"ui-library","role":"teammate","status":"inactive","description":"实现我的音乐/每日推荐/私人FM/云盘页面","provider":"spawn","context":"fresh","model":"deepseek-v4-pro","diagnostics":[]},{"target":"ui-detail","role":"teammate","status":"inactive","description":"实现详情页与共享交互组件","provider":"spawn","context":"fresh","model":"deepseek-v4-pro","diagnostics":[]},{"target":"qa-frontend","role":"teammate","status":"running","description":"前端测试员：真机逐页测试 UI 交互","provider":"spawn","context":"fresh","model":"deepseek-v4-pro","diagnostics":[]},{"target":"qa-backend","role":"teammate","status":"running","description":"后端与音源测试员：接口、音源、中继稳定性","provider":"spawn","context":"fresh","model":"deepseek-v4-pro","diagnostics":[]},{"target":"qa-bug-hunter","role":"teammate","status":"running","description":"bug 猎手：交叉/稳定/刁钻路径测试","provider":"spawn","context":"fresh","model":"deepseek-v4-pro","diagnostics":[]}]
+
+[assistant]
+I'm qa-bug-hunter. Let me read the reference script test-fm.mjs to learn the CDP probe pattern, then look at package.json and other test scripts to learn conventions.
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-fm.mjs"}
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\package.json"}
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-fm.mjs</path>
+<type>file</type>
+<content>
+1: /**
+2:  * 端到端验证「私人漫游全部走汽水音乐、随机播放」。
+3:  *
+4:  * 用法：npx electron-vite build 之后 node scripts/test-fm.mjs
+5:  * 用独立的 userData（不需要登录：汽水免登录直连）。
+6:  */
+7: import { spawn } from 'node:child_process'
+8: import * as path from 'node:path'
+9: import * as os from 'node:os'
+10: import * as fs from 'node:fs'
+11: import process from 'node:process'
+12: 
+13: const root = process.cwd()
+14: const electron = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+15: const CDP_PORT = 9379
+16: const userData = path.join(os.tmpdir(), 'youyou-fm-test')
+17: const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+18: const log = (message) => console.log(`[fm] ${message}`)
+19: 
+20: const results = []
+21: const record = (name, ok, detail = '') => {
+22:   results.push({ name, ok })
+23:   log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
+24: }
+25: 
+26: async function cdpEval(expression) {
+27:   const targets = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json()
+28:   const page = targets.find((target) => target.type === 'page')
+29:   if (!page) throw new Error('未找到页面 target')
+30:   const ws = new WebSocket(page.webSocketDebuggerUrl)
+31:   await new Promise((resolve, reject) => {
+32:     ws.addEventListener('open', () => resolve())
+33:     ws.addEventListener('error', reject)
+34:   })
+35:   const value = await new Promise((resolve) => {
+36:     const id = Math.floor(Math.random() * 1e9)
+37:     const onMessage = (event) => {
+38:       const message = JSON.parse(event.data)
+39:       if (message.id !== id) return
+40:       ws.removeEventListener('message', onMessage)
+41:       const result = message.result
+42:       if (result?.exceptionDetails) {
+43:         resolve({ __exception: result.exceptionDetails.text })
+44:         return
+45:       }
+46:       resolve(result?.result?.value)
+47:     }
+48:     ws.addEventListener('message', onMessage)
+49:     ws.send(
+50:       JSON.stringify({
+51:         id,
+52:         method: 'Runtime.evaluate',
+53:         params: { expression, returnByValue: true, awaitPromise: true }
+54:       })
+55:     )
+56:   })
+57:   ws.close()
+58:   return value
+59: }
+60: 
+61: async function waitFor(expression, timeoutMs = 20_000, label = expression) {
+62:   const deadline = Date.now() + timeoutMs
+63:   let last
+64:   while (Date.now() < deadline) {
+65:     last = await cdpEval(expression)
+66:     if (last === true) return true
+67:     await wait(500)
+68:   }
+69:   log(`等待超时: ${label} 最后取值=${JSON.stringify(last)?.slice(0, 200)}`)
+70:   return false
+71: }
+72: 
+73: const state = () => cdpEval(`(async () => (await window.youyou.invoke('player:state')).data)()`)
+74: 
+75: const fmSnapshot = () =>
+76:   cdpEval(
+77:     `(() => ({
+78:       title: document.querySelector('.fm__title')?.textContent ?? null,
+79:       artist: document.querySelector('.fm__artist')?.textContent ?? null,
+80:       queue: document.querySelector('.fm__queue')?.textContent ?? null,
+81:       playing: Boolean(document.querySelector('.fm__control--primary')),
+82:       placeholder: document.querySelector('.placeholder')?.textContent ?? null
+83:     }))()`
+84:   )
+85: 
+86: async function main() {
+87:   fs.rmSync(userData, { recursive: true, force: true })
+88:   fs.mkdirSync(userData, { recursive: true })
+89:   const env = { ...process.env, YOYOU_USER_DATA: userData }
+90:   delete env.ELECTRON_RUN_AS_NODE
+91:   const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
+92:     stdio: 'ignore',
+93:     env,
+94:     cwd: root,
+95:     detached: true
+96:   })
+97:   child.unref()
+98: 
+99:   try {
+100:     let ready = false
+101:     for (let attempt = 0; attempt < 30; attempt += 1) {
+102:       await wait(1500)
+103:       try {
+104:         if (await cdpEval(`Boolean(window.youyou)`)) {
+105:           ready = true
+106:           break
+107:         }
+108:       } catch {
+109:         /* 还没起来 */
+110:       }
+111:     }
+112:     if (!ready) {
+113:       record('实例启动', false, '轮询超时')
+114:       return
+115:     }
+116:     record('实例启动并连上 CDP', true)
+117: 
+118:     // 未登录也能进：漫游页在侧栏里，不需要网易云账号。
+119:     const entered = await cdpEval(
+120:       `(() => {
+121:         const link = [...document.querySelectorAll('.sidebar__link')].find((node) => (node.textContent ?? '').trim() === '私人漫游')
+122:         if (!link) return false
+123:         link.click()
+124:         return true
+125:       })()`
+126:     )
+127:     record('侧栏进入私人漫游', entered)
+128: 
+129:     const started = await waitFor(
+130:       `Boolean(document.querySelector('.fm__title'))`,
+131:       40_000,
+132:       '漫游曲目出现'
+133:     )
+134:     const first = await fmSnapshot()
+135:     record('漫游开始出曲', started, `title=${JSON.stringify(first.title)} placeholder=${JSON.stringify(first.placeholder)}`)
+136:     record('曲目有歌名与歌手', Boolean(first.title) && Boolean(first.artist), `${first.title} / ${first.artist}`)
+137:     record('显示漫游队列剩余', /漫游队列剩余\s*\d+/.test(first.queue ?? ''), JSON.stringify(first.queue))
+138: 
+139:     const playing = await waitFor(
+140:       `(async () => {
+141:         const s = (await window.youyou.invoke('player:state')).data
+142:         return Boolean(s && s.playing && s.position > 0.5 && s.servedFrom)
+143:       })()`,
+144:       60_000,
+145:       '漫游出声'
+146:     )
+147:     const snapshot = await state()
+148:     record('漫游出声', playing, `servedFrom=${snapshot?.servedFrom} pos=${snapshot?.position?.toFixed?.(1)}`)
+149:     record('音源是汽水音乐', snapshot?.servedFrom === '汽水音乐', String(snapshot?.servedFrom))
+150:     record('队列来自站外合成曲目', typeof snapshot?.track?.id === 'number' && snapshot.track.id < 0, `id=${snapshot?.track?.id}`)
+151: 
+152:     // 换两首：曲目必须都是站外合成曲目（漫游由汽水供曲），汽水优先、拿不到才换源。
+153:     const sources = [snapshot?.servedFrom]
+154:     for (const round of [1, 2]) {
+155:       const before = (await state())?.track?.name
+156:       await cdpEval(`(async () => (await window.youyou.invoke('player:next')).data)()`)
+157:       const switched = await waitFor(
+158:         `(async () => {
+159:           const s = (await window.youyou.invoke('player:state')).data
+160:           return Boolean(s && s.playing && s.position > 0.3 && s.servedFrom && s.track && s.track.id < 0 && s.track.name !== ${JSON.stringify(before)})
+161:         })()`,
+162:         60_000,
+163:         `第 ${round} 次换曲出声`
+164:       )
+165:       const now = await state()
+166:       sources.push(now?.servedFrom)
+167:       record(
+168:         `换到第 ${round + 1} 首仍是漫游曲目`,
+169:         switched,
+170:         `${before} → ${now?.track?.name} servedFrom=${now?.servedFrom} id=${now?.track?.id}`
+171:       )
+172:     }
+173:     const qishuiCount = sources.filter((item) => item === '汽水音乐').length
+174:     record(
+175:       '汽水是漫游的主要音源',
+176:       qishuiCount >= 2,
+177:       `来源=${JSON.stringify(sources)}（汽水 ${qishuiCount}/${sources.length}）`
+178:     )
+179: 
+180:     // 「不喜欢」按钮：站外曲目不该报错，且能换下一首
+181:     const trashWorked = await cdpEval(
+182:       `(() => {
+183:         const button = [...document.querySelectorAll('.fm__control')].find((node) => (node.getAttribute('aria-label') ?? '').includes('不喜欢'))
+184:         if (!button) return false
+185:         button.click()
+186:         return true
+187:       })()`
+188:     )
+189:     record('找到不喜欢按钮', trashWorked)
+190:     const afterTrash = await waitFor(
+191:       `(async () => {
+192:         const s = (await window.youyou.invoke('player:state')).data
+193:         return Boolean(s && s.playing && s.servedFrom === '汽水音乐')
+194:       })()`,
+195:       45_000,
+196:       '不喜欢后继续漫游'
+197:     )
+198:     const toast = await cdpEval(`document.querySelector('.toast')?.textContent ?? null`)
+199:     record('不喜欢后继续漫游且无报错', afterTrash && !/失败/.test(toast ?? ''), `toast=${JSON.stringify(toast)}`)
+200:   } finally {
+201:     try {
+202:       await cdpEval(`window.close()`)
+203:     } catch {
+204:       /* 忽略 */
+205:     }
+206:     spawn('taskkill', ['/F', '/T', '/PID', String(child.pid)], { stdio: 'ignore' })
+207:   }
+208: 
+209:   const failed = results.filter((item) => !item.ok)
+210:   log(`结果: ${results.length - failed.length}/${results.length} 通过`)
+211:   if (failed.length > 0) process.exitCode = 1
+212: }
+213: 
+214: await main()
+
+(End of file - total 214 lines)
+</content>
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\package.json</path>
+<type>file</type>
+<content>
+1: {
+2:   "name": "youyou-music",
+3:   "version": "0.4.2",
+4:   "description": "悠悠音乐 — NetEase Cloud Music client for Windows (Electron + mpv)",
+5:   "main": "out/main/index.js",
+6:   "author": "悠悠音乐",
+7:   "license": "LGPL-3.0-only",
+8:   "private": true,
+9:   "scripts": {
+10:     "dev": "electron-vite dev",
+11:     "build": "electron-vite build",
+12:     "start": "electron-vite preview",
+13:     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+14:     "test": "vitest run",
+15:     "smoke": "electron-vite build && node scripts/smoke.mjs",
+16:     "verify:packaged": "node scripts/verify-packaged.mjs",
+17:     "dist": "electron-vite build && node scripts/package.mjs",
+18:     "dist:installer": "electron-vite build && electron-builder --win nsis --publish never",
+19:     "dist:portable": "electron-vite build && electron-builder --win portable --publish never"
+20:   },
+21:   "dependencies": {
+22:     "electron-updater": "^6.6.2",
+23:     "qrcode": "^1.5.4"
+24:   },
+25:   "devDependencies": {
+26:     "@types/node": "^22.10.2",
+27:     "@types/qrcode": "^1.5.6",
+28:     "@types/react": "^18.3.17",
+29:     "@types/react-dom": "^18.3.5",
+30:     "@vitejs/plugin-react": "^4.3.4",
+31:     "7zip-bin": "^5.2.0",
+32:     "electron": "^33.3.0",
+33:     "electron-builder": "^25.1.8",
+34:     "electron-vite": "^2.3.0",
+35:     "react": "^18.3.1",
+36:     "react-dom": "^18.3.1",
+37:     "ssh2": "^1.17.0",
+38:     "typescript": "^5.7.2",
+39:     "vite": "^5.4.11",
+40:     "vitest": "^2.1.8"
+41:   }
+42: }
+
+(End of file - total 42 lines)
+</content>
+
+[assistant]
+Let me look at a couple more test scripts to learn conventions, particularly how they handle login state (cookies), and how they launch the app with a real user data dir. Let me check test-together-ui.mjs and test-back-and-quality.mjs since those are related to my test list. Also check the out/ directory exists.
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-back-and-quality.mjs"}
+
+[assistant • pwsh]
+{"command":"Get-ChildItem \"E:\\deepseek 工作区\\kumone-windows\\out\" -ErrorAction SilentlyContinue | Select-Object Name; Write-Host \"---\"; Get-Process electron -ErrorAction SilentlyContinue | Select-Object Id, ProcessName; Write-Host \"---env---\"; $env:YOYOU_USER_DATA","description":"Check out dir and running electron processes"}
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-back-and-quality.mjs</path>
+<type>file</type>
+<content>
+1: /**
+2:  * 验证两件事：
+3:  *  A. 「返回」按钮只在内容页出现，且只回到进入它的那个页面（不会退回别的类目）；
+4:  *  B. 底部音质显示的是**真实音质**（设置里的首选达不到时显示实际档位）。
+5:  *
+6:  * 用法：npx electron-vite build 之后 node scripts/test-back-and-quality.mjs
+7:  */
+8: import { spawn, execSync } from 'node:child_process'
+9: import * as path from 'node:path'
+10: import * as os from 'node:os'
+11: import process from 'node:process'
+12: 
+13: const root = process.cwd()
+14: const electron = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+15: const CDP_PORT = 9346
+16: const userData = path.join(os.tmpdir(), 'youyou-back-quality-test')
+17: const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+18: const log = (message) => console.log(`[back-quality] ${message}`)
+19: 
+20: async function cdp(expression) {
+21:   const targets = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json()
+22:   const page = targets.find((target) => target.type === 'page')
+23:   if (!page) throw new Error('未找到页面 target')
+24:   const ws = new WebSocket(page.webSocketDebuggerUrl)
+25:   await new Promise((resolve, reject) => {
+26:     ws.addEventListener('open', () => resolve())
+27:     ws.addEventListener('error', reject)
+28:   })
+29:   const value = await new Promise((resolve) => {
+30:     const id = Math.floor(Math.random() * 1e9)
+31:     const onMessage = (event) => {
+32:       const message = JSON.parse(event.data)
+33:       if (message.id === id) {
+34:         ws.removeEventListener('message', onMessage)
+35:         resolve(message.result?.result?.value)
+36:       }
+37:     }
+38:     ws.addEventListener('message', onMessage)
+39:     // awaitPromise 必须为 true：否则 async 表达式只会拿回一个 Promise 对象（returnByValue 下是 {}）。
+40:     ws.send(
+41:       JSON.stringify({
+42:         id,
+43:         method: 'Runtime.evaluate',
+44:         params: { expression, returnByValue: true, awaitPromise: true }
+45:       })
+46:     )
+47:   })
+48:   ws.close()
+49:   return value
+50: }
+51: 
+52: const clickNav = (label) =>
+53:   cdp(`(() => {
+54:     const link = [...document.querySelectorAll('.sidebar__link')].find((item) => item.textContent.includes(${JSON.stringify(label)}))
+55:     if (!link) return false
+56:     link.click()
+57:     return true
+58:   })()`)
+59: 
+60: const visiblePageTitle = () =>
+61:   cdp(`(() => {
+62:     const slot = [...document.querySelectorAll('.page-slot')].find((item) => !item.hasAttribute('hidden'))
+63:     const root = slot ?? document
+64:     const title = root.querySelector('.page__title, .home__greeting, h1, h2')
+65:     return (title?.textContent ?? '').replace(/\\s+/g, ' ').trim().slice(0, 24)
+66:   })()`)
+67: 
+68: const hasBackButton = () => cdp(`Boolean(document.querySelector('.top-row__back'))`)
+69: 
+70: const results = []
+71: const record = (name, ok, detail = '') => {
+72:   results.push({ name, ok })
+73:   log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
+74: }
+75: 
+76: async function main() {
+77:   const env = { ...process.env, KUMONE_USER_DATA: userData }
+78:   delete env.ELECTRON_RUN_AS_NODE
+79:   const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
+80:     stdio: 'ignore',
+81:     env,
+82:     cwd: root,
+83:     detached: true
+84:   })
+85:   child.unref()
+86:   log(`dev 实例 PID=${child.pid}`)
+87: 
+88:   try {
+89:     for (let attempt = 0; attempt < 24; attempt += 1) {
+90:       await wait(1500)
+91:       try {
+92:         if (await cdp(`Boolean(document.querySelector('.sidebar__link'))`)) break
+93:       } catch {
+94:         /* 还没起来 */
+95:       }
+96:     }
+97:     await wait(2500)
+98: 
+99:     // --- A. 一级页面不显示返回 ---
+100:     let allClean = true
+101:     for (const label of ['发现', '我的音乐', '每日推荐', '私人漫游', '一起听', '云盘', '设置']) {
+102:       await clickNav(label)
+103:       await wait(1000)
+104:       if (await hasBackButton()) {
+105:         allClean = false
+106:         log(`  「${label}」出现了返回按钮`)
+107:       }
+108:     }
+109:     record('一级页面（含设置）都不显示返回按钮', allClean)
+110: 
+111:     // --- B. 从「我的音乐」进专辑页 → 显示返回，返回后回到我的音乐（不是别的类目）---
+112:     await clickNav('我的音乐')
+113:     await wait(3000)
+114:     const entered = await cdp(`(() => {
+115:       const root = document.querySelector('.page-slot:not([hidden])') ?? document
+116:       const cards = [...root.querySelectorAll('.card, .album-card, [role="button"]')]
+117:       const card = cards.find((item) => item.className && String(item.className).includes('card'))
+118:       if (!card) return false
+119:       card.click()
+120:       return true
+121:     })()`)
+122:     await wait(2800)
+123:     const backVisible = await hasBackButton()
+124:     record('进入内容页后出现返回按钮', backVisible === true)
+125: 
+126:     if (entered && backVisible) {
+127:       await cdp(`document.querySelector('.top-row__back').click()`)
+128:       await wait(2000)
+129:       const afterBack = await visiblePageTitle()
+130:       const stillHasBack = await hasBackButton()
+131:       record('返回后回到来源类目（我的音乐），且返回按钮消失', stillHasBack === false, `回到：${afterBack}`)
+132:     } else {
+133:       record('返回后回到来源类目（我的音乐），且返回按钮消失', false, `未进入内容页（entered=${entered} back=${backVisible}）`)
+134:     }
+135: 
+136:     // --- C. 音质显示真实档位（先设最高首选音质，再播放一首歌）---
+137:     await cdp(`(async () => {
+138:       await window.youyou.invoke('settings:update', { quality: 'jymaster' })
+139:       return true
+140:     })()`)
+141:     await wait(1500)
+142: 
+143:     await clickNav('搜索')
+144:     await wait(2000)
+145:     // 空态里的大搜索框输入并用回车搜索
+146:     await cdp(`(() => {
+147:       const input = [...document.querySelectorAll('input')].find((el) => el.offsetParent !== null)
+148:       if (!input) return false
+149:       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+150:       setter.call(input, '孤勇者')
+151:       input.dispatchEvent(new Event('input', { bubbles: true }))
+152:       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+153:       return true
+154:     })()`)
+155: 
+156:     let rows = 0
+157:     for (let attempt = 0; attempt < 22; attempt += 1) {
+158:       await wait(900)
+159:       rows = Number(
+160:         await cdp(`document.querySelector('.page-slot:not([hidden])')?.querySelectorAll('.song-row').length ?? document.querySelectorAll('.song-row').length`)
+161:       ) || 0
+162:       if (rows > 0) break
+163:     }
+164:     record('搜索页能出结果（用于验证播放）', rows > 0, `${rows} 行`)
+165: 
+166:     // 点第一行的播放按钮（或双击整行）
+167:     await cdp(`(() => {
+168:       const root = document.querySelector('.page-slot:not([hidden])') ?? document
+169:       const row = root.querySelector('.song-row')
+170:       if (!row) return false
+171:       const button = row.querySelector('button')
+172:       if (button) button.click()
+173:       else row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+174:       return true
+175:     })()`)
+176: 
+177:     let snapshot
+178:     for (let attempt = 0; attempt < 24; attempt += 1) {
+179:       await wait(1500)
+180:       snapshot = await cdp(`(async () => {
+181:         const reply = await window.youyou.invoke('player:state')
+182:         const state = reply?.data ?? reply
+183:         const select = document.querySelector('.quality-select select')
+184:         return {
+185:           preference: state?.quality ?? null,
+186:           served: state?.servedQuality ?? null,
+187:           bitrate: state?.servedBitrate ?? null,
+188:           servedFrom: state?.servedFrom ?? null,
+189:           selectValue: select?.value ?? null,
+190:           playing: state?.playing === true,
+191:           track: state?.track?.name ?? null
+192:         }
+193:       })()`)
+194:       log(`  第 ${attempt + 1} 次采样：${JSON.stringify(snapshot)}`)
+195:       // 等到真实档位被补上（第三方音源要等 mpv 载入后读码率），最多等 ~35 秒。
+196:       if (snapshot?.playing && snapshot?.served) break
+197:       if (snapshot?.playing && snapshot?.preference && attempt >= 12 && snapshot.served) break
+198:     }
+199:     log(`  播放状态：${JSON.stringify(snapshot)}`)
+200:     if (snapshot?.playing) {
+201:       const expected = snapshot.served ?? (snapshot.servedFrom ? 'standard' : snapshot.preference)
+202:       record(
+203:         '音质控件显示真实档位（不是首选值）',
+204:         snapshot.selectValue === expected,
+205:         `显示=${snapshot.selectValue} 实际=${snapshot.served} 码率=${snapshot.bitrate}kbps 来源=${snapshot.servedFrom ?? '网易云'}`
+206:       )
+207:       if (snapshot.served && snapshot.preference && snapshot.served !== snapshot.preference) {
+208:         record('首选达不到时如实降档显示', snapshot.selectValue === snapshot.served, `${snapshot.selectValue} ≠ 首选 ${snapshot.preference}`)
+209:       } else if (snapshot.served) {
+210:         log('  本次音源给到了首选档位（served == preference）')
+211:       } else {
+212:         record('第三方音源也能标出真实档位', false, 'servedQuality 始终为 null（码率没读到）')
+213:       }
+214:     } else {
+215:       record('能播放曲目以验证音质显示', false, '播放未开始')
+216:     }
+217:   } catch (cause) {
+218:     record('测试执行异常', false, String(cause).slice(0, 160))
+219:   } finally {
+220:     try {
+221:       execSync(
+222:         `powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*youyou-back-quality-test*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`,
+223:         { stdio: 'ignore' }
+224:       )
+225:     } catch {
+226:       /* ignore */
+227:     }
+228:   }
+229: 
+230:   const failed = results.filter((item) => !item.ok)
+231:   log(failed.length === 0 ? 'BACK-QUALITY OK' : `BACK-QUALITY FAILED (${failed.length}/${results.length})`)
+232:   process.exit(failed.length === 0 ? 0 : 1)
+233: }
+234: 
+235: main().catch((cause) => {
+236:   console.error(`[back-quality] 失败: ${cause}`)
+237:   process.exit(1)
+238: })
+
+(End of file - total 238 lines)
+</content>
+
+[tool • pwsh]
+
+---
+---env---
+Name
+----
+main
+preload
+renderer
+
+
+
+[assistant]
+The out/ directory has main, preload, renderer. The task instructions say to start `electron out/main/index.js --remote-debugging-port=9393` — but the test scripts use `electron .` which uses package.json main = out/main/index.js. Let me check what other test scripts do about login state (cookies copying). Let me look at test-together-ui.mjs and one that copies cookies. Let me grep for cookie-related code in scripts.
+
+[assistant • grep]
+{"pattern":"cookies|Cookie|登录|login|MUSIC_U","path":"E:\\deepseek 工作区\\kumone-windows\\scripts","include":"*.mjs"}
+
+[tool • grep]
+Found 98 matches
+
+kumone-windows\scripts\smoke.mjs
+Line 40: // Isolated profile: the check must not touch the real login, and a stale
+
+kumone-windows\scripts\probe-top-artists.mjs
+Line 59:   if (musicU) header.MUSIC_U = musicU
+Line 77: function loadCookie() {
+Line 79:   const file = join(p ?? join(homedir(), 'AppData', 'Roaming'), 'youyou-music', 'cookies.json')
+Line 92:     musicU: jar.MUSIC_U ?? ''
+Line 97:   const cookie = loadCookie()
+Line 110:         Cookie: cookie.header
+Line 137:         Cookie: cookie.header
+
+kumone-windows\scripts\github-release.mjs
+Line 81:   const login = user.login
+Line 82:   log(`身份: @${login}（${user.name ?? '无显示名'}）`)
+Line 87:     repo = await api('GET', `/repos/${login}/youyou-music`)
+Line 103:     const remote = `https://x-access-token:${token}@github.com/${login}/youyou-music.git`
+Line 119:     release = await api('GET', `/repos/${login}/youyou-music/releases/tags/${releaseTag}`)
+Line 125:       release = await api('POST', `/repos/${login}/youyou-music/releases`, {
+Line 149:     const existing = await api('GET', `/repos/${login}/youyou-music/releases/tags/${releaseTag}`)
+Line 156:       `https://uploads.github.com/repos/${login}/youyou-music/releases/${release.id}/assets?name=${encodeURIComponent(name)}`,
+Line 178:     log(`仓库地址: https://github.com/${login}/youyou-music`)
+
+kumone-windows\scripts\diag-playback.mjs
+Line 174:   // 真实配置只读副本：登录态 + 设置；故意不拷 audio-cache（要测冷启动）
+Line 175:   for (const entry of ['settings.json', 'cookies.json', 'Preferences', 'Local State', 'Local Storage', 'Network']) {
+Line 203:   log(`登录态 = ${JSON.stringify(auth?.data)}`)
+
+kumone-windows\scripts\test-auto-retry.mjs
+Line 111:   for (const name of ['cookies.json', 'settings.json']) {
+
+kumone-windows\scripts\probe-perf.mjs
+Line 53:   for (const name of ['cookies.json', 'settings.json']) {
+
+kumone-windows\scripts\diag-stutter.mjs
+Line 228:   for (const entry of ['settings.json', 'cookies.json', 'Preferences', 'Local State', 'Local Storage', 'Network']) {
+Line 246:   log(`登录态 = ${JSON.stringify(auth?.data)}`)
+
+kumone-windows\scripts\test-quality.mjs
+Line 86:   for (const name of ['cookies.json', 'settings.json']) {
+
+kumone-windows\scripts\test-nowplaying-ui.mjs
+Line 5:  *  1. 用**真实 cookies.json 的副本**起一个隔离 userData 实例（不碰用户真实 profile）；
+Line 40: /** 只复制 cookie jar（保持登录态），不复制缓存与设置。 */
+Line 43:   const source = path.join(realUserData, 'cookies.json')
+Line 45:     log(`未找到 ${source}，将以未登录状态运行`)
+Line 48:   copyFileSync(source, path.join(userData, 'cookies.json'))
+Line 50:     const jar = JSON.parse(readFileSync(path.join(userData, 'cookies.json'), 'utf8'))
+Line 51:     return typeof jar.MUSIC_U === 'string' && jar.MUSIC_U.length > 0
+Line 248:   log(loggedIn ? '已复制真实 cookie（含 MUSIC_U），实例应处于登录态' : '没有可用登录态')
+
+kumone-windows\scripts\test-fm.mjs
+Line 5:  * 用独立的 userData（不需要登录：汽水免登录直连）。
+Line 118:     // 未登录也能进：漫游页在侧栏里，不需要网易云账号。
+
+kumone-windows\scripts\test-home-artists.mjs
+Line 2:  * 取证「首页歌手图片加载不出来」：隔离实例 + 真实登录 cookie，进首页，
+Line 109:   // 复制真实登录 cookie + 设置，让首页 feed/热歌与用户一致。
+Line 111:   for (const name of ['cookies.json', 'settings.json']) {
+
+kumone-windows\scripts\test-daily-ui.mjs
+Line 5:  *  1. 用**真实 cookies.json 的副本**起一个隔离 userData 实例（不碰用户真实 profile）；
+Line 35: /** 只复制 cookie jar（保持登录态），不复制缓存与设置，尽量少动东西。 */
+Line 38:   const source = path.join(realUserData, 'cookies.json')
+Line 40:     log(`未找到 ${source}，将以未登录状态运行`)
+Line 43:   copyFileSync(source, path.join(userData, 'cookies.json'))
+Line 44:   // 不打印 cookie 内容，只确认登录令牌在不在。
+Line 46:     const jar = JSON.parse(readFileSync(path.join(userData, 'cookies.json'), 'utf8'))
+Line 47:     return typeof jar.MUSIC_U === 'string' && jar.MUSIC_U.length > 0
+Line 240:   log(loggedIn ? '已复制真实 cookie（含 MUSIC_U），实例应处于登录态' : '没有可用登录态')
+
+kumone-windows\scripts\test-round2.mjs
+Line 17:  *      登录 uid（服务器按 uid 存日推记录，用合成 uid 不污染真实账号数据）；
+
+kumone-windows\scripts\test-sources.mjs
+Line 68:   for (const name of ['cookies.json', 'settings.json']) {
+
+kumone-windows\scripts\test-prefetch.mjs
+Line 108:   for (const entry of ['settings.json', 'cookies.json', 'Preferences', 'Local State', 'Local Storage', 'Network']) {
+
+kumone-windows\scripts\test-playlist.mjs
+Line 6:  * QQ 歌单要扫码登录才拿得到，所以这里用 YOYOU_FAKE_QQ_ACCOUNT=1 种一个假账号 + 一张
+Line 105:         qr: Boolean(group.querySelector('.source-bind img, .source-bind .login__qr-placeholder'))
+
+kumone-windows\scripts\test-together-ui.mjs
+Line 25: /** 用 smoke 自检的离线样本造缓存音源：不需要登录、不需要网络也能真的播放。 */
+Line 29: /** 记录实际使用的登录凭证来源，便于排查「实例没登录」。 */
+Line 30: let plantCookiesSource = '(未复制)'
+Line 45:  * 一起听需要登录：把真实 profile 的 cookies.json 复制一份到隔离目录
+Line 48:  * 注意：不同时期的构建用过不同的 userData 目录名，其中只有仍是有效登录态的
+Line 49:  * 那份 cookie 能让实例处于登录状态，所以按「已知可用的目录」顺序尝试。
+Line 51: function plantCookies() {
+Line 54:     path.join(process.env.APPDATA ?? '', 'kumone-windows', 'cookies.json'),
+Line 55:     path.join(process.env.APPDATA ?? '', 'youyou-music', 'cookies.json'),
+Line 56:     path.join(process.env.APPDATA ?? '', 'YouyouMusic', 'cookies.json')
+Line 60:     log('未找到任何登录凭证：未登录状态下页面只会显示登录提示卡')
+Line 64:   copyFileSync(source, path.join(userData, 'cookies.json'))
+Line 65:   plantCookiesSource = source
+Line 66:   log(`已复制登录凭证：${source}`)
+Line 145:   const loggedIn = plantCookies()
+Line 181:     // 登录态与资料是异步加载的，等它落定再判断（最多 20 秒）。
+Line 193:     record('测试实例处于登录态', loggedInApp, plantCookiesSource)
+Line 195:     record('登录后不显示登录门禁', gate === false)
+Line 201:     // 2. 登录后应自动连接中继（页面上已无「连接中继」「断开」按钮）
+
+kumone-windows\scripts\test-round6.mjs
+Line 129:   // 只覆盖 settings（关掉桌面歌词等干扰）；登录态 cookies.json 原样保留（真实配置才有）。
+Line 131:   log(`已准备隔离配置：${tmp}${real ? '（真实登录态拷贝）' : '（全新）'}`)
+
+kumone-windows\scripts\test-round5.mjs
+Line 2:  * 第五轮打磨的真机验证（CDP 端口 9363，profile 用真实登录态拷贝）：
+Line 6:  *  ④ 登录态侧边栏头像显示、auth:profile 通道能返回带头像资料（登录后无需重启）；
+Line 175:   // 只覆盖 settings（关掉桌面歌词等干扰），登录态 cookies.json 原样保留——③④⑥ 需要真实 uid。
+Line 177:   log(`已准备隔离配置（真实登录态）：${tmpProfile}`)
+Line 303:     // ---------- ④ 登录态头像 ----------
+Line 312:       '④ 登录态侧边栏头像显示（img 存在且有地址）',
+
+kumone-windows\scripts\test-speed.mjs
+Line 2:  * 本轮提速与返回按钮的端到端验证（隔离实例 + 真实登录 cookie，不碰用户的实例）。
+Line 91:   for (const name of ['cookies.json', 'settings.json']) {
+
+kumone-windows\scripts\test-platforms.mjs
+Line 2:  * 端到端验证「登录页只有网易云 + QQ 音源账号在设置里按需绑定」。
+Line 5:  * 用独立的 userData（全新的、没登录过），所以进去就是登录页。
+Line 76: const loginSnapshot = () =>
+Line 79:       platforms: document.querySelectorAll('.login__platform').length,
+Line 81:       status: document.querySelector('.login__status')?.textContent ?? null,
+Line 82:       hint: document.querySelector('.login__hint')?.textContent ?? null,
+Line 112:         status: group.querySelector('.login__status')?.textContent ?? null,
+Line 157:     // 没登录时首页给的是「去登录」入口，登录页在它后面。
+Line 160:         const button = [...document.querySelectorAll('button')].find((node) => (node.textContent ?? '').trim() === '去登录')
+Line 166:     record('从首页进入登录页', opened)
+Line 168:     const onLogin = await waitFor(`Boolean(document.querySelector('.login__qr-frame'))`, 15_000, '登录页出现')
+Line 169:     record('登录页出现', onLogin)
+Line 172:     const login = await loginSnapshot()
+Line 173:     record('登录页只剩网易云：出二维码', neteaseQR)
+Line 174:     record('登录页不再有平台图标', login.platforms === 0, `platforms=${login.platforms}`)
+Line 175:     record('状态文案是网易云', /网易云/.test(login.status ?? ''), login.status ?? '')
+Line 176:     record('提示文案是网易云扫码', /网易云音乐 App/.test(login.hint ?? ''), login.hint ?? '')
+
+[assistant]
+I now understand the patterns. Let me plan my testing. I'm the bug hunter with 12 tricky paths. I should:
+
+1. First check that out/ is built and launchable (Lead might be rebuilding).
+2. Set up a probe harness script for bug hunting.
+
+Key facts:
+- electron.exe at node_modules/electron/dist/electron.exe
+- Launch: `electron out/main/index.js --remote-debugging-port=9393` per instructions (or `electron .` which is the same since package.json main points there).
+- YOYOU_USER_DATA env var for user data dir (note: test-back-and-quality.mjs uses KUMONE_USER_DATA, but the instructions say YOYOU_USER_DATA — test-fm.mjs uses YOYOU_USER_DATA. Let me check main process code to see which env var it reads).
+- Login state: copy cookies.json from real profile: %APPDATA%\youyou-music\cookies.json (and possibly kumone-windows).
+
+Let me check what env var the app actually reads for user data.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src","pattern":"YOYOU_USER_DATA|KUMONE_USER_DATA|userData"}
+
+[assistant • pwsh]
+{"command":"Get-ChildItem \"$env:APPDATA\\youyou-music\", \"$env:APPDATA\\kumone-windows\", \"$env:APPDATA\\YouyouMusic\" -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize","description":"Check real userData profiles for cookies"}
+
+[tool • grep]
+Found 29 matches
+
+kumone-windows\src\shared\types.ts
+Line 222:   /** Directory for cached audio; empty means "next to userData". */
+
+kumone-windows\src\shared\ipc.ts
+Line 311:   /** 选择本地图片作为程序背景壁纸：主进程复制到 userData 并通过自定义协议提供。 */
+
+kumone-windows\src\main\logCollector.ts
+Line 10:  * 本地队列：<userData>/diagnostics/pending.jsonl（JSONL，每行一条）。
+Line 46: export function initLogCollector(opts: { userData: string; enabled: boolean }): void {
+Line 48:   pendingFile = path.join(opts.userData, 'diagnostics', 'pending.jsonl')
+
+kumone-windows\src\main\index.ts
+Line 43: // to the userData path, so with the default path the smoke instance would
+Line 45: bootLog('module loaded; userData=' + app.getPath('userData') + '; argv=' + process.argv.slice(1).join(' '))
+Line 46: const smokeUserData = process.env.YOYOU_USER_DATA
+Line 49:   app.setPath('userData', smokeUserData)
+Line 62:     const current = app.getPath('userData')
+Line 333:   const userData = app.getPath('userData')
+Line 334:   const settings = new SettingsStore(userData)
+Line 339:   initLogCollector({ userData, enabled: current.collectLogs })
+Line 344:   const legacyCacheRoot = path.join(userData, 'cache')
+Line 345:   const audioCacheRoot = path.join(userData, 'audio-cache')
+Line 370:     cookieDirectory: userData,
+Line 462:     dailyHistory: new DailyHistoryStore(path.join(userData, 'daily-history')),
+Line 463:     accounts: new PlatformAccounts(userData),
+Line 804:  * youyou-wallpaper://current?v=<n> → userData/wallpaper/ 下第一个 wallpaper.* 文件。
+Line 810:       const dir = path.join(app.getPath('userData'), 'wallpaper')
+Line 826:   const earlySettingsFile = path.join(app.getPath('userData'), 'settings.json')
+
+kumone-windows\src\main\ipc\app.ts
+Line 112:     const dir = path.join(app.getPath('userData'), 'wallpaper')
+Line 129:     const dir = path.join(app.getPath('userData'), 'wallpaper')
+
+kumone-windows\src\renderer\src\components\SourceAccount.tsx
+Line 5:  * 登录页不再出现第二个平台。绑一次会把该账号的 cookie 存进 `<userData>/accounts.json`，
+
+kumone-windows\src\main\storage\settings.ts
+Line 5:  * equivalent is a JSON file under the app's userData directory.
+
+kumone-windows\src\renderer\src\pages\Settings.tsx
+Line 206:    * 选壁纸：主进程弹系统文件框、把图片存进 userData，渲染层只负责换背景
+
+kumone-windows\src\main\storage\dailyHistory.ts
+Line 8:  * 文件按天存放：`<userData>/daily-history/<YYYY-MM-DD>.json`，内容是渲染层可直接
+
+kumone-windows\src\renderer\src\lib\appearance.ts
+Line 7:  *   - 壁纸的图片放在主进程的 userData 里，通过 youyou-wallpaper:// 协议读；渲染层
+
+kumone-windows\src\main\netease\client.ts
+Line 82:   /** Directory that holds `cookies.json`. Defaults to app userData. */
+
+[tool • pwsh]
+
+FullName                                                        Length LastWriteTime
+--------                                                        ------ -------------
+C:\Users\ASUS\AppData\Roaming\youyou-music\audio-cache                 2026/10/10 14:57:29
+C:\Users\ASUS\AppData\Roaming\youyou-music\blob_storage                2026/10/11 9:47:29
+C:\Users\ASUS\AppData\Roaming\youyou-music\cache                       2026/10/10 14:57:29
+C:\Users\ASUS\AppData\Roaming\youyou-music\Code Cache                  2026/10/5 7:27:05
+C:\Users\ASUS\AppData\Roaming\youyou-music\daily-history               2026/10/11 0:10:03
+C:\Users\ASUS\AppData\Roaming\youyou-music\DawnGraphiteCache           2026/10/5 7:27:05
+C:\Users\ASUS\AppData\Roaming\youyou-music\DawnWebGPUCache             2026/10/5 7:27:05
+C:\Users\ASUS\AppData\Roaming\youyou-music\Dictionaries                2026/10/5 7:27:10
+C:\Users\ASUS\AppData\Roaming\youyou-music\GPUCache                    2026/10/5 7:27:05
+C:\Users\ASUS\AppData\Roaming\youyou-music\Local Storage               2026/10/5 7:27:05
+C:\Users\ASUS\AppData\Roaming\youyou-music\Network                     2026/10/11 10:01:13
+C:\Users\ASUS\AppData\Roaming\youyou-music\Session Storage             2026/10/11 8:57:08
+C:\Users\ASUS\AppData\Roaming\youyou-music\Shared Dictionary           2026/10/5 7:27:05
+C:\Users\ASUS\AppData\Roaming\youyou-music\wallpaper                   2026/10/10 13:06:28
+C:\Users\ASUS\AppData\Roaming\youyou-music\accounts.json        729    2026/10/11 0:39:55
+C:\Users\ASUS\AppData\Roaming\youyou-music\cookies.json         1285   2026/10/11 0:43:22
+C:\Users\ASUS\AppData\Roaming\youyou-music\DevToolsActivePort   59     2026/10/7 12:02:31
+C:\Users\ASUS\AppData\Roaming\youyou-music\Local State          434    2026/10/5 7:29:44
+C:\Users\ASUS\AppData\Roaming\youyou-music\lockfile             0      2026/10/11 9:47:29
+C:\Users\ASUS\AppData\Roaming\youyou-music\Preferences          86     2026/10/11 9:47:39
+C:\Users\ASUS\AppData\Roaming\youyou-music\settings.json        756    2026/10/11 0:46:12
+C:\Users\ASUS\AppData\Roaming\youyou-music\SharedStorage        4096   2026/10/5 8:28:50
+C:\Users\ASUS\AppData\Roaming\youyou-music\SharedStorage-wal    0      2026/10/11 9:17:57
+C:\Users\ASUS\AppData\Roaming\kumone-windows\blob_storage              2026/10/5 6:51:05
+C:\Users\ASUS\AppData\Roaming\kumone-windows\cache                     2026/10/5 6:51:05
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Code Cache                2026/10/5 6:12:32
+C:\Users\ASUS\AppData\Roaming\kumone-windows\DawnGraphiteCache         2026/10/5 6:12:32
+C:\Users\ASUS\AppData\Roaming\kumone-windows\DawnWebGPUCache           2026/10/5 6:12:32
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Dictionaries              2026/10/5 6:16:55
+C:\Users\ASUS\AppData\Roaming\kumone-windows\GPUCache                  2026/10/5 6:12:32
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Local Storage             2026/10/5 6:12:32
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Network                   2026/10/5 7:19:47
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Session Storage           2026/10/5 6:53:38
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Shared Dictionary         2026/10/5 6:12:32
+C:\Users\ASUS\AppData\Roaming\kumone-windows\cookies.json       1175   2026/10/5 6:52:11
+C:\Users\ASUS\AppData\Roaming\kumone-windows\DevToolsActivePort 59     2026/10/5 6:16:52
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Local State        434    2026/10/5 6:12:35
+C:\Users\ASUS\AppData\Roaming\kumone-windows\Preferences        57     2026/10/5 6:51:16
+C:\Users\ASUS\AppData\Roaming\kumone-windows\settings.json      482    2026/10/5 7:18:42
+C:\Users\ASUS\AppData\Roaming\kumone-windows\SharedStorage      4096   2026/10/5 6:18:53
+
+[exit code: 1]
+
+[assistant]
+Good. The env var is YOYOU_USER_DATA (main/index.ts:46). Real profile: C:\Users\ASUS\AppData\Roaming\youyou-music\cookies.json exists (1285 bytes, updated 2026/10/11 0:43:22 — recent, likely valid login state).
+
+Now let me set up my test plan. I have 12 tricky paths. Let me create a shared probe harness module and then individual test scripts `scripts/test-qa-bug-*.mjs`.
+
+First, let me check whether out/ is fresh (Lead may be rebuilding). Let me check timestamps of out/main/index.js and check if there are electron processes running.
+
+Plan:
+1. Verify build works and app launches. 
+2. Write a common probe helper? The instruction says probe scripts only in scripts/test-qa-bug-*.mjs. I can create one helper file scripts/test-qa-bug-util.mjs — hmm, instruction says "探针脚本只写 scripts/test-qa-bug-*.mjs" (probe scripts only write scripts/test-qa-bug-*.mjs). That means my probe scripts must be named test-qa-bug-*.mjs. I could also write a shared helper named test-qa-bug-util.mjs which matches the pattern.
+
+Let me start. First a quick launch check to see the app starts and what the player state API looks like.
+
+Test order strategy — group by risk and dependencies:
+- Path 1: rapid next/prev x20 while playing → hang/audio corruption.
+- Path 2: quality switching while playing.
+- Path 3: logout during playback, login another account during playback.
+- Path 4: network down/up.
+- Path 5: kill process, restart → data intact.
+- Path 6: two instances same account (one real data dir, one copy).
+- Path 7: special search inputs.
+- Path 8: failed songs skip timing.
+- Path 9: FM dislike spam, queue to 0.
+- Path 10: together-listen room scenarios.
+- Path 11: settings theme/quality/cache dir switching.
+- Path 12: window minimize/restore, desktop lyrics on/off, fullscreen.
+
+I'll write one harness script per cluster. Let me first do a quick sanity check that the app launches and CDP works, and inspect player:state and available channels. Let me also read the ipc.ts to know channel names for player, settings, together.
+
+Let me check src/shared/ipc.ts for channel names.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src\\shared\\ipc.ts","pattern":"'[a-z]+:[a-z-]+'|\"[a-z]+:[a-z-]+\""}
+
+[assistant • pwsh]
+{"command":"Get-Item \"E:\\deepseek 工作区\\kumone-windows\\out\\main\\index.js\" | Select-Object Length, LastWriteTime; Get-Process electron -ErrorAction SilentlyContinue | Measure-Object | Select-Object Count","description":"Check build freshness and electron processes"}
+
+[tool • grep]
+Found 96 matches
+
+kumone-windows\src\shared\ipc.ts
+Line 141:   'auth:state': { request: void; response: { loggedIn: boolean; profile?: UserProfileDTO } }
+Line 145:   'auth:logout': { request: void; response: void }
+Line 146:   'auth:profile': { request: void; response: UserProfileDTO | undefined }
+Line 159:   'auth:platforms': { request: void; response: PlatformAccountDTO[] }
+Line 179:   'home:feed': { request: void; response: HomeFeedDTO }
+Line 186:   'home:personalized': { request: { limit?: number }; response: PlaylistSummaryDTO[] }
+Line 188:   'home:toplists': { request: void; response: ToplistDTO[] }
+Line 202:   'search:query': {
+Line 206:   'search:suggest': { request: { keywords: string }; response: SearchSuggestDTO | undefined }
+Line 209:   'search:external': {
+Line 215:   'library:overview': { request: void; response: LibraryDTO }
+Line 222:   'library:cloud': { request: { limit?: number; offset?: number }; response: CloudPageDTO }
+Line 226:   'playlist:detail': { request: { id: number }; response: PlaylistDetailDTO }
+Line 233:   'album:detail': { request: { id: number }; response: AlbumDetailDTO }
+Line 234:   'artist:detail': { request: { id: number }; response: ArtistDetailDTO }
+Line 235:   'artist:albums': { request: { id: number; limit?: number; offset?: number }; response: ArtistSummaryPage }
+Line 236:   'artist:similar': { request: { id: number }; response: ArtistSummaryDTO[] }
+Line 239:   'track:detail': { request: { ids: number[] }; response: TrackDTO[] }
+Line 240:   'track:similar': { request: { id: number; limit?: number }; response: TrackDTO[] }
+Line 241:   'track:fm': { request: void; response: TrackDTO[] }
+Line 243:   'track:intelligence': { request: { songID: number; playlistID: number }; response: TrackDTO[] }
+Line 246:   'player:state': { request: void; response: PlayerStateDTO }
+Line 259:   'player:toggle': { request: void; response: PlayerStateDTO }
+Line 260:   'player:play': { request: void; response: PlayerStateDTO }
+Line 261:   'player:pause': { request: void; response: PlayerStateDTO }
+Line 262:   'player:next': { request: void; response: PlayerStateDTO }
+Line 263:   'player:previous': { request: void; response: PlayerStateDTO }
+Line 264:   'player:seek': { request: { seconds: number }; response: PlayerStateDTO }
+Line 271:   'player:append': { request: { tracks: TrackDTO[] }; response: PlayerStateDTO }
+Line 282:   'lyrics:get': { request: { trackID: number }; response: LyricsDTO }
+Line 294:   'window:minimize': { request: void; response: void }
+Line 297:   'window:close': { request: void; response: void }
+Line 301:   'update:check': {
+Line 306:   'update:install': { request: void; response: void }
+Line 309:   'settings:get': { request: void; response: SettingsDTO }
+Line 310:   'settings:update': { request: Partial<SettingsDTO>; response: SettingsDTO }
+Line 314:   'app:info': { request: void; response: AppInfoDTO }
+Line 319:   'app:entitlements': { request: void; response: EntitlementDTO }
+Line 323:   'app:log': { request: { level: 'info' | 'warn' | 'error'; message: string }; response: void }
+Line 338:   'player:state': PlayerStateDTO
+Line 339:   'player:track': { track?: TrackDTO }
+Line 340:   'auth:changed': { loggedIn: boolean; profile?: UserProfileDTO }
+Line 341:   'lyrics:line': { trackID: number; lines: LyricsDTO }
+Line 342:   'app:error': { message: string }
+Line 343:   'app:navigate': { route: string }
+Line 344:   'settings:changed': SettingsDTO
+Line 345:   'window:maximized': { maximized: boolean }
+Line 347:   'window:fullscreen': { fullscreen: boolean }
+Line 353:   'auth:state',
+Line 357:   'auth:logout',
+Line 358:   'auth:profile',
+Line 362:   'auth:platforms',
+Line 368:   'home:feed',
+Line 373:   'home:personalized',
+Line 375:   'home:toplists',
+Line 379:   'search:query',
+Line 380:   'search:suggest',
+Line 382:   'search:external',
+Line 383:   'library:overview',
+Line 390:   'library:cloud',
+Line 392:   'playlist:detail',
+Line 394:   'album:detail',
+Line 395:   'artist:detail',
+Line 396:   'artist:albums',
+Line 397:   'artist:similar',
+Line 398:   'track:detail',
+Line 399:   'track:similar',
+Line 400:   'track:fm',
+Line 402:   'track:intelligence',
+Line 403:   'player:state',
+Line 408:   'player:toggle',
+Line 409:   'player:play',
+Line 410:   'player:pause',
+Line 411:   'player:next',
+Line 412:   'player:previous',
+Line 413:   'player:seek',
+Line 420:   'player:append',
+Line 426:   'lyrics:get',
+Line 433:   'window:minimize',
+Line 436:   'window:close',
+Line 437:   'update:check',
+Line 438:   'update:install',
+Line 439:   'settings:get',
+Line 440:   'settings:update',
+Line 443:   'app:info',
+Line 448:   'app:entitlements',
+Line 451:   'app:log'
+Line 455:   'player:state',
+Line 456:   'player:track',
+Line 457:   'auth:changed',
+Line 458:   'lyrics:line',
+Line 459:   'app:error',
+Line 460:   'app:navigate',
+Line 461:   'settings:changed',
+Line 462:   'window:maximized',
+Line 463:   'window:fullscreen'
+
+[tool • pwsh]
+
+Length LastWriteTime
+------ -------------
+274460 2026/10/11 9:40:34
+     1 
+
+[exit code: 1]
+
+[assistant]
+The out/main/index.js was built at 9:40:34 today, so the build is fresh. There's 1 electron process running — probably the user's real instance (the real profile has a lockfile updated at 9:47). Wait — Measure-Object count = 1. I need to be careful: killing "electron.exe" processes by Name would kill the user's real instance! My instructions say "先杀端口 9393 旧实例（按 Name -eq 'electron.exe' 过滤）" — kill the old instance on port 9393 filtered by Name -eq electron.exe. Actually it means: kill old instances (filtered by electron.exe name). Hmm, but that would kill the user's real app too. Let me be more careful: filter by command line containing my test userData dir or port 9393. The existing test scripts use command-line filtering on the userData path. That's safer.
+
+Also, let me check if there are together-listen channels — I didn't see them in the grep. Let me search for together in ipc.ts. The grep pattern only caught quoted channel names; 'together' might not match '[a-z]+:[a-z-]+' if it has digits like 'together:create'. Let me grep for "together".
+
+Also let me check settings keys and player state DTO to know what fields exist. Let me grep ipc.ts for together and read the PlayerStateDTO + SettingsDTO sections.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src\\shared\\ipc.ts","pattern":"together|一起听"}
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\src\\shared\\ipc.ts","offset":240,"limit":120}
+
+[tool • grep]
+Found 1 match
+
+kumone-windows\src\shared\ipc.ts
+Line 152:   /** 账号资料补充：性别/年龄/地区/签名（一起听找听友用）。 */
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\src\shared\ipc.ts</path>
+<type>file</type>
+<content>
+240:   'track:similar': { request: { id: number; limit?: number }; response: TrackDTO[] }
+241:   'track:fm': { request: void; response: TrackDTO[] }
+242:   'track:fmTrash': { request: { id: number }; response: void }
+243:   'track:intelligence': { request: { songID: number; playlistID: number }; response: TrackDTO[] }
+244: 
+245:   // --- player ---
+246:   'player:state': { request: void; response: PlayerStateDTO }
+247:   'player:playTracks': {
+248:     request: { tracks: TrackDTO[]; startIndex?: number; playlistID?: number; randomStart?: boolean }
+249:     response: PlayerStateDTO
+250:   }
+251:   /** 播放站外曲目（汽水/酷狗/酷我 搜索来的歌）：主进程解析完整音频后直接播放。 */
+252:   'player:playExternal': { request: { item: ExternalTrackDTO }; response: PlayerStateDTO }
+253:   /** 播放一整串站外曲目（平台歌单）：整条入队，逐首解析，解析不到自动跳下一首。 */
+254:   'player:playExternalList': {
+255:     request: { items: ExternalTrackDTO[]; startIndex?: number }
+256:     response: PlayerStateDTO
+257:   }
+258:   'player:playFMTracks': { request: { tracks: TrackDTO[] }; response: PlayerStateDTO }
+259:   'player:toggle': { request: void; response: PlayerStateDTO }
+260:   'player:play': { request: void; response: PlayerStateDTO }
+261:   'player:pause': { request: void; response: PlayerStateDTO }
+262:   'player:next': { request: void; response: PlayerStateDTO }
+263:   'player:previous': { request: void; response: PlayerStateDTO }
+264:   'player:seek': { request: { seconds: number }; response: PlayerStateDTO }
+265:   'player:setVolume': { request: { volume: number }; response: PlayerStateDTO }
+266:   'player:setMuted': { request: { muted: boolean }; response: PlayerStateDTO }
+267:   'player:setRepeat': { request: { mode: 'off' | 'all' | 'one' }; response: PlayerStateDTO }
+268:   'player:cycleRepeat': { request: void; response: PlayerStateDTO }
+269:   'player:setShuffle': { request: { shuffle: boolean }; response: PlayerStateDTO }
+270:   'player:setQueue': { request: { tracks: TrackDTO[]; startIndex?: number }; response: PlayerStateDTO }
+271:   'player:append': { request: { tracks: TrackDTO[] }; response: PlayerStateDTO }
+272:   'player:removeAt': { request: { indices: number[] }; response: PlayerStateDTO }
+273:   'player:clearQueue': { request: void; response: PlayerStateDTO }
+274:   'player:setQuality': { request: { quality: string }; response: PlayerStateDTO }
+275:   'player:trackInfo': {
+276:     request: void
+277:     response: { codec?: string; sampleRate?: number; channels?: number; bitrate?: number; fileSize?: number }
+278:   }
+279:   'player:audioDevices': { request: void; response: AudioDeviceDTO[] }
+280: 
+281:   // --- lyrics ---
+282:   'lyrics:get': { request: { trackID: number }; response: LyricsDTO }
+283:   'lyrics:desktopToggle': { request: { visible: boolean }; response: void }
+284:   'lyrics:desktopMove': { request: { x: number; y: number }; response: void }
+285:   /** 桌面歌词窗口按内容自适配高度：窗口只罩住当前行，不占整条透明区域。 */
+286:   'lyrics:desktopResize': { request: { height: number; width?: number }; response: void }
+287:   /** 鼠标不在歌词文字上时让点击穿透到桌面（forward 模式仍能收到 mousemove）。 */
+288:   'lyrics:desktopClickThrough': { request: { through: boolean }; response: void }
+289: 
+290:   // --- window ---
+291:   /** 切换主窗口的系统全屏（任务栏也被覆盖的真全屏）。 */
+292:   'window:toggleFullScreen': { request: void; response: boolean }
+293:   'window:setFullScreen': { request: { fullscreen: boolean }; response: boolean }
+294:   'window:minimize': { request: void; response: void }
+295:   'window:toggleMaximize': { request: void; response: boolean }
+296:   'window:isMaximized': { request: void; response: boolean }
+297:   'window:close': { request: void; response: void }
+298: 
+299:   // --- update ---
+300:   /** 检查更新：有新版本时带 version/notes；否则 version 为空。 */
+301:   'update:check': {
+302:     request: void
+303:     response: { current: string; version?: string; notes?: string; updateType: 'installer' | 'portable' | null }
+304:   }
+305:   /** 下载并应用更新（下载最新资产 → 排定替换/安装流程 → 应用自动退出重开）。 */
+306:   'update:install': { request: void; response: void }
+307: 
+308:   // --- settings / app ---
+309:   'settings:get': { request: void; response: SettingsDTO }
+310:   'settings:update': { request: Partial<SettingsDTO>; response: SettingsDTO }
+311:   /** 选择本地图片作为程序背景壁纸：主进程复制到 userData 并通过自定义协议提供。 */
+312:   'settings:pickWallpaper': { request: void; response: { set: boolean; version: number } }
+313:   'settings:clearWallpaper': { request: void; response: { set: boolean; version: number } }
+314:   'app:info': { request: void; response: AppInfoDTO }
+315:   'app:cacheUsage': { request: void; response: CacheUsageDTO }
+316:   'app:clearCache': { request: { what: 'audio' | 'images' | 'all' }; response: CacheUsageDTO }
+317:   'app:openExternal': { request: { url: string }; response: void }
+318:   'app:chooseCacheDirectory': { request: void; response: string | undefined }
+319:   'app:entitlements': { request: void; response: EntitlementDTO }
+320:   'app:qrMatrix': { request: { url: string }; response: { size: number; modules: boolean[][] } }
+321:   /** QQ 群二维码（data URL），设置页「加入群聊」用。 */
+322:   'app:qqGroupImage': { request: void; response: string | undefined }
+323:   'app:log': { request: { level: 'info' | 'warn' | 'error'; message: string }; response: void }
+324: }
+325: 
+326: /** Artist album page — kept separate to avoid a generic that IPC cannot carry. */
+327: export interface ArtistSummaryPage {
+328:   items: AlbumSummaryDTO[]
+329:   more?: boolean
+330: }
+331: 
+332: export type IPCChannel = keyof IPCContract
+333: export type IPCRequest<C extends IPCChannel> = IPCContract[C]['request']
+334: export type IPCResponse<C extends IPCChannel> = IPCContract[C]['response']
+335: 
+336: /** Push channels: main → renderer, no reply. */
+337: export interface IPCEvents {
+338:   'player:state': PlayerStateDTO
+339:   'player:track': { track?: TrackDTO }
+340:   'auth:changed': { loggedIn: boolean; profile?: UserProfileDTO }
+341:   'lyrics:line': { trackID: number; lines: LyricsDTO }
+342:   'app:error': { message: string }
+343:   'app:navigate': { route: string }
+344:   'settings:changed': SettingsDTO
+345:   'window:maximized': { maximized: boolean }
+346:   /** 主窗口系统真全屏状态变化（F11 / 全屏按钮），全屏页据此隐藏控件。 */
+347:   'window:fullscreen': { fullscreen: boolean }
+348: }
+349: 
+350: export type IPCEventName = keyof IPCEvents
+351: 
+352: export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
+353:   'auth:state',
+354:   'auth:qrStart',
+355:   'auth:qrPoll',
+356:   'auth:qrCancel',
+357:   'auth:logout',
+358:   'auth:profile',
+359:   'auth:sendSMSCode',
+
+(Showing lines 240-359 of 464. Use offset=360 to continue.)
+</content>
+
+[assistant]
+Now I know the channel list. There's no explicit "together" IPC channel — 一起听 (together listen) is likely implemented in the renderer + relay (via server). Let me check the renderer for 一起听 implementation and how the room works. Also let me check the player state DTO.
+
+Let me now write my first probe script. I'll write a reusable helper module `scripts/test-qa-bug-lib.mjs`... wait, the naming constraint: "探针脚本只写 scripts/test-qa-bug-*.mjs" — I'll name the helper `test-qa-bug-lib.mjs` which still matches the glob. Good.
+
+Helper functions needed:
+- launch app with YOYOU_USER_DATA, CDP port
+- cdpEval with awaitPromise
+- waitFor
+- kill by userData path (filter command line, not all electron.exe!)
+- plant cookies from real profile
+- player state snapshot
+- logging
+
+Also, to test login/logout/other-account: logout via auth:logout, login another account is hard (needs QR scan). For "播放中登录另一个账号" — I can simulate by replacing cookies.json while app is running? The app probably reads cookies at start. Actually auth state is held by main process. Changing cookies.json on disk while running probably won't change logged-in state until re-read. Hmm. I can test "播放中退出登录" via auth:logout, and then re-login requires QR. For "播放中登录另一个账号" I can restart the app with a different cookies.json (a second account's cookies)? We only have one account presumably. Alternative: use YOYOU_FAKE_QQ_ACCOUNT env? There was mention in test-playlist.mjs of YOYOU_FAKE_QQ_ACCOUNT=1 which plants a fake QQ account. Let me check how that works — it may provide a fake logged-in state for QQ. For NetEase login another account — maybe there's a fake env too. Let me grep for YOYOU_ in src.
+
+Let me also check the PlayerStateDTO and SettingsDTO shapes quickly.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src","pattern":"YOYOU_FAKE|YOYOU_[A-Z_]+"}
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\src\\shared\\types.ts","limit":130,"offset":120}
+
+[tool • grep]
+Found 26 matches
+
+kumone-windows\src\main\index.ts
+Line 46: const smokeUserData = process.env.YOYOU_USER_DATA
+Line 385:     log('未找到 mpv.exe —— 播放功能不可用。请运行 scripts/fetch-mpv.ps1 或设置 YOYOU_MPV。')
+Line 554:   if (process.env.YOYOU_SMOKE_TEST === '1') {
+Line 566:     process.env.YOYOU_FIXTURE,
+
+kumone-windows\src\main\accounts\platforms.ts
+Line 124:     // YOYOU_FAKE_QQ_ACCOUNT=1 时生效。
+Line 125:     if (process.env.YOYOU_FAKE_QQ_ACCOUNT === '1' && !this.sessions.has('qq')) {
+
+kumone-windows\src\main\update\service.ts
+Line 10:  * 测试/内网场景可用环境变量 YOYOU_UPDATE_URL 指向一个 JSON 清单。
+Line 47:   const override = process.env.YOYOU_UPDATE_URL
+Line 238:     // 两种来源：GitHub Release 原始 JSON，或直接给我们的清单格式（YOYOU_UPDATE_URL 用）。
+
+kumone-windows\src\main\diagnostics.ts
+Line 5:  * `YOYOU_BOOT_LOG=<路径>` 后，主进程会在每个启动里程碑追加一行日志；不设置时
+Line 9:  *   $env:YOYOU_BOOT_LOG="$env:TEMP\youyou-boot.log"; .\YouyouMusic.exe
+Line 14: const target = process.env.YOYOU_BOOT_LOG
+
+kumone-windows\src\main\audio\mpv.ts
+Line 517:   if (process.env.YOYOU_MPV) candidates.push(process.env.YOYOU_MPV)
+
+kumone-windows\src\main\ipc\explore.ts
+Line 278:      * 导致渲染层的「站外兜底」分支在真机上无法自然复现。设 YOYOU_FORCE_EXTERNAL=1
+Line 281:     if (process.env.YOYOU_FORCE_EXTERNAL === '1' && type === 'songs') {
+Line 284:     /* 测试钩子：设 YOYOU_FAIL_SEARCH=1 让搜索整条链路直接 reject（模拟风控报错），
+Line 286:     if (process.env.YOYOU_FAIL_SEARCH === '1') {
+
+kumone-windows\src\main\ipc\update.ts
+Line 5:  * 然后退出应用。开发模式（未打包且没有 YOYOU_UPDATE_URL）下 check 直接返回无更新，
+Line 35:     // 开发模式不打扰；YOYOU_UPDATE_URL 存在时视为有意的联调，放行。
+Line 36:     if (!app.isPackaged && !process.env.YOYOU_UPDATE_URL) {
+
+kumone-windows\src\main\ipc\auth.ts
+Line 33:  * 测试钩子（YOYOU_FAKE_QQ_ACCOUNT=1）：真实 QQ 歌单必须扫码登录才拿得到，测试里
+Line 240:     if (platform === 'qq' && process.env.YOYOU_FAKE_QQ_ACCOUNT === '1') return [FAKE_QQ_PLAYLIST]
+
+kumone-windows\src\main\ipc\library.ts
+Line 21:  * 测试钩子：设 YOYOU_FAIL_LIBRARY=<N> 时，library:overview 前 N 次调用直接失败，
+Line 30:       libraryFailBudget = Math.max(0, Number(process.env.YOYOU_FAIL_LIBRARY ?? 0) || 0)
+
+kumone-windows\src\main\storage\remoteDaily.ts
+Line 21: // 真机测试钩子：YOYOU_FORCE_UID=1686312334 直接指定登录 uid，跳过「先问网易云接口」的
+Line 23: const forcedUID = process.env.YOYOU_FORCE_UID
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\src\shared\types.ts</path>
+<type>file</type>
+<content>
+120:   vipType: number
+121: }
+122: 
+123: export interface LoginStateDTO {
+124:   loggedIn: boolean
+125:   profile?: UserProfileDTO
+126: }
+127: 
+128: /**
+129:  * 站外音源（网易云曲库里搜不到的歌，例如大量抖音热歌）。
+130:  * 汽水音乐只作「发现层」：它的搜索接口可用，但播放地址接口需要签名与登录态，
+131:  * 因此点播时统一走严格匹配到酷狗/酷我拿完整音频。
+132:  */
+133: export type ExternalSource = 'qishui' | 'kugou' | 'kuwo'
+134: 
+135: export const EXTERNAL_SOURCES: ExternalSource[] = ['qishui', 'kugou', 'kuwo']
+136: 
+137: /**
+138:  * 站外曲目的来源标记。三个「发现层」之外，平台歌单（QQ音乐）里的曲目也走同一条
+139:  * 严格匹配播放链路，所以它们共用 `ExternalTrackDTO`，只是来源标记不同。
+140:  */
+141: export type ExternalItemSource = ExternalSource | 'qq'
+142: 
+143: export const EXTERNAL_SOURCE_NAMES: Record<ExternalItemSource, string> = {
+144:   qishui: '汽水音乐',
+145:   kugou: '酷狗音乐',
+146:   kuwo: '酷我音乐',
+147:   qq: 'QQ音乐'
+148: }
+149: 
+150: export interface ExternalTrackDTO {
+151:   source: ExternalItemSource
+152:   /** 源内 ID（汽水 track_id / 酷狗 hash / 酷我 rid / QQ songmid） */
+153:   sourceId: string
+154:   name: string
+155:   artists: string
+156:   album?: string
+157:   durationMS: number
+158:   coverUrl?: string
+159:   /** 已知的 QQ 音乐 songmid：有它就直接取地址，不再搜索匹配。 */
+160:   songMid?: string
+161: }
+162: 
+163: export type QRLoginStatus = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error'
+164: export interface QRLoginStateDTO {
+165:   status: QRLoginStatus
+166:   /** URL the QR code encodes; the renderer draws it. */
+167:   url?: string
+168:   /** 有些平台直接给二维码图片（data URL 或图片地址），渲染层直接显示。 */
+169:   image?: string
+170:   unikey?: string
+171:   message?: string
+172:   nickname?: string
+173:   avatarUrl?: string
+174:   /** Present once the scan is confirmed and the profile has been fetched. */
+175:   profile?: UserProfileDTO
+176: }
+177: 
+178: /**
+179:  * 可登录的平台。
+180:  * 汽水音乐与酷我音乐只作为音源使用，不做登录；酷狗的扫码接口当前对所有参数
+181:  * 组合都返回「参数错误 20006」，登录先搁置（它仍然是一个可用的音源）。
+182:  */
+183: export type AccountPlatform = 'netease' | 'kugou' | 'qq'
+184: 
+185: /** 登录页上会出现图标的平台。 */
+186: export const ACCOUNT_PLATFORMS: AccountPlatform[] = ['netease', 'qq']
+187: 
+188: export interface PlatformAccountDTO {
+189:   platform: AccountPlatform
+190:   loggedIn: boolean
+191:   nickname?: string
+192:   avatarUrl?: string
+193: }
+194: 
+195: /** 平台账号的歌单（只用于展示与后续取歌，不参与网易云的曲库模型）。 */
+196: export interface PlatformPlaylistDTO {
+197:   id: string
+198:   name: string
+199:   trackCount: number
+200:   coverUrl?: string
+201: }
+202: 
+203: export interface SettingsDTO {
+204:   quality: QualityLevel
+205:   /** Fall back to a lower tier when the requested one is not entitled. */
+206:   autoDowngradeQuality: boolean
+207:   volume: number
+208:   /** Prefer `https://` and third-party mirrors for cover art. */
+209:   showDesktopLyrics: boolean
+210:   desktopLyricsFontSize: number
+211:   desktopLyricsOpacity: number
+212:   /** 桌面歌词特效：经典 / 渐变 / 霓虹 / 逐字卡拉OK。 */
+213:   desktopLyricsEffect: DesktopLyricsEffect
+214:   /** 歌词字体（播放页与桌面歌词共用）。 */
+215:   lyricFont: LyricFont
+216:   /** 锁定桌面歌词位置：锁定后不可拖动，避免误触。 */
+217:   desktopLyricsLocked: boolean
+218:   /** Always-on-top desktop lyric window position, in screen coordinates. */
+219:   desktopLyricsPosition?: { x: number; y: number }
+220:   /** Cache cap in megabytes; 0 disables eviction. */
+221:   cacheLimitMB: number
+222:   /** Directory for cached audio; empty means "next to userData". */
+223:   cacheDirectory: string
+224:   /** Explicit audio output device for mpv (`wasapi/{...}`), empty = system default. */
+225:   audioDevice: string
+226:   /** Enable the system media-key / SMTC integration. */
+227:   mediaKeys: boolean
+228:   /** Enable the tray icon. */
+229:   tray: boolean
+230:   /** Close to tray instead of quitting. */
+231:   closeToTray: boolean
+232:   /** Scrobble playback to the account. */
+233:   scrobble: boolean
+234:   /** Follow the system light/dark theme. */
+235:   theme: 'system' | 'light' | 'dark'
+236:   /** UI language: follow the system, or force one. */
+237:   language: 'system' | 'zh-Hans' | 'en'
+238:   /** 自定义壁纸已设置：渲染层通过 youyou-wallpaper:// 协议读取图片。 */
+239:   wallpaperSet: boolean
+240:   /** 每次换壁纸 +1，渲染层用它拼 URL 做缓存失效。 */
+241:   wallpaperVersion: number
+242:   /** Unlock grey tracks from third-party sources. */
+243:   unblockGreyTracks: boolean
+244:   /**
+245:    * 启用的第三方音源，顺序即尝试优先级：汽水 → 酷狗 → 酷我 → QQ。
+246:    * 任一为启用状态时，受限歌曲都会自动换源播放完整版本。
+247:    */
+248:   unblockSources: Array<'qishui' | 'kugou' | 'kuwo' | 'qq'>
+249:   /** Keep a local copy of played tracks so they play offline. */
+
+(Showing lines 120-249 of 385. Use offset=250 to continue.)
+</content>
+
+[assistant]
+I have enough understanding of the API surface now. Let me set up my testing infrastructure. I'll create a shared helper and start with the first batch of tests.
+
+Let me create:
+1. `scripts/test-qa-bug-lib.mjs` — shared harness library (launch, CDP, waitFor, kill-by-userdata, cookies planting).
+2. `scripts/test-qa-bug-rapid.mjs` — path 1 (rapid next/prev x20) + path 2 (quality switching).
+
+Actually, let me keep each script focused. First, quick sanity launch to make sure the app boots and I can play something. Let me check the settings.json of the real profile to see quality levels, and check the audio-cache for offline playable tracks (there may be cached tracks so network issues don't block playback testing).
+
+Actually let me first check how test-together-ui.mjs builds offline sample audio (line 25 mentions "用 smoke 自检的离线样本造缓存音源"). That's useful for deterministic playback tests. Let me read the top of that file.
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-together-ui.mjs","limit":160}
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-together-ui.mjs</path>
+<type>file</type>
+<content>
+1: /**
+2:  * 「一起听」页面真实 UI 验证（dev 实例 + CDP 驱动）。
+3:  *
+4:  * 验证链路：渲染进程 WebSocket → wss://yy.ytw.asia/relay（带口令，走 CSP 白名单）
+5:  *  1. 点侧栏进入「一起听」页；
+6:  *  2. 点「连接中继」，断言状态变成「已连接」且礼物目录已下发；
+7:  *  3. 填房间名点「创建房间」，断言变为房主（我是房主）且成员列表包含自己。
+8:  *
+9:  * 用法：node scripts/test-together-ui.mjs
+10:  */
+11: import { spawn, execSync } from 'node:child_process'
+12: import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+13: import * as path from 'node:path'
+14: import * as os from 'node:os'
+15: import process from 'node:process'
+16: 
+17: const root = process.cwd()
+18: const electron = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+19: const CDP_PORT = 9336
+20: const userData = path.join(os.tmpdir(), 'youyou-together-ui-test')
+21: const ROOM_NAME = `自测房间${Date.now() % 10000}`
+22: const SYNC_ROOM = `同步房间${Date.now() % 10000}`
+23: const RELAY_URL = 'wss://yy.ytw.asia/relay'
+24: const RELAY_TOKEN = 'yy-7f3a9c2e51d84b06'
+25: /** 用 smoke 自检的离线样本造缓存音源：不需要登录、不需要网络也能真的播放。 */
+26: const FIXTURE = path.join(root, 'tests', 'fixtures', 'offline.m4a')
+27: const CACHED_TRACK_ID = 999000001
+28: const CACHED_TRACK_NAME = '同步测试曲'
+29: /** 记录实际使用的登录凭证来源，便于排查「实例没登录」。 */
+30: let plantCookiesSource = '(未复制)'
+31: 
+32: function plantCachedAudio() {
+33:   const fixture = process.env.YOYOU_FIXTURE ?? FIXTURE
+34:   if (!existsSync(fixture)) {
+35:     log(`未找到样本 ${fixture}，跳过真实播放同步验证`)
+36:     return false
+37:   }
+38:   const directory = path.join(userData, 'cache', 'audio')
+39:   mkdirSync(directory, { recursive: true })
+40:   copyFileSync(fixture, path.join(directory, `${CACHED_TRACK_ID}-exhigh.m4a`))
+41:   return true
+42: }
+43: 
+44: /**
+45:  * 一起听需要登录：把真实 profile 的 cookies.json 复制一份到隔离目录
+46:  * （只读复制，绝不修改真实 profile）。
+47:  *
+48:  * 注意：不同时期的构建用过不同的 userData 目录名，其中只有仍是有效登录态的
+49:  * 那份 cookie 能让实例处于登录状态，所以按「已知可用的目录」顺序尝试。
+50:  */
+51: function plantCookies() {
+52:   const candidates = [
+53:     process.env.YOYOU_COOKIE_PROFILE,
+54:     path.join(process.env.APPDATA ?? '', 'kumone-windows', 'cookies.json'),
+55:     path.join(process.env.APPDATA ?? '', 'youyou-music', 'cookies.json'),
+56:     path.join(process.env.APPDATA ?? '', 'YouyouMusic', 'cookies.json')
+57:   ].filter(Boolean)
+58:   const source = candidates.find((candidate) => existsSync(candidate))
+59:   if (!source) {
+60:     log('未找到任何登录凭证：未登录状态下页面只会显示登录提示卡')
+61:     return false
+62:   }
+63:   mkdirSync(userData, { recursive: true })
+64:   copyFileSync(source, path.join(userData, 'cookies.json'))
+65:   plantCookiesSource = source
+66:   log(`已复制登录凭证：${source}`)
+67:   return true
+68: }
+69: 
+70: const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+71: const log = (message) => console.log(`[together-ui] ${message}`)
+72: 
+73: async function cdp(expression) {
+74:   const { WebSocket } = globalThis
+75:   const response = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)
+76:   const targets = await response.json()
+77:   const page = targets.find((target) => target.type === 'page')
+78:   if (!page) throw new Error('未找到页面 target')
+79:   const ws = new WebSocket(page.webSocketDebuggerUrl)
+80:   await new Promise((resolve, reject) => {
+81:     ws.addEventListener('open', () => resolve())
+82:     ws.addEventListener('error', reject)
+83:   })
+84:   const value = await new Promise((resolve) => {
+85:     const id = Math.floor(Math.random() * 1e9)
+86:     const onMessage = (event) => {
+87:       const message = JSON.parse(event.data)
+88:       if (message.id === id) {
+89:         ws.removeEventListener('message', onMessage)
+90:         resolve(message.result?.result?.value)
+91:       }
+92:     }
+93:     ws.addEventListener('message', onMessage)
+94:     ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression: expression, returnByValue: true } }))
+95:   })
+96:   ws.close()
+97:   return value
+98: }
+99: 
+100: async function clickByText(text) {
+101:   return cdp(`(() => {
+102:     const node = [...document.querySelectorAll('button')].find((button) => button.textContent.trim() === ${JSON.stringify(text)})
+103:     if (!node) return false
+104:     node.click()
+105:     return true
+106:   })()`)
+107: }
+108: 
+109: /** 极简脚本端客户端：用于当「房主」验证应用端的跟随同步。 */
+110: function scriptClient() {
+111:   const socket = new WebSocket(`${RELAY_URL}?token=${RELAY_TOKEN}`)
+112:   const received = []
+113:   socket.addEventListener('message', (event) => {
+114:     try {
+115:       received.push(JSON.parse(event.data))
+116:     } catch {
+117:       /* ignore */
+118:     }
+119:   })
+120:   const ready = new Promise((resolve, reject) => {
+121:     socket.addEventListener('open', () => resolve())
+122:     socket.addEventListener('error', () => reject(new Error('脚本端连接失败')))
+123:   })
+124:   const send = (payload) => socket.send(JSON.stringify(payload))
+125:   const waitFor = async (type, timeoutMs = 8000) => {
+126:     const deadline = Date.now() + timeoutMs
+127:     while (Date.now() < deadline) {
+128:       const hit = received.find((entry) => entry.type === type)
+129:       if (hit) return hit
+130:       await wait(80)
+131:     }
+132:     throw new Error(`脚本端未收到 ${type}`)
+133:   }
+134:   return { socket, send, waitFor, ready }
+135: }
+136: 
+137: const results = []
+138: const record = (name, ok, detail = '') => {
+139:   results.push({ name, ok })
+140:   log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
+141: }
+142: 
+143: async function main() {
+144:   const planted = plantCachedAudio()
+145:   const loggedIn = plantCookies()
+146:   const env = { ...process.env, YOYOU_USER_DATA: userData }
+147:   delete env.ELECTRON_RUN_AS_NODE
+148:   const child = spawn(electron, ['.', `--remote-debugging-port=${CDP_PORT}`], {
+149:     stdio: 'ignore',
+150:     env,
+151:     cwd: root,
+152:     detached: true
+153:   })
+154:   child.unref()
+155:   log(`dev 实例 PID=${child.pid}`)
+156: 
+157:   try {
+158:     // 1. 进入「一起听」页
+159:     let entered = false
+160:     for (let attempt = 0; attempt < 24; attempt += 1) {
+
+(Showing lines 1-160 of 484. Use offset=161 to continue.)
+</content>
+
+[assistant]
+I have a good picture now. Let me build my QA harness. I'll create a shared library file and then the test scripts.
+
+Key details for the harness:
+- electron.exe path: node_modules/electron/dist/electron.exe
+- Launch: spawn(electron, ['.', `--remote-debugging-port=${port}`], env with YOYOU_USER_DATA)
+- CDP eval with awaitPromise:true
+- Kill: filter by command line containing my userData dir (safer than killing all electron.exe — there's 1 electron running, likely the user's real app instance)
+- Fixture audio: tests/fixtures/offline.m4a → plant into <userData>/cache/audio/<CACHED_TRACK_ID>-exhigh.m4a for deterministic offline playback
+- Cookies: copy from %APPDATA%\youyou-music\cookies.json
+
+Test plan (order):
+Batch 1 (core playback stress): 
+- Path 1: rapid next/prev x20
+- Path 2: quality switching during playback
+
+Batch 2 (auth/network):
+- Path 3: logout during playback
+- Path 4: network down/up (simulate via DNS/firewall? I can use Windows firewall rules or disable network adapter — but that needs admin and affects the machine. Better: use a hosts file trick? No. Alternative: I can set a proxy? The app uses Electron's net with system proxy. Hmm. A cleaner way: block outbound to specific domains via Windows Firewall (needs admin). Or route: use `route delete`? Needs admin too.
+  
+  Actually, for the offline-cached-track scenario: the cached fixture plays without network. Network failure during playback of a cached track would test mpv resilience. To simulate network down without admin: I could set YOYOU env? Let me check if there's a network-fail test hook. There's YOYOU_FAIL_SEARCH. Let me grep for more hooks like YOYOU_FAIL_ in src.
+
+Let me check what fail hooks exist.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src\\main","pattern":"YOYOU_FAIL|FAIL_BUDGET|process\\.env\\.YOYOU"}
+
+[tool • grep]
+Found 15 matches
+
+kumone-windows\src\main\diagnostics.ts
+Line 14: const target = process.env.YOYOU_BOOT_LOG
+
+kumone-windows\src\main\index.ts
+Line 46: const smokeUserData = process.env.YOYOU_USER_DATA
+Line 554:   if (process.env.YOYOU_SMOKE_TEST === '1') {
+Line 566:     process.env.YOYOU_FIXTURE,
+
+kumone-windows\src\main\ipc\auth.ts
+Line 240:     if (platform === 'qq' && process.env.YOYOU_FAKE_QQ_ACCOUNT === '1') return [FAKE_QQ_PLAYLIST]
+
+kumone-windows\src\main\update\service.ts
+Line 47:   const override = process.env.YOYOU_UPDATE_URL
+
+kumone-windows\src\main\accounts\platforms.ts
+Line 125:     if (process.env.YOYOU_FAKE_QQ_ACCOUNT === '1' && !this.sessions.has('qq')) {
+
+kumone-windows\src\main\storage\remoteDaily.ts
+Line 23: const forcedUID = process.env.YOYOU_FORCE_UID
+
+kumone-windows\src\main\ipc\explore.ts
+Line 281:     if (process.env.YOYOU_FORCE_EXTERNAL === '1' && type === 'songs') {
+Line 284:     /* 测试钩子：设 YOYOU_FAIL_SEARCH=1 让搜索整条链路直接 reject（模拟风控报错），
+Line 286:     if (process.env.YOYOU_FAIL_SEARCH === '1') {
+
+kumone-windows\src\main\ipc\library.ts
+Line 21:  * 测试钩子：设 YOYOU_FAIL_LIBRARY=<N> 时，library:overview 前 N 次调用直接失败，
+Line 30:       libraryFailBudget = Math.max(0, Number(process.env.YOYOU_FAIL_LIBRARY ?? 0) || 0)
+
+kumone-windows\src\main\ipc\update.ts
+Line 36:     if (!app.isPackaged && !process.env.YOYOU_UPDATE_URL) {
+
+kumone-windows\src\main\audio\mpv.ts
+Line 517:   if (process.env.YOYOU_MPV) candidates.push(process.env.YOYOU_MPV)
+
+[assistant]
+For network-down simulation, no in-app hook exists for playback stream failures. Options:
+1. Windows Firewall rule to block electron.exe outbound (needs admin — likely not available; approval prompts are disabled in this session).
+2. Test with the app started offline (disable network adapter needs admin too).
+3. A user-mode trick: set system proxy to a dead address via registry — needs admin as well.
+4. Start the app with network down using... hmm.
+
+Wait, actually — I'm running under "danger-full-access" file policy, and the pwsh runs may be full-access. Let me test if I have admin rights in the shell. If the session runs elevated, I could use netsh or New-NetFirewallRule (would affect the machine — risky but temporary, can remove right after; it only blocks electron.exe or mpv.exe... mpv.exe is spawned by electron, blocking both is needed. Also blocking DNS is not the same).
+
+Careful consideration: firewall rule that blocks outbound for mpv.exe would test the "stream dies mid-playback" scenario. And for electron.exe, it would cut API access. This is machine-wide but temporary and removed at the end. The task explicitly says "播放中拔网线 15 秒再恢复（可用 pwsh 禁网卡或改 DNS 模拟，或直接测无网启动）". So the Lead sanctions disabling the NIC via pwsh. Disabling the NIC affects the whole machine — but it's sanctioned. However, it also cuts MY connection to... no, I'm running locally; pwsh runs locally; the CDP connection is localhost. Disabling the NIC kills external network for 15s including the relay/netease API — that's exactly what we want. The risk: if the session depends on network for something... the tool calls run in-process on the same machine. Disabling the NIC briefly should be fine as long as I don't need external network during those 15s (I'll do it within a single pwsh script: disable NIC → wait 15s → re-enable).
+
+Let me check admin rights first. Let me also check whether there's a "mpv" folder with mpv.exe.
+
+[assistant • pwsh]
+{"command":"$id = [System.Security.Principal.WindowsIdentity]::GetCurrent(); $p = New-Object System.Security.Principal.WindowsPrincipal($id); Write-Host \"IsAdmin: $($p.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator))\"; Get-NetAdapter -ErrorAction SilentlyContinue | Select-Object Name, InterfaceIndex, Status | Format-Table -AutoSize; Get-ChildItem \"E:\\deepseek 工作区\\kumone-windows\\resources\" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object FullName | Select-Object -First 20","description":"Check admin rights, adapters, mpv resources"}
+
+[tool • pwsh]
+IsAdmin: False
+
+Name                          InterfaceIndex Status
+----                          -------------- ------
+以太网                                    21 Disconnected
+蓝牙网络连接                              16 Disconnected
+WLAN                                      13 Up
+VMware Network Adapter VMnet8             11 Up
+VMware Network Adapter VMnet1              5 Up
+vEthernet (Default Switch)                 4 Not Present
+
+
+FullName
+--------
+E:\deepseek 工作区\kumone-windows\resources\qq-group.png
+
+
+
+[assistant]
+Not admin. So I cannot disable the WLAN adapter or add firewall rules. Options for network-down simulation without admin:
+
+1. Use a dead proxy: Electron respects system proxy settings (registry HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings). Writing HKCU proxy settings doesn't need admin! I can set a dead HTTP proxy (127.0.0.1:9) in HKCU, then launch the app — Electron's Chromium net stack picks up system proxy → all HTTP(S) fails. But mpv is a separate process; mpv might not use system proxy... Actually mpv's http streaming might use system proxy on Windows? mpv uses ffmpeg's http which does not automatically use Windows proxy settings unless http_proxy env var is set. I can set http_proxy env var for the spawned app → mpv inherits it → stream URL fetch fails too. And https streams: https_proxy.
+
+   Wait — but the app is already running; the env var approach must be set at launch. For a "playing → cut network → restore" scenario, changing HKCU proxy mid-run won't take effect in Chromium automatically (needs restart or it may pick it up dynamically — Chromium watches proxy settings changes via WinINet... Electron actually reacts to proxy changes within seconds). mpv won't react though.
+
+   Simpler alternative for mpv: play a real network stream, then kill the connection at the OS level? Can't without admin.
+
+2. Test "无网启动" (start offline) — as the task suggests: "或直接测无网启动". I can launch the app with http_proxy/https_proxy pointing to a dead port and a HKCU proxy set... but wait, changing HKCU Internet Settings affects MY OWN shell processes too (they run locally, no external network needed during the test). Risky but reversible. Hmm, but do I want to touch the user's proxy settings? I should restore them exactly after. It's the user's machine and their instruction allows pwsh network simulation.
+
+   Actually cleaner: a dead DNS approach — set HKCU hosts? No, hosts file is system. DNS server change per-adapter needs admin.
+
+   Simplest robust approach: environment variables only affect processes I spawn. For Chromium net stack in Electron, does it respect http_proxy env? Chromium doesn't use http_proxy env var on Windows (it uses WinINet proxy settings)... Electron's net module with `session.defaultSession.setProxy` — the app could set it via CDP! I can use CDP's Network domain... Actually CDP has no proxy setting API directly, but Electron exposes `session.setProxy` via... not accessible from renderer.
+
+   Hmm, but wait — Chromium does respect `--proxy-server` command-line switch. I can't add switches mid-run.
+
+   What about a Host-resolver approach: Chromium uses the system DNS resolver (getaddrinfo) which consults hosts file — system file, needs admin.
+
+3. Block at the router? Not available.
+
+4. Use the mpv end: mpv supports runtime commands via IPC. If the app spawns mpv with IPC named pipe, I could send mpv a "stop" or disconnect command... but that simulates mpv dying, not network loss. Actually for the bug-hunt purpose, "stream interrupted" is what matters. Hmm.
+
+5. Actually — what about Windows' built-in per-process firewall? `netsh advfirewall firewall add rule` requires admin. No.
+
+6. WSL/VMware adapters are Up. The physical WLAN is the real connection. Not admin.
+
+OK here's another angle: for "断网重连" the core bug to hunt is: does the app hang/crash when the network drops mid-playback, and does it recover? I can approximate with two scenarios that don't need admin:
+
+A. 无网启动: Launch app with env http_proxy=https_proxy=http://127.0.0.1:1 AND system proxy set to dead (HKCU) — then verify: app boots, UI shows, playback attempts fail gracefully, error toasts instead of hang. Then relaunch with normal settings.
+
+Hmm wait, but actually — does Chromium in Electron pick up http_proxy env vars? No, on Windows it reads the registry WinINET settings. Setting HKCU Internet Settings proxy is per-user and doesn't need admin: 
+- HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings: ProxyEnable=1, ProxyServer="127.0.0.1:9". 
+- Chromium reads this at startup and on WM_SETTINGCHANGE notifications. Changing registry live + broadcasting a settings change may or may not propagate; at startup it definitely reads it.
+
+Risk: if I set ProxyEnable=1 and the app... I must restore the previous values after. Let me snapshot and restore. This affects other apps on the machine temporarily — user sanctioned network simulation. It's 15-60 seconds.
+
+B. mpv mid-play stream cut: set http_proxy/https_proxy/all_proxy env at launch → mpv (ffmpeg http) DOES respect http_proxy on... ffmpeg's http.c checks http_proxy only if built with it? By default ffmpeg http protocol supports "http_proxy" option via AVOption and env var? ffmpeg's tcp/http does read the http_proxy environment variable... hmm, actually ffmpeg's http protocol has an option http_proxy, and there's a config option to enable reading env vars ("http_proxy" env is read by default in recent ffmpeg when compiled without --disable-http-proxy-env? I'm not 100% sure).
+
+Let me not over-engineer. Plan for path 4:
+- Test 4a (无网启动): Set dead HKCU proxy + launch → app must boot to UI, login state from cookies, attempt play → record behavior (error toast? hang? crash?). Then restore proxy.
+- Test 4b (播放中切代理?): Actually — trick: Chromium re-reads proxy on settings change broadcast! I can write HKCU proxy to dead value and call `InternetSetOption` via... In ConstrainedLanguage mode, COM isn't available. Hmm, but I can broadcast WM_SETTINGCHANGE via user32 P/Invoke — not in constrained mode.
+
+Alternative 4b: kill mpv.exe mid-playback (simulates stream loss) → does the app recover, re-spawn mpv, or wedged? That tests the "stream died" path. And for the network-restore path, verify app can play again after network returns.
+
+Also there's ANOTHER way to cut network without admin: `route` commands need admin. VPN? No.
+
+Hmm wait — actually maybe I DO have a way: the session's pwsh — approval prompts disabled, "danger-full-access" file policy. Admin check says False. OK, no admin.
+
+One more idea: use the app's own infrastructure — play a song from a URL that I control? No, the app decides URLs.
+
+Alternatively for mid-play cut: netease songs stream from CDN URLs; if I set HKCU proxy mid-playback AND trigger Chromium to re-read proxy... Chromium's ProxyConfigServiceWin listens for WM_SETTINGCHANGE broadcast messages. Setting the registry alone doesn't broadcast. But you know what DOES? `netsh winhttp set proxy` — no that's WinHTTP not WinINET, and needs admin? `netsh winhttp set proxy` requires admin too. 
+
+OK — decision: 
+- 4a: dead-proxy cold start (Chromium reads registry at startup) + http_proxy env for mpv. Verify graceful behavior. 
+- 4b: kill mpv.exe mid-playback → watch recovery. This is "stream/process death" resilience, adjacent to network cut.
+- 4c: network restore after failure: with proxy restored to normal, verify playback resumes/works and app not wedged.
+
+Additionally, maybe I can simulate mid-play network loss via mpv IPC! Check how the app spawns mpv — does it use IPC named pipe? Let me check src/main/audio/mpv.ts. If mpv runs with --input-ipc-server, I can connect and send commands like "stop"... but that's mpv-side again. There's no way to make ffmpeg drop mid-stream without cutting actual network. Fine — killing mpv.exe is the honest simulation of stream death; report it as such.
+
+Now — the BIG consideration: I should not spend too long on infra. Let me check the mpv spawn code quickly for IPC pipe and see log locations for evidence (diagnostics/pending.jsonl?). The app writes logs via initLogCollector to userData/diagnostics/pending.jsonl, plus maybe console. For evidence, I can capture app logs from the userData dir. Also YOYOU_BOOT_LOG gives boot milestones. Let me check mpv.ts spawn args and log capture mechanism.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src\\main\\audio\\mpv.ts","pattern":"spawn|ipc-server|--input|log-file|stderr|stdout"}
+
+[tool • grep]
+Found 5 matches
+
+kumone-windows\src\main\audio\mpv.ts
+Line 12:  * `mpv --input-ipc-server` accepts a pipe name as happily as a socket path.
+Line 14: import { spawn, type ChildProcess } from 'node:child_process'
+Line 108:       `--input-ipc-server=\\\\.\\pipe\\${this.pipeName}`,
+Line 130:     this.process = spawn(this.options.binary, args, { stdio: 'ignore', windowsHide: true })
+Line 151:     // mpv creates the pipe slightly after spawn; retry until it answers.
+
+[assistant]
+mpv uses `--input-ipc-server=\\.\pipe\<name>`. The pipe name is per-instance — let me see how pipeName is derived. If deterministic, I could connect to the pipe with node and send mpv commands (like `stop`), but that's mpv-level.
+
+Let me now look at the pipe name generation and whether the main process logs to a file I can read for evidence. Let me quickly view lines 90-160 of mpv.ts.
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\src\\main\\audio\\mpv.ts","limit":80,"offset":85}
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\src\main\audio\mpv.ts</path>
+<type>file</type>
+<content>
+85:     muted: false,
+86:     loading: false,
+87:     idle: true,
+88:     path: ''
+89:   }
+90:   private endEmitted = false
+91:   private readonly pipeName: string
+92: 
+93:   constructor(options: MpvControllerOptions) {
+94:     super()
+95:     this.options = options
+96:     this.pipeName = `youyou-mpv-${process.pid}-${Math.floor(Math.random() * 1e6)}`
+97:   }
+98: 
+99:   get currentState(): MpvState {
+100:     return { ...this.state }
+101:   }
+102: 
+103:   // MARK: - Lifecycle
+104: 
+105:   async start(): Promise<void> {
+106:     if (this.process) return
+107:     const args = [
+108:       `--input-ipc-server=\\\\.\\pipe\\${this.pipeName}`,
+109:       '--idle=yes',
+110:       '--no-video',
+111:       '--no-terminal',
+112:       '--gapless-audio=yes',
+113:       '--audio-display=no',
+114:       '--keep-open=no',
+115:       '--really-quiet',
+116:       '--volume-max=150',
+117:       '--cache=yes',
+118:       '--demuxer-max-bytes=64MiB',
+119:       // 预读 120 秒：灰色曲走第三方 CDN 时快时慢，慢的时候靠这 120 秒缓冲
+120:       // 撑过去，避免播放中途缓冲耗尽（paused-for-cache）「咔一下」。
+121:       '--demuxer-readahead-secs=120',
+122:       // NetEase serves FLAC/MP3 over https; let mpv verify but not block on
+123:       // slow CDNs for too long. 9 秒足够正常 CDN 建连+首包；遇到已经死掉的
+124:       // 源，早点失败、早点重连，比让用户盯着 20 秒无声的「正在缓冲」强。
+125:       '--network-timeout=9',
+126:       '--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_delay_max=2',
+127:       ...(this.options.audioDevice ? [`--audio-device=${this.options.audioDevice}`] : []),
+128:       ...(this.options.extraArgs ?? [])
+129:     ]
+130:     this.process = spawn(this.options.binary, args, { stdio: 'ignore', windowsHide: true })
+131:     this.process.on('error', (error) => {
+132:       this.options.onLog?.('error', `mpv 启动失败: ${error.message}`)
+133:       this.emit('error', error)
+134:     })
+135:     this.process.on('exit', (code, signal) => {
+136:       this.options.onLog?.('warn', `mpv 退出 (code=${code} signal=${signal})`)
+137:       this.process = undefined
+138:       this.socket?.destroy()
+139:       this.socket = undefined
+140:       this.state.running = false
+141:       this.emitState()
+142:       this.emit('exit')
+143:     })
+144: 
+145:     await this.connect()
+146:     await this.observeProperties()
+147:   }
+148: 
+149:   private async connect(): Promise<void> {
+150:     const deadline = Date.now() + 10_000
+151:     // mpv creates the pipe slightly after spawn; retry until it answers.
+152:     for (;;) {
+153:       try {
+154:         await this.connectOnce()
+155:         this.state.running = true
+156:         this.emitState()
+157:         return
+158:       } catch (error) {
+159:         if (Date.now() > deadline) {
+160:           throw new Error(`无法连接 mpv IPC: ${(error as Error).message}`)
+161:         }
+162:         await delay(120)
+163:       }
+164:     }
+
+(Showing lines 85-164 of 547. Use offset=165 to continue.)
+</content>
+
+[assistant]
+I have enough understanding. The mpv pipe name is `youyou-mpv-<electron pid>-<random>`. I can enumerate named pipes via `[System.IO.Directory]::GetFiles("\\.\pipe\")` — in ConstrainedLanguage that might not work; but node script can do it (fs.readdirSync on \\?\pipe\? Actually node can list named pipes with fs.readdirSync('\\\\.\\pipe\\')). That could let me attach to mpv IPC and send `stop` to simulate stream death mid-play without killing mpv... but killing mpv.exe is simpler and equally valid.
+
+Now let me write the harness lib + first test script. Time to be productive. Set up a todo list first.
+
+Let me create the shared lib `scripts/test-qa-bug-lib.mjs` with:
+- launchBugInstance({port, userData, cookieProfile, extraEnv, fixture}) 
+- cdpEval(port, expression) with awaitPromise, error capture
+- waitFor(port, expr, timeout, label)
+- killInstance(userData) — filter command line containing userData, kill process tree
+- plantCookies(userData) — from candidates incl. %APPDATA%\youyou-music\cookies.json
+- plantCachedAudio(userData) — offline.m4a fixture
+- playerState(port)
+- record framework
+
+Then scripts:
+1. test-qa-bug-rapid.mjs — path 1 & 2 (rapid switching + quality switching). Use the cached offline track for deterministic playback, plus real tracks if network works.
+
+Actually wait. For rapid switching tests, using the offline fixture track means every next/prev just replays the same track — good for detecting engine churn but not for "20 different songs". Better: build a queue of ~10 real NetEase songs via search (network needed) or use track:fm. But network may be slow. Hybrid: first ensure real playback works (search 孤勇者 → play → next), then run rapid-fire tests.
+
+Given the scale of the task, let me prioritize speed: I'll write the lib and the first script now, run it, and iterate. Let me also set up todos.
+
+[assistant]
+<acp tokens="25" type="text">m00058</acp>
+Now I have a full picture of the harness conventions. Let me set up my test plan and infrastructure.
+
+[assistant • todo_write]
+{"todos":[{"content":"写共享探针库 scripts/test-qa-bug-lib.mjs","status":"in_progress"},{"content":"路径1: 播放中狂点切歌/快切上下首20次","status":"pending"},{"content":"路径2: 播放中切音质 128/320/无损来回","status":"pending"},{"content":"路径3: 播放中退出登录/换账号","status":"pending"},{"content":"路径4: 断网重连(无网启动+mpv中途死亡)","status":"pending"},{"content":"路径5: 杀进程强退再启动,数据完好","status":"pending"},{"content":"路径6: 双实例同账号互顶","status":"pending"},{"content":"路径7: 搜索特殊输入(emoji/单字/超长/空格/符号)","status":"pending"},{"content":"路径8: 播放失败歌曲跳过耗时","status":"pending"},{"content":"路径9: 私人漫游不喜欢连点/队列归零","status":"pending"},{"content":"路径10: 一起听进出房间/改名/送礼/被顶号","status":"pending"},{"content":"路径11: 设置页主题/音质/缓存目录来回切","status":"pending"},{"content":"路径12: 窗口最小化恢复/桌面歌词/全屏","status":"pending"}]}
+
+[tool • todo_write]
+Updated todo list: 12 pending, 1 in progress, 0 completed.
+
+[assistant]
+
+
+[assistant • write]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-lib.mjs","content":"/**\n * bug 猎手共享库：启停隔离实例、CDP 探针、登录态/离线音源种植。\n * 只读复制真实 profile 的 cookies.json，绝不修改真实 profile。\n * 杀进程按「命令行包含本测试 userData」过滤，绝不误杀用户的真实实例。\n */\nimport { spawn, execSync } from 'node:child_process'\nimport { copyFileSync, existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs'\nimport * as path from 'node:path'\nimport * as os from 'node:os'\n\nexport const ROOT = process.cwd()\nexport const ELECTRON = path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe')\nexport const FIXTURE = path.join(ROOT, 'tests', 'fixtures', 'offline.m4a')\nexport const CACHED_TRACK_ID = 999000001\nexport const CACHED_TRACK_NAME = '同步测试曲'\nexport const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))\nexport const log = (message) => console.log(`[bug] ${message}`)\n\n/** 离线缓存音源：不需要网络也能真的播放（mpv 读本地文件）。 */\nexport function plantCachedAudio(userData, id = CACHED_TRACK_ID) {\n  if (!existsSync(FIXTURE)) return false\n  const directory = path.join(userData, 'cache', 'audio')\n  mkdirSync(directory, { recursive: true })\n  copyFileSync(FIXTURE, path.join(directory, `${id}-exhigh.m4a`))\n  return true\n}\n\n/** 复制真实登录态（按已知可用目录顺序尝试），返回来源路径或 null。 */\nexport function plantCookies(userData) {\n  const candidates = [\n    process.env.YOYOU_COOKIE_PROFILE,\n    path.join(process.env.APPDATA ?? '', 'youyou-music', 'cookies.json'),\n    path.join(process.env.APPDATA ?? '', 'kumone-windows', 'cookies.json'),\n    path.join(process.env.APPDATA ?? '', 'YouyouMusic', 'cookies.json')\n  ].filter(Boolean)\n  const source = candidates.find((candidate) => existsSync(candidate))\n  if (!source) return null\n  mkdirSync(userData, { recursive: true })\n  copyFileSync(source, path.join(userData, 'cookies.json'))\n  const jar = JSON.parse(readFileSync(path.join(userData, 'cookies.json'), 'utf8'))\n  if (typeof jar.MUSIC_U !== 'string' || jar.MUSIC_U.length === 0) {\n    log(`登录凭证存在但无 MUSIC_U：${source}`)\n  }\n  return source\n}\n\n/** 清理并重建 userData 目录。 */\nexport function freshUserData(userData) {\n  rmSync(userData, { recursive: true, force: true })\n  mkdirSync(userData, { recursive: true })\n}\n\nexport async function launchBugInstance({ port, userData, extraEnv = {}, cookie = true, fixture = true }) {\n  if (cookie) plantCookies(userData)\n  if (fixture) plantCachedAudio(userData)\n  const env = { ...process.env, YOYOU_USER_DATA: userData, ...extraEnv }\n  delete env.ELECTRON_RUN_AS_NODE\n  const child = spawn(ELECTRON, ['.', `--remote-debugging-port=${port}`], {\n    stdio: 'ignore',\n    env,\n    cwd: ROOT,\n    detached: true\n  })\n  child.unref()\n  log(`启动实例 PID=${child.pid} port=${port} userData=${userData}`)\n  return child\n}\n\n/**\n * CDP Runtime.evaluate。返回 { ok, value, error }。\n * awaitPromise: true —— async 表达式会等真正落定。\n */\nexport async function cdp(port, expression) {\n  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()\n  const page = targets.find((target) => target.type === 'page')\n  if (!page) throw new Error('未找到页面 target')\n  const ws = new WebSocket(page.webSocketDebuggerUrl)\n  await new Promise((resolve, reject) => {\n    ws.addEventListener('open', () => resolve())\n    ws.addEventListener('error', reject)\n  })\n  const value = await new Promise((resolve) => {\n    const id = Math.floor(Math.random() * 1e9)\n    const onMessage = (event) => {\n      const message = JSON.parse(event.data)\n      if (message.id !== id) return\n      ws.removeEventListener('message', onMessage)\n      const result = message.result\n      if (result?.exceptionDetails) {\n        resolve({\n          ok: false,\n          error: `${result.exceptionDetails.text} ${result.exceptionDetails.exception?.description ?? ''}`.trim()\n        })\n        return\n      }\n      resolve({ ok: true, value: result?.result?.value })\n    }\n    ws.addEventListener('message', onMessage)\n    ws.send(\n      JSON.stringify({\n        id,\n        method: 'Runtime.evaluate',\n        params: { expression, returnByValue: true, awaitPromise: true }\n      })\n    )\n  })\n  ws.close()\n  return value\n}\n\n/** 轮询直到表达式返回 true。返回 { ok, last }。 */\nexport async function waitFor(port, expression, timeoutMs = 20_000, label = expression) {\n  const deadline = Date.now() + timeoutMs\n  let last\n  while (Date.now() < deadline) {\n    const reply = await cdp(port, expression)\n    if (reply.ok && reply.value === true) return { ok: true, last: reply.value }\n    last = reply.ok ? reply.value : reply.error\n    await wait(500)\n  }\n  log(`等待超时: ${label} 最后取值=${JSON.stringify(last)?.slice(0, 200)}`)\n  return { ok: false, last }\n}\n\n/** 取播放器状态。 */\nexport const playerState = (port) =>\n  cdp(port, `(async () => (await window.youyou.invoke('player:state')).data)()`)\n\n/** 等待播放器出声（position 增长）。 */\nexport async function waitPlaying(port, timeoutMs = 30_000) {\n  const before = await playerState(port)\n  const startPos = before.ok ? (before.value?.position ?? 0) : 0\n  const deadline = Date.now() + timeoutMs\n  let last = before\n  while (Date.now() < deadline) {\n    last = await playerState(port)\n    if (last.ok && last.value?.playing && (last.value.position ?? 0) > startPos + 0.3) {\n      return { ok: true, state: last.value }\n    }\n    await wait(600)\n  }\n  return { ok: false, state: last.ok ? last.value : null }\n}\n\n/** 按命令行包含 userData 杀实例（含 mpv 子进程树）。 */\nexport function killInstance(userData) {\n  try {\n    execSync(\n      `powershell -NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${userData.replace(/\\\\/g, '\\\\\\\\')}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"`,\n      { stdio: 'ignore', windowsHide: true }\n    )\n  } catch {\n    /* ignore */\n  }\n}\n\n/** 等待 CDP 就绪（window.youyou 存在）。 */\nexport async function waitReady(port, timeoutMs = 60_000, retryIfFail = true) {\n  const deadline = Date.now() + timeoutMs\n  for (;;) {\n    try {\n      const reply = await cdp(port, `Boolean(window.youyou)`)\n      if (reply.ok && reply.value === true) return true\n    } catch (cause) {\n      if (!retryIfFail) throw cause\n    }\n    if (Date.now() > deadline) return false\n    await wait(1200)\n  }\n}\n\n/** 侧栏导航。 */\nexport const clickNav = (port, label) =>\n  cdp(port, `(() => {\n    const link = [...document.querySelectorAll('.sidebar__link')].find((item) => (item.textContent ?? '').includes(${JSON.stringify(label)}))\n    if (!link) return false\n    link.click()\n    return true\n  })()`)\n\n/** 搜索框输入并回车（走 React 受控组件路径）。 */\nexport const typeSearch = (port, keyword) =>\n  cdp(port, `(() => {\n    const input = [...document.querySelectorAll('input')].find((el) => el.offsetParent !== null)\n    if (!input) return false\n    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set\n    setter.call(input, ${JSON.stringify(keyword)})\n    input.dispatchEvent(new Event('input', { bubbles: true }))\n    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))\n    return true\n  })()`)\n\n/** 搜索结果行数（当前可见 page-slot 内）。 */\nexport const searchRows = (port) =>\n  cdp(port, `document.querySelector('.page-slot:not([hidden])')?.querySelectorAll('.song-row').length ?? document.querySelectorAll('.song-row').length`)\n\n/** 收集 app 日志证据（诊断队列）。 */\nexport function collectLogs(userData) {\n  const file = path.join(userData, 'diagnostics', 'pending.jsonl')\n  if (!existsSync(file)) return []\n  try {\n    return readFileSync(file, 'utf8').trim().split(/\\r?\\n/).filter(Boolean).map((line) => {\n      try {\n        return JSON.parse(line)\n      } catch {\n        return { raw: line }\n      }\n    })\n  } catch {\n    return []\n  }\n}\n"}
+
+[tool • write]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-lib.mjs</path>
+<type>file</type>
+<content>
+Created file
+</content>
+
+[assistant]
+Now the first test script: path 1 (rapid next/prev switching) + path 2 (quality switching). Let me write it to:
+1. Launch instance with cookies + fixture.
+2. Verify login state.
+3. Play something real (search + play) OR use fixture track. For rapid switching, I want a real queue. Search "孤勇者" and play the first row. Then verify playing.
+4. Path 1: rapid next/prev: invoke player:next / player:previous 20 times back-to-back without waiting, then sample state over time: check position monotonic, no exception, no crash, mpv alive, playing state consistent. Also watch for UI errors.
+5. Path 2: quality switching: settings:update quality values + player:setQuality across ['standard','higher','exhigh','lossless','jymaster'] repeatedly, then verify playback continues (position increases, no stop/rewind to zero, no error).
+
+Let me check the QualityLevel type values. Let me grep types.ts for QualityLevel.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src\\shared\\types.ts","pattern":"QualityLevel|'standard'|'higher'|'exhigh'|'lossless'|'jymaster'"}
+
+[tool • grep]
+Found 16 matches
+
+kumone-windows\src\shared\types.ts
+Line 9: export type QualityLevel =
+Line 10:   | 'standard'
+Line 11:   | 'higher'
+Line 12:   | 'exhigh'
+Line 13:   | 'lossless'
+Line 17:   | 'jymaster'
+Line 20:   level: QualityLevel
+Line 30:   { level: 'standard', label: '标准音质', br: 128, vip: false },
+Line 31:   { level: 'higher', label: '较高音质', br: 192, vip: false },
+Line 32:   { level: 'exhigh', label: '极高音质', br: 320, vip: false },
+Line 33:   { level: 'lossless', label: '无损音质', br: 1411, vip: true },
+Line 37:   { level: 'jymaster', label: '超清母带', br: 0, vip: true }
+Line 101:   quality: QualityLevel
+Line 103:   servedQuality?: QualityLevel
+Line 204:   quality: QualityLevel
+Line 258:   quality: 'exhigh',
+
+[assistant]
+Quality levels: standard(128), higher(192), exhigh(320), lossless, jymaster. The task says 128→320→无损: standard→exhigh→lossless.
+
+Now write the first bug test script. I'll test with the real playlist. For rapid switching, first build a queue: search '孤勇者' (or any), click play, wait playing. Then:
+
+Path 1: 
+- Fire 20 next/previous invocations rapidly: alternate next, previous, next, next... at ~80ms intervals without waiting for settle.
+- After the storm, poll player:state every 500ms x 20 samples: check playing=true eventually, position increases (no stuck), no exceptions, and check the UI shows a track name, and mpv process alive (via tasklist).
+- Also sample during the storm: measure that state.playing eventually true and position resets per track change (position going backward is expected on track change; going to a stuck 0 repeatedly = bad).
+
+Actually the interesting bug signals:
+- player:state invoke throws or returns error
+- app:error events
+- mpv process count (should be 1 mpv per app; if multiple mpv accumulate = leak)
+- audio output: cannot hear; rely on state + mpv logs. mpv logs go to onLog → diagnostics? Let me check where onLog goes — logCollector. The diagnostics/pending.jsonl may capture 'error'/'warn' logs. Good.
+
+- Progress stuck: position frozen for >10s while playing=true.
+
+Path 2 quality switching: every 2 seconds cycle standard→exhigh→lossless→standard, 6 cycles; after each, sample: playing, position (should not go backwards to 0 — position may reset if it reloads the track, that's "回零" which is the bug they fear; note: reload with position reset is the bug signal "停播/回零"). Also servedQuality change.
+
+Let me also record timings.
+
+For evidence of UI errors, I'll also poll for `.toast` text and error indicators.
+
+One important detail: rapid switching via `player:next` IPC from the renderer — each invoke is async. I'll fire them without await from the CDP side (a single evaluate that fires 20 invocations in a loop). That's the truest "狂点" simulation (like user clicking the button repeatedly). Also alternate previous/next.
+
+Let me write the script now. Port 9391 (avoid 9393 conflicts with other QA? The instructions say use 9393. But qa-frontend/qa-backend teammates may also be running instances on 9393 or other ports. I'll use distinct ports: 9401 for bug hunter. The instruction says start with --remote-debugging-port=9393 — that's their example; the key requirement is killing old instance on the port first. I'll use 9401 to avoid colliding with other teammates' instances; each script kills its own userData-scoped instance before and after. Also before starting, kill any instance whose command line contains my userData dir.
+
+[assistant • write]
+{"content":"/**\n * bug 猎手 · 路径 1：播放中狂点切歌（下一首/上一首交替，20 连发，不等落定）。\n * 路径 2：播放中来回切音质 standard→exhigh→lossless 6 轮。\n *\n * 关注信号：player:state 报错 / 卡死（position 冻结）/ 回零 / mpv 进程堆积 / app:error。\n */\nimport * as path from 'node:path'\nimport * as os from 'node:os'\nimport {\n  log, wait, launchBugInstance, killInstance, waitReady, cdp, waitFor, playerState, waitPlaying,\n  clickNav, typeSearch, searchRows, collectLogs, freshUserData\n} from './test-qa-bug-lib.mjs'\n\nconst PORT = 9401\nconst userData = path.join(os.tmpdir(), 'youyou-bug-rapid')\nconst results = []\nconst record = (name, ok, detail = '') => {\n  results.push({ name, ok })\n  log(`${ok ? 'PASS' : 'BUG?'} ${name}${detail ? ` — ${detail}` : ''}`)\n}\n\n/** 报告一条 bug 给 Lead（严重度分级）。 */\nconst bugs = []\nconst report = (pathNo, operation, symptom, severity, evidence) => {\n  const line = `路径${pathNo} → ${operation} → ${symptom} → 严重度:${severity}${evidence ? ` | 证据:${evidence}` : ''}`\n  bugs.push(line)\n  log(`🐛 ${line}`)\n}\n\nasync function main() {\n  freshUserData(userData)\n  killInstance(userData)\n  launchBugInstance({ port: PORT, userData })\n  try {\n    const ready = await waitReady(PORT, 90_000)\n    record('实例启动', ready)\n    if (!ready) return\n\n    const auth = await cdp(PORT, `(async () => (await window.youyou.invoke('auth:state')).data)()`)\n    log(`登录态: ${JSON.stringify({ loggedIn: auth.value?.loggedIn, nick: auth.value?.profile?.nickname })}`)\n\n    // 造队列：搜索 → 点第一行播放（等真出声）\n    await clickNav(PORT, '搜索')\n    await wait(1500)\n    const typed = await typeSearch(PORT, '孤勇者')\n    const rows = await waitFor(PORT, `(async () => (await ${searchRows.toString()})() > 0)`, 20_000, '搜索结果出现')\n    record('搜索并出结果', typed && rows.ok, `rows=${JSON.stringify(rows.last)}`)\n\n    await cdp(PORT, `(() => {\n      const root = document.querySelector('.page-slot:not([hidden])') ?? document\n      const row = root.querySelector('.song-row')\n      if (!row) return false\n      const button = row.querySelector('button')\n      if (button) button.click()\n      else row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))\n      return true\n    })()`)\n    const played = await waitPlaying(PORT, 60_000)\n    record('首曲出声', played.ok, played.ok\n      ? `${played.state.track?.name} pos=${played.state.position?.toFixed(1)} servedFrom=${played.state.servedFrom ?? '网易云'}`\n      : JSON.stringify(played.state)?.slice(0, 160))\n\n    // ---------- 路径 1：狂点切歌 ----------\n    log('== 路径 1：20 连发 next/prev ==')\n    const storm = await cdp(PORT, `(async () => {\n      const ops = ['player:next','player:previous','player:next','player:previous']\n      const errors = []\n      for (let i = 0; i < 20; i += 1) {\n        try {\n          const reply = await window.youyou.invoke(ops[i % 4])\n          if (reply?.error) errors.push(String(reply.error))\n        } catch (cause) { errors.push(String(cause)) }\n        await new Promise((resolve) => setTimeout(resolve, 60))\n      }\n      return { errors }\n    })()`)\n    const stormErrors = storm.ok ? (storm.value?.errors ?? []) : [storm.error ?? 'cdp异常']\n    record('20 连发期间 player 通道无报错', stormErrors.length === 0, JSON.stringify(stormErrors).slice(0, 300))\n\n    // 风暴后观察 20 秒：应落定在 playing 且 position 前进\n    const settle = await waitFor(PORT, `(async () => {\n      const s = (await window.youyou.invoke('player:state')).data\n      return Boolean(s && s.playing === true && s.position > 0.5 && s.track?.name)\n    })()`, 25_000, '风暴后落定播放')\n    const post = await playerState(PORT)\n    const p1 = post.ok ? post.value : null\n    record('风暴后仍在正常播放（不卡死）', settle.ok, p1 ? `${p1.track?.name} pos=${p1.position?.toFixed(1)}` : JSON.stringify(post).slice(0, 160))\n\n    // position 是否继续前进（卡死 = 冻结）\n    const beforePos = p1?.position ?? 0\n    await wait(4000)\n    const post2 = await playerState(PORT)\n    const p2 = post2.ok ? post2.value : null\n    const advanced = (p2?.position ?? 0) > beforePos + 0.5\n    record('进度持续前进（无冻结）', advanced, `${beforePos?.toFixed(1)} → ${p2?.position?.toFixed(1)}`)\n\n    // 回零检查：若 track 相同且 position 大幅回退 → 声音错乱\n    if (p1?.track?.id && p2?.track?.id === p1.track.id) {\n      const rewound = p2.position < p1.position - 2\n      record('同曲进度未回退', !rewound, `${p1.position?.toFixed(1)} → ${p2.position?.toFixed(1)}`)\n    } else {\n      log('  两次采样曲目不同（正常换曲），跳过回退检查')\n    }\n\n    // mpv 进程数（堆积 = 泄漏）\n    const mpvCount = await cdp(PORT, `(async () => (await window.youyou.invoke('app:info')).data)()`)\n    log(`app:info = ${JSON.stringify(mpvCount.value)?.slice(0, 200)}`)\n\n    // ---------- 路径 2：播放中切音质 ----------\n    log('== 路径 2：音质来回切 ==')\n    const cycles = ['standard', 'exhigh', 'lossless', 'standard']\n    const qResults = []\n    for (let round = 0; round < 6; round += 1) {\n      const target = cycles[round % cycles.length]\n      const t0 = Date.now()\n      const set = await cdp(PORT, `(async () => {\n        const before = (await window.youyou.invoke('player:state')).data\n        await window.youyou.invoke('player:setQuality', { quality: ${JSON.stringify(target)} })\n        await window.youyou.invoke('settings:update', { quality: ${JSON.stringify(target)} })\n        await new Promise((resolve) => setTimeout(resolve, 1500))\n        const after = (await window.youyou.invoke('player:state')).data\n        return {\n          target: ${JSON.stringify(target)},\n          before: { name: before?.track?.name, pos: before?.position },\n          after: { name: after?.track?.name, pos: after?.position, playing: after?.playing, servedQuality: after?.servedQuality }\n        }\n      })()`)\n      const ms = Date.now() - t0\n      const v = set.ok ? set.value : { error: set.error }\n      qResults.push({ ...v, ms })\n      log(`  第${round + 1}轮 → ${target}: ${JSON.stringify(v)?.slice(0, 220)} (${ms}ms)`)\n      if (!set.ok) {\n        report(2, `切音质到 ${target}`, 'player:setQuality 通道报错', '挂死', String(set.error).slice(0, 200))\n        break\n      }\n      if (!v.after?.playing) {\n        report(2, `切音质到 ${target}`, '切换后播放停止', '数据错乱', JSON.stringify(v))\n        break\n      }\n      if (v.after.name === v.before?.name && v.after.pos < v.before.pos - 1) {\n        report(2, `切音质到 ${target}`, '同曲进度回零/回退', '数据错乱', `${v.before.pos?.toFixed(1)}→${v.after.pos?.toFixed(1)}`)\n      }\n    }\n    const allOk = qResults.length === 6 && qResults.every((item) => item?.after?.playing)\n    record('6 轮音质来回切全部保持播放', allOk, `轮数=${qResults.length}`)\n\n    // 风暴期间主进程日志（错误证据）\n    await wait(1000)\n    const logs = collectLogs(userData).filter((item) => item?.level === 'error' || item?.level === 'warn')\n    record('风暴期间无 error/warn 日志', logs.length === 0, logs.slice(-6).map((item) => `${item.level}:${String(item.message ?? item.raw ?? '').slice(0, 120)}`).join(' || '))\n  } catch (cause) {\n    record('测试执行异常', false, String(cause).slice(0, 200))\n  } finally {\n    killInstance(userData)\n  }\n\n  const failed = results.filter((item) => !item.ok)\n  log(`结果: ${results.length - failed.length}/${results.length} 通过，bugs=${bugs.length}`)\n  for (const line of bugs) console.log(`REPORT|${line}`)\n  if (failed.length > 0 || bugs.length > 0) process.exitCode = 1\n}\n\nawait main()\n","file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-rapid.mjs"}
+
+[tool • write]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-rapid.mjs</path>
+<type>file</type>
+<content>
+Created file
+</content>
+
+[assistant]
+Wait, there's a bug in my waitFor usage: `await waitFor(PORT, ...)` — the expression I passed uses `(async () => (await ${searchRows.toString()})() > 0)` — that's wrong. searchRows is a function that takes port and returns a cdp call — calling it from inside the renderer makes no sense. I need the raw expression `document.querySelector(...)`. Let me fix: the waitFor expression should be the DOM query directly.
+
+[assistant • edit]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-rapid.mjs","old_string":"    const rows = await waitFor(PORT, `(async () => (await ${searchRows.toString()})() > 0)`, 20_000, '搜索结果出现')","new_string":"    const rows = await waitFor(PORT, `(document.querySelector('.page-slot:not([hidden])')?.querySelectorAll('.song-row').length ?? document.querySelectorAll('.song-row').length) > 0`, 20_000, '搜索结果出现')"}
+
+[tool • edit]
+The file E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-rapid.mjs has been updated successfully.
+
+[assistant]
+Also remove the unused import searchRows... it's fine, harmless. Let me run this script now. It takes a while (launch ~10-20s + playback + storm + 6 quality cycles). Let me run it in background and monitor.
+
+Actually wait — one concern: `player:setQuality` — let me double-check it exists in the contract... yes: 'player:setQuality': { request: { quality: string }; response: PlayerStateDTO }.
+
+Let me run.
+
+[assistant • pwsh]
+{"command":"node \"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-rapid.mjs\"","description":"Run rapid-switch and quality-switch bug test","run_in_background":true,"workdir":"E:\\deepseek 工作区\\kumone-windows"}
+
+[tool • pwsh]
+started background job pwsh-595
+
+[assistant]
+While that runs, let me write the next test scripts. Path 3 (logout during playback / login another account), path 7 (special search inputs), path 11 (settings toggles) — these are lighter and can share an instance in a separate script... Actually each script uses its own port and instance to avoid conflicts. Let me write test-qa-bug-auth.mjs for path 3, and test-qa-bug-search.mjs for path 7.
+
+For path 3:
+- Launch with cookies (logged in). Play something. Then auth:logout during playback → check player state (should the player keep playing? Expected behavior: probably playback continues or stops; record what happens — does it crash, does state become inconsistent, does UI show login gate?).
+- Then "播放中登录另一个账号": realistically we can't QR-scan. But we CAN simulate "account switch": stop the app, replace cookies.json with a DIFFERENT account's cookie (do we have one? Only one cookies.json likely). Alternative: replace with an INVALID cookie (empty jar) → app starts logged out; or YOYOU_FORCE_UID to a different uid... that only forces uid for daily recommendations.
+
+Hmm — what about the fake QQ account (YOYOU_FAKE_QQ_ACCOUNT=1)? That logs a fake QQ platform account, not netease.
+
+Realistic simulation of "login another account mid-play": I can overwrite cookies.json on disk while playing, then... the main process reads cookies at startup for login state; mid-run it won't re-read. BUT auth:qrStart/qrPoll flow exists — after logout, starting QR login flow changes state. I can't complete QR.
+
+What I CAN do: logout mid-play (real), then verify no crash + UI shows login gate + playback state (stopped/paused/continues?). Then relaunch with a second account cookie IF available. Let me check if there are other cookies in the profile... accounts.json may contain QQ session. Let me look at accounts.json (it's 729 bytes) — it holds platform accounts (qq etc.). Not a second netease account though.
+
+Actually — is there a way to fake a different netease uid? Let me check the netease client: does it validate MUSIC_U? If I craft cookies.json with a random MUSIC_U string, the app might "log in" but API calls fail. That would simulate a stale/invalid session — an interesting bug path itself (invalid cookie handling).
+
+Plan for path 3:
+1. Launch with real cookies → play → logout via auth:logout mid-play → observe: player state, UI, any crash, toasts.
+2. After logout, try player:play / next → observe errors.
+3. Relaunch with a corrupted/invalid cookies.json (random MUSIC_U) → observe boot behavior (crash? infinite spinner? login gate?).
+4. Also test: while playing, invoke auth:state → fine.
+
+Additionally "播放中登录另一个账号" — closest: after logout, do a QR login start while queue is playing... requires QR. Skip with note.
+
+Let me also handle: does the app have a logout button in UI? auth:logout channel works via invoke. I'll do invoke directly.
+
+Path 7 search special inputs: emoji 🎵, single char 爱, super long string (500 chars), spaces only, pure symbols ★☆♪, empty, and maybe a CJK extension char 𠀀. For each: type into search box, wait, check: any uncaught error (page error event via CDP? I can check for toast with '失败', check results count, check renderer crash (target disappears), and capture window errors). Also search:suggest calls. I'll listen for window.onerror by injecting a hook at start: `window.__qaErrors = []; window.addEventListener('error', e => window.__qaErrors.push(String(e.message)))`. Then after each search, read __qaErrors.
+
+Also check the suggest dropdown doesn't crash with emoji.
+
+Path 11 settings toggles: cycle theme light/dark/system, quality settings, cache directory change (choose dir — can't open native dialog; but settings:update with cacheDirectory path string works), cacheLimitMB, showDesktopLyrics toggle, lyricFont changes, language change, wallpaper... "缓存目录来回切" — settings:update({cacheDirectory: 'C:\\temp\\x'}) then back to ''. Verify settings:get round-trips and app doesn't crash, and audio cache still works.
+
+Path 12 window: window:minimize → restore (can't restore programmatically? There's no window:restore channel; minimize then check app still responsive via CDP — actually minimized window still runs CDP; "恢复" from tray? There's a tray icon; renderer may have a way. There's window:toggleMaximize, window:toggleFullScreen, window:setFullScreen. I'll test: minimize → wait → toggleMaximize → isMaximized → setFullScreen(true/false) → verify fullscreen event and UI classes, desktop lyrics on/off via lyrics:desktopToggle + settings:update showDesktopLyrics.
+
+Let me write these three scripts now while rapid test runs.
+
+[assistant]
+<acp tokens="19" type="text">m00077</acp>
+While that runs, let me write the auth/logout and search-fuzz test scripts.
+
+[assistant • write]
+{"content":"/**\n * bug 猎手 · 路径 3：播放中退出登录；登录态失效/换账号模拟（坏 cookie 冷启动）。\n *\n * 关注：登出瞬间播放器是否崩溃/继续出声/状态错乱；UI 是否卡在登录门禁；\n *       坏 cookie 启动是否挂死/无限转圈。\n */\nimport * as path from 'node:path'\nimport * as os from 'node:os'\nimport { writeFileSync } from 'node:fs'\nimport {\n  log, wait, launchBugInstance, killInstance, waitReady, cdp, playerState, waitPlaying,\n  clickNav, typeSearch, freshUserData\n} from './test-qa-bug-lib.mjs'\n\nconst PORT = 9402\nconst userData = path.join(os.tmpdir(), 'youyou-bug-auth')\nconst results = []\nconst bugs = []\nconst record = (name, ok, detail = '') => {\n  results.push({ name, ok })\n  log(`${ok ? 'PASS' : 'BUG?'} ${name}${detail ? ` — ${detail}` : ''}`)\n}\nconst report = (pathNo, operation, symptom, severity, evidence) => {\n  bugs.push(`路径${pathNo} → ${operation} → ${symptom} → 严重度:${severity}${evidence ? ` | 证据:${evidence}` : ''}`)\n  log(`🐛 ${bugs[bugs.length - 1]}`)\n}\n\nasync function startPlayback() {\n  await clickNav(PORT, '搜索')\n  await wait(1500)\n  await typeSearch(PORT, '晴天')\n  await wait(3000)\n  await cdp(PORT, `(() => {\n    const root = document.querySelector('.page-slot:not([hidden])') ?? document\n    const row = root.querySelector('.song-row')\n    if (!row) return false\n    const button = row.querySelector('button')\n    if (button) button.click()\n    else row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))\n    return true\n  })()`)\n  return waitPlaying(PORT, 60_000)\n}\n\nasync function main() {\n  freshUserData(userData)\n  killInstance(userData)\n  launchBugInstance({ port: PORT, userData })\n  try {\n    const ready = await waitReady(PORT, 90_000)\n    record('实例启动（真实登录态）', ready)\n    if (!ready) return\n\n    const authBefore = await cdp(PORT, `(async () => (await window.youyou.invoke('auth:state')).data)()`)\n    const loggedIn = authBefore.ok && authBefore.value?.loggedIn === true\n    record('初始处于登录态', loggedIn, authBefore.value?.profile?.nickname ? `昵称=${authBefore.value.profile.nickname}` : JSON.stringify(authBefore.value).slice(0, 120))\n    if (!loggedIn) {\n      log('  未登录（真实 cookie 失效？），登出场景改为「未登录状态播放」继续')\n    }\n\n    // 先装错误监听\n    await cdp(PORT, `(window.__qaErrors = [], window.addEventListener('error', (e) => window.__qaErrors.push(String(e.message)), true))`)\n\n    // 播放中\n    const played = await startPlayback()\n    record('登出前播放中', played.ok, played.ok ? `${played.state?.track?.name} pos=${played.state?.position?.toFixed(1)}` : JSON.stringify(played.state)?.slice(0, 140))\n\n    // 播放中退出登录\n    const t0 = Date.now()\n    const logout = await cdp(PORT, `(async () => {\n      try {\n        const reply = await window.youyou.invoke('auth:logout')\n        return { ok: !reply?.error, error: reply?.error ?? null }\n      } catch (cause) { return { ok: false, error: String(cause) } }\n    })()`)\n    const logoutMs = Date.now() - t0\n    record('播放中 auth:logout 通道不报错', logout.ok && logout.value?.ok === true, `${logoutMs}ms ${JSON.stringify(logout.value)?.slice(0, 160)}`)\n\n    await wait(2500)\n    const afterLogout = await playerState(PORT)\n    const s = afterLogout.ok ? afterLogout.value : null\n    log(`登出后播放器: playing=${s?.playing} track=${s?.track?.name} pos=${s?.position?.toFixed?.(1)}`)\n    // 判定：登出后播放器要么继续出声（独立于登录态）、要么明确停止——不允许「显示播放中但进度冻结」假死\n    const frozenWhilePlaying = s?.playing === true && s?.position !== undefined\n    if (s?.playing === true) {\n      const pos1 = s.position\n      await wait(4000)\n      const s2 = (await playerState(PORT)).value\n      const advancing = (s2?.position ?? 0) > pos1 + 0.5\n      if (!advancing) report(3, '播放中退出登录', 'UI 显示播放中但进度冻结（假死）', '挂死', `pos ${pos1?.toFixed(1)}→${s2?.position?.toFixed(1)}`)\n      else record('登出后播放器保持出声且进度前进（或明确停止）', true, `pos ${pos1?.toFixed(1)}→${s2?.position?.toFixed(1)}`)\n    } else {\n      record('登出后播放器明确停止（无假死）', frozenWhilePlaying === false, `playing=${s?.playing}`)\n    }\n\n    // 登出后再点播放/下一首：应给明确错误或跳登录，不崩溃\n    const playAfter = await cdp(PORT, `(async () => {\n      const out = {}\n      for (const channel of ['player:play', 'player:next']) {\n        try {\n          const reply = await window.youyou.invoke(channel)\n          out[channel] = reply?.error ? `error:${reply.error}` : 'ok'\n        } catch (cause) { out[channel] = `throw:${String(cause).slice(0, 80)}` }\n      }\n      return out\n    })()`)\n    record('登出后播放/下一首操作有明确反馈且不崩溃', playAfter.ok, JSON.stringify(playAfter.value))\n\n    const errs = await cdp(PORT, `window.__qaErrors.slice(0, 10)`)\n    record('全程渲染层无未捕获错误', errs.ok && (errs.value ?? []).length === 0, JSON.stringify(errs.value))\n\n    // 实例还活着吗\n    const alive = await cdp(PORT, `Boolean(window.youyou)`).then((r) => r.ok && r.value === true).catch(() => false)\n    record('登出后实例存活（未崩溃）', alive)\n\n    // 登出后 UI 是否给出登录门禁（体验：用户应知道需要重新登录）\n    await clickNav(PORT, '首页')\n    await wait(1500)\n    const gate = await cdp(PORT, `Boolean([...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '去登录'))`)\n    record('登出后首页出现「去登录」入口（状态已同步）', gate.ok && gate.value === true, `gate=${gate.value}`)\n  } catch (cause) {\n    record('测试执行异常', false, String(cause).slice(0, 200))\n  } finally {\n    killInstance(userData)\n  }\n\n  // ================= 场景 B：坏 cookie（模拟另一个/失效账号）冷启动 =================\n  log('== 场景 B：失效 MUSIC_U 冷启动 ==')\n  freshUserData(userData)\n  writeFileSync(path.join(userData, 'cookies.json'), JSON.stringify({ MUSIC_U: 'deadbeef' + Date.now(), __csrf: 'x' }))\n  launchBugInstance({ port: PORT, userData, cookie: false, fixture: false })\n  try {\n    const readyB = await waitReady(PORT, 90_000)\n    record('坏 cookie 实例能启动到渲染层', readyB)\n    if (!readyB) return\n    await wait(8000)\n    const authB = await cdp(PORT, `(async () => (await window.youyou.invoke('auth:state')).data)()`)\n    log(`坏 cookie 登录态: ${JSON.stringify(authB.value)?.slice(0, 160)}`)\n    const spinner = await cdp(PORT, `Boolean(document.querySelector('.spinner, .loading, [class*=\"spin\"]'))`)\n    const gateB = await cdp(PORT, `Boolean([...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '去登录'))`)\n    record('坏 cookie 未无限转圈（有落定 UI）', spinner.ok && spinner.value === false, `spinner=${spinner.value} gate=${gateB.value}`)\n    // 失效态应呈现未登录门禁，而不是假登录页面\n    if (authB.value?.loggedIn === true) {\n      report(3, '失效 cookie 启动', 'app 认为已登录但接口必然全挂（假登录）', '体验差', JSON.stringify(authB.value).slice(0, 160))\n    } else {\n      record('失效 cookie 正确判定未登录', true, `loggedIn=${authB.value?.loggedIn}`)\n    }\n  } catch (cause) {\n    record('场景B 异常', false, String(cause).slice(0, 200))\n  } finally {\n    killInstance(userData)\n  }\n\n  const failed = results.filter((item) => !item.ok)\n  log(`结果: ${results.length - failed.length}/${results.length} 通过，bugs=${bugs.length}`)\n  for (const line of bugs) console.log(`REPORT|${line}`)\n  if (failed.length > 0 || bugs.length > 0) process.exitCode = 1\n}\n\nawait main()\n","file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-auth.mjs"}
+
+[tool • write]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-auth.mjs</path>
+<type>file</type>
+<content>
+Created file
+</content>
+
+[assistant]
+Wait — in scenario B I call launchBugInstance with cookie:false and fixture:false, but I wrote cookies.json manually before launching. Good. But plantCachedAudio is skipped — fine since no playback there. Also note: launchBugInstance with cookie:false means it won't overwrite my planted bad cookie. Correct.
+
+One issue in scenario A: after killInstance, the CDP port may linger briefly; the B launch uses the same port 9402 — Chromium will pick a new port? No! If port 9402 is in TIME_WAIT or the old process is still dying, the new instance may fail to bind 9402 and pick another port (Chromium retries with next port, e.g. 9403). Then waitReady on 9402 would poll the dying instance... Actually if the old process is killed, 9402 frees up. There's a race: waitReady(PORT) with the new process maybe on 9403. To be safe, add a wait between kill and relaunch. Let me add `await wait(2000)` after killInstance in scenario B. Actually in scenario A's finally, killInstance runs, then immediately freshUserData + launch. Add a wait.
+
+Also the scenario B relaunch: `launchBugInstance({ port: PORT, ...})` — if the port bind fails, electron's remote-debugging-port will use the next free port. My waitReady on 9402 would then connect to... nothing (old instance dead) → fails → record failure. To be robust, I could check json/list on 9402 and 9403. Let me improve waitReady to try a couple of adjacent ports? Simpler: keep 9402 but before relaunching, poll until `fetch(9402/json/list)` fails (old instance fully gone). Let me add that helper inline in the auth script... Actually simplest: in lib, add `waitPortFree(port)` helper. Let me edit both files.
+
+[assistant • edit]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-lib.mjs","new_string":"/** 等端口彻底释放（旧实例死透，避免 Chromium 自动换端口导致探针连不上）。 */\nexport async function waitPortFree(port, timeoutMs = 15_000) {\n  const deadline = Date.now() + timeoutMs\n  for (;;) {\n    try {\n      await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(500) })\n    } catch {\n      return true\n    }\n    if (Date.now() > deadline) return false\n    await wait(500)\n  }\n}\n\n/** 侧栏导航。 */","old_string":"/** 侧栏导航。 */"}
+
+[tool • edit]
+The file E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-lib.mjs has been updated successfully.
+
+[assistant]
+
+
+[assistant • edit]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-auth.mjs","new_string":"import {\n  log, wait, launchBugInstance, killInstance, waitReady, waitPortFree, cdp, playerState, waitPlaying,\n  clickNav, typeSearch, freshUserData\n} from './test-qa-bug-lib.mjs'","old_string":"import {\n  log, wait, launchBugInstance, killInstance, waitReady, cdp, playerState, waitPlaying,\n  clickNav, typeSearch, freshUserData\n} from './test-qa-bug-lib.mjs'"}
+
+[assistant • edit]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-auth.mjs","new_string":"  // ================= 场景 B：坏 cookie（模拟另一个/失效账号）冷启动 =================\n  log('== 场景 B：失效 MUSIC_U 冷启动 ==')\n  await waitPortFree(PORT)\n  freshUserData(userData)","old_string":"  // ================= 场景 B：坏 cookie（模拟另一个/失效账号）冷启动 =================\n  log('== 场景 B：失效 MUSIC_U 冷启动 ==')\n  freshUserData(userData)"}
+
+[tool • edit]
+The file E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-auth.mjs has been updated successfully.
+
+[tool • edit]
+The file E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-auth.mjs has been updated successfully.
+
+[assistant]
+Now the search fuzz script (path 7). Also check the rapid test progress.
+
+[assistant • write]
+{"content":"/**\n * bug 猎手 · 路径 7：搜索特殊输入模糊测试。\n * emoji / 单字符 / 超长词(1000字) / 全空格 / 纯符号 / 生僻字 / 控制字符。\n *\n * 关注：崩溃 / 未捕获异常 / toast 报错 / 结果卡死转圈。\n */\nimport * as path from 'node:path'\nimport * as os from 'node:os'\nimport {\n  log, wait, launchBugInstance, killInstance, waitReady, cdp, typeSearch, clickNav, freshUserData\n} from './test-qa-bug-lib.mjs'\n\nconst PORT = 9403\nconst userData = path.join(os.tmpdir(), 'youyou-bug-search')\nconst results = []\nconst bugs = []\nconst record = (name, ok, detail = '') => {\n  results.push({ name, ok })\n  log(`${ok ? 'PASS' : 'BUG?'} ${name}${detail ? ` — ${detail}` : ''}`)\n}\nconst report = (pathNo, operation, symptom, severity, evidence) => {\n  bugs.push(`路径${pathNo} → ${operation} → ${symptom} → 严重度:${severity}${evidence ? ` | 证据:${evidence}` : ''}`)\n  log(`🐛 ${bugs[bugs.length - 1]}`)\n}\n\nconst CASES = [\n  { name: 'emoji', text: '🎵🎧❤️' },\n  { name: '单字「爱」', text: '爱' },\n  { name: '超长词 1000 字', text: '周杰伦'.repeat(333).slice(0, 1000) },\n  { name: '全空格', text: '     ' },\n  { name: '纯符号', text: '★☆♪♫→←😀%%%***///' },\n  { name: '生僻字', text: '𠀀𠮷囧' },\n  { name: '控制字符', text: '\\u0000\\u0001\\u0007' },\n  { name: 'URL 注入', text: \"https://evil.com/'; DROP TABLE songs;--\" }\n]\n\nasync function main() {\n  freshUserData(userData)\n  killInstance(userData)\n  launchBugInstance({ port: PORT, userData, cookie: true, fixture: false })\n  try {\n    const ready = await waitReady(PORT, 90_000)\n    record('实例启动', ready)\n    if (!ready) return\n\n    await cdp(PORT, `(window.__qaErrors = [], window.addEventListener('error', (e) => window.__qaErrors.push(String(e.message)), true))`)\n    await clickNav(PORT, '搜索')\n    await wait(1500)\n\n    for (const c of CASES) {\n      const t0 = Date.now()\n      const typed = await typeSearch(PORT, c.text)\n      await wait(2500)\n      // 截图现场：错误累积、转圈、toast、结果行数\n      const snap = await cdp(PORT, `(() => {\n        const root = document.querySelector('.page-slot:not([hidden])') ?? document\n        return {\n          rows: root.querySelectorAll('.song-row').length,\n          spinner: Boolean(document.querySelector('.spinner, .loading, [class*=\"spin\"]')),\n          toast: document.querySelector('.toast')?.textContent ?? null,\n          errors: window.__qaErrors.slice(0, 6),\n          suggest: document.querySelectorAll('.suggest-item, [class*=\"suggest\"]').length\n        }\n      })()`)\n      const ms = Date.now() - t0\n      const v = snap.value ?? {}\n      log(`  [${c.name}] ${ms}ms rows=${v.rows} spinner=${v.spinner} toast=${JSON.stringify(v.toast)} errs=${JSON.stringify(v.errors)}`)\n      record(`搜索「${c.name}」不崩溃不报错`, snap.ok && (v.errors ?? []).length === 0 && !v.toast, `rows=${v.rows}`)\n      if (!snap.ok) {\n        report(7, `搜索「${c.name}」`, 'CDP 评估失败（渲染层可能已崩）', '崩溃', String(snap.error).slice(0, 160))\n        break\n      }\n      if ((v.errors ?? []).length > 0) {\n        report(7, `搜索「${c.name}」`, '渲染层未捕获异常', '崩溃', JSON.stringify(v.errors).slice(0, 160))\n      }\n      if (v.spinner && v.rows === 0) {\n        report(7, `搜索「${c.name}」`, '结果一直转圈无落定', '体验差', `${ms}ms 仍 spinner`)\n      }\n      // 清空再下一个\n      await typeSearch(PORT, '')\n      await wait(600)\n    }\n\n    // 实例是否存活\n    const alive = await cdp(PORT, `Boolean(window.youyou)`).then((r) => r.ok && r.value === true).catch(() => false)\n    record('8 轮特殊输入后实例存活', alive)\n\n    // 恢复正常搜索仍可用\n    await typeSearch(PORT, '周杰伦')\n    await wait(3000)\n    const normal = await cdp(PORT, `(document.querySelector('.page-slot:not([hidden])')?.querySelectorAll('.song-row').length ?? document.querySelectorAll('.song-row').length) > 0`)\n    record('特殊输入后正常搜索仍可用', normal.ok && normal.value === true, `rows>0=${normal.value}`)\n  } catch (cause) {\n    record('测试执行异常', false, String(cause).slice(0, 200))\n  } finally {\n    killInstance(userData)\n  }\n\n  const failed = results.filter((item) => !item.ok)\n  log(`结果: ${results.length - failed.length}/${results.length} 通过，bugs=${bugs.length}`)\n  for (const line of bugs) console.log(`REPORT|${line}`)\n  if (failed.length > 0 || bugs.length > 0) process.exitCode = 1\n}\n\nawait main()\n","file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-search.mjs"}
+
+[tool • write]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-search.mjs</path>
+<type>file</type>
+<content>
+Created file
+</content>
+
+[assistant]
+
+
+[assistant • job_output]
+{"job_id":"pwsh-595","wait":false}
+
+[tool • job_output]
+[bug] 启动实例 PID=30660 port=9401 userData=C:\Users\ASUS\AppData\Local\Temp\youyou-bug-rapid
+[bug] PASS 实例启动
+[bug] 登录态: {"loggedIn":true,"nick":"喵汪鱼"}
+[bug] 等待超时: 搜索结果出现 最后取值=false
+[bug] BUG? 搜索并出结果 — rows=false
+[status: running]
+
+[assistant]
+Search didn't return results within 20s. Possible causes: network slow, or search input typing failed, or the search page isn't in the right state. Note the login works (nick 喵汪鱼). Let me wait for the script to finish, then debug. It's still running — it will then attempt to play (no rows → no play → waitPlaying fails), then storm test with empty queue... the storm will still fire player:next etc. with empty queue — that's actually interesting (rapid next on empty queue!). Then quality switching too. Let me see how it ends.
+
+[assistant • job_output]
+{"job_id":"pwsh-595","wait":true,"timeout_ms":180000}
+
+[tool • job_output]
+[bug] BUG? 首曲出声 — {"queue":[],"index":-1,"playing":false,"position":0,"duration":0,"volume":80,"muted":false,"loading":false,"repeat":"off","shuffle":false,"quality":"exhigh"}
+[bug] == 路径 1：20 连发 next/prev ==
+[bug] PASS 20 连发期间 player 通道无报错 — []
+[bug] 等待超时: 风暴后落定播放 最后取值=false
+[bug] BUG? 风暴后仍在正常播放（不卡死） — undefined pos=0.0
+[bug] BUG? 进度持续前进（无冻结） — 0.0 → 0.0
+[bug]   两次采样曲目不同（正常换曲），跳过回退检查
+[bug] app:info = {"name":"悠悠音乐","version":"0.4.2","electron":"33.4.11","chrome":"130.0.6723.191","node":"20.18.3","platform":"win32","mpv":"mpv v0.41.0-1095-g413ff0b1c Copyright © 2000-2026 mpv/MPlayer/mplayer2 projec
+[bug] == 路径 2：音质来回切 ==
+[bug]   第1轮 → standard: {"target":"standard","before":{"pos":0},"after":{"pos":0,"playing":false}} (1516ms)
+[bug] 🐛 路径2 → 切音质到 standard → 切换后播放停止 → 严重度:数据错乱 | 证据:{"target":"standard","before":{"pos":0},"after":{"pos":0,"playing":false}}
+[bug] BUG? 6 轮音质来回切全部保持播放 — 轮数=1
+[bug] PASS 风暴期间无 error/warn 日志
+[bug] 结果: 3/8 通过，bugs=1
+REPORT|路径2 → 切音质到 standard → 切换后播放停止 → 严重度:数据错乱 | 证据:{"target":"standard","before":{"pos":0},"after":{"pos":0,"playing":false}}
+[status: completed, exit code: 1]
+
+[assistant]
+The test ran but the search produced no results, so nothing played. The "bugs" found are false positives from an empty queue (nothing playing). The root issue: search didn't return rows within 20s. Why? Possibly:
+1. The search input wasn't found (empty state input?) — typeSearch finds first visible input. If it typed into the wrong input...
+2. Network issues — real search requires network to NetEase API. Let me test the network: is there internet? The login state check succeeded via cookies (local file, no network needed). Search needs network.
+
+Let me quickly check network connectivity from the machine, and verify how the search page looks. Actually let me debug interactively: launch instance and manually check what the search page looks like, what inputs exist.
+
+Also let me check whether search worked in recent teammate runs... qa-frontend is running similar tests maybe. But simpler: check network.
+
+[assistant]
+<acp tokens="29" type="text">m00098</acp>
+The rapid test's search returned no results — possibly a network issue or wrong input. Let me debug interactively.
+
+[assistant • pwsh]
+{"command":"try { $r = Invoke-WebRequest -Uri \"https://music.163.com\" -UseBasicParsing -TimeoutSec 10; Write-Host \"netease HTTP $($r.StatusCode)\" } catch { Write-Host \"netease FAIL: $($_.Exception.Message)\" }; try { $r2 = Invoke-WebRequest -Uri \"https://yy.ytw.asia/\" -UseBasicParsing -TimeoutSec 10; Write-Host \"relay HTTP $($r2.StatusCode)\" } catch { Write-Host \"relay FAIL: $($_.Exception.Message)\" }","description":"Check network reachability"}
+
+[tool • pwsh]
+netease HTTP 200
+relay HTTP 200
+
+
+[assistant]
+Network is fine. So why did the search not return rows? Possibilities:
+1. typeSearch typed into the wrong input or the Enter didn't trigger search.
+2. The search UI: after clicking 搜索 in sidebar, there's an empty-state page with a big search input. My typeSearch picks the first visible input — probably correct. The Enter keydown → search:query. Should work.
+
+Wait — in test-back-and-quality.mjs they typed '孤勇者' with the same pattern and it worked. One difference: they waited `for attempt 22 × 900ms` with a different row query. My waitFor polls every 500ms with expression `(document.querySelector('.page-slot:not([hidden])')?.querySelectorAll('.song-row').length ?? document.querySelectorAll('.song-row').length) > 0`.
+
+Hmm — possible problem: `document.querySelector('.page-slot:not([hidden])')` — if page-slot exists without hidden attribute... In test-back-and-quality they used `.page-slot:not([hidden])')?.querySelectorAll` too. OK.
+
+Or maybe the search DID work but slowly (suggest first, results on Enter). Actually wait — my typeSearch fires `keydown` with key Enter, but maybe the app listens to `keypress` or checks `event.key === 'Enter'` on keydown — should be fine.
+
+Another possibility: the empty-state search input only appears after clicking 搜索 nav — and there might be TWO inputs (the sidebar top search box too). `[...document.querySelectorAll('input')].find((el) => el.offsetParent !== null)` picks the FIRST visible input, which might be a different one (e.g., a topbar search input on the home page rather than the search page input).
+
+Let me debug live: launch an instance on 9403 (before running search fuzz) and inspect the DOM. Let me write a quick interactive debug session using the lib. Actually — the search fuzz script is about to run and would hit the same issue. Let me first do a quick manual probe: launch instance, click 搜索 nav, dump all inputs and their placeholders/classes.
+
+[assistant • write]
+{"content":"/** 临时调试：检查搜索页 DOM 结构（不列入正式测试）。 */\nimport * as path from 'node:path'\nimport * as os from 'node:os'\nimport { log, wait, launchBugInstance, killInstance, waitReady, cdp, clickNav, typeSearch, freshUserData } from './test-qa-bug-lib.mjs'\n\nconst PORT = 9405\nconst userData = path.join(os.tmpdir(), 'youyou-bug-debug')\nawait freshUserData(userData)\nkillInstance(userData)\nlaunchBugInstance({ port: PORT, userData, cookie: true, fixture: false })\ntry {\n  await waitReady(PORT)\n  await clickNav(PORT, '搜索')\n  await wait(2000)\n  const dump = await cdp(PORT, `(() => {\n    const inputs = [...document.querySelectorAll('input')].map((el) => ({\n      visible: el.offsetParent !== null,\n      ph: el.placeholder ?? '',\n      cls: String(el.className).slice(0, 80),\n      type: el.type\n    }))\n    return { inputs, body: document.body.innerText.slice(0, 300) }\n  })()`)\n  log(`inputs: ${JSON.stringify(dump.value?.inputs, null, 1)}`)\n  log(`body: ${JSON.stringify(dump.value?.body)}`)\n  const typed = await typeSearch(PORT, '晴天')\n  await wait(4000)\n  const after = await cdp(PORT, `(() => {\n    const root = document.querySelector('.page-slot:not([hidden])') ?? document\n    return {\n      rows: root.querySelectorAll('.song-row').length,\n      allRows: document.querySelectorAll('.song-row').length,\n      inputValue: [...document.querySelectorAll('input')].find((el) => el.offsetParent !== null)?.value ?? null,\n      body: document.body.innerText.slice(0, 400)\n    }\n  })()`)\n  log(`after: ${JSON.stringify(after.value, null, 1)}`)\n} finally {\n  killInstance(userData)\n}\n","file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-debug-search.mjs"}
+
+[tool • write]
+<path>E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-debug-search.mjs</path>
+<type>file</type>
+<content>
+Created file
+</content>
+
+[assistant]
+
+
+[assistant • pwsh]
+{"command":"node \"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-debug-search.mjs\"","description":"Debug search page DOM structure","timeoutMs":180000,"workdir":"E:\\deepseek 工作区\\kumone-windows"}
+
+[tool • pwsh]
+[bug] 启动实例 PID=26456 port=9405 userData=C:\Users\ASUS\AppData\Local\Temp\youyou-bug-debug
+[bug] inputs: [
+ {
+  "visible": true,
+  "ph": "",
+  "cls": "slider",
+  "type": "range"
+ },
+ {
+  "visible": true,
+  "ph": "",
+  "cls": "slider slider--volume",
+  "type": "range"
+ }
+]
+[bug] body: "悠悠音乐\n首页\n发现\n搜索\n我的音乐\n每日推荐\n私人漫游\n一起听\n云盘\n设置\n喵汪鱼\nv0.4.2\n早上好，喵汪鱼\n推荐每天更新\n今日热歌\n为你随机挑选的今日热歌\n正在加载…\n猜你喜欢\n正在加载…\n排行榜\n正在加载…\n热门歌手\n正在加载…\n精品歌单\n正在加载…\n未在播放\n选择一首歌开始\n顺序播放\n0:00\n0:00\n标准\n较高\n极高\n无损\nHi-Res\n沉浸环绕\n全景声\n母带"
+[bug] after: {
+ "rows": 0,
+ "allRows": 0,
+ "inputValue": "0",
+ "body": "悠悠音乐\n首页\n发现\n搜索\n我的音乐\n每日推荐\n私人漫游\n一起听\n云盘\n设置\n喵汪鱼\nv0.4.2\n早上好，喵汪鱼\n推荐每天更新\n今日热歌\n为你随机挑选的今日热歌\n正在加载…\n推荐歌单\n252.8亿\n私人雷达\n云音乐私人雷达\n88.4万\n音乐诗人：李健 毛不易 赵雷 朴树\n账号已注销\n6.8万\n毛不易精选歌单 | 只在今夜 一起看月亮\n云音乐福利\n3.1万\n雨点敲窗的节奏，刚好接上副歌\n云村歌单王\n27.0亿\n华语私人雷达 | 最懂你的华语推荐 每日更新35首\n云音乐官方歌单\n25.9万\n那些只打巅峰赛的古风歌曲（诸神交战）\n姚明_IgGl\n1.7万\nTVB剧集金玉满堂\nclaude_cheng\n24.5万\n中式美学感BGM |看小说 宿命 氛围感 酸涩\n失忆宇宙\n158.1万\n你撑把小纸伞 叹因缘太婉转\n花楪ylin\n39.6万\n【100首舒缓的轻音乐】喧嚣都市中的孤岛\nGloria楽\n"
+}
+
+
+[assistant]
+Critical finding: clicking 搜索 in the sidebar did NOT navigate to the search page — the body still shows the 首页 content (早上好，喵汪鱼, 今日热歌...). And the only inputs are the volume sliders (type=range)! My typeSearch typed "0" into a range slider (hence inputValue "0").
+
+So the sidebar 搜索 link didn't navigate. Why? clickNav matches `.sidebar__link` with textContent includes '搜索'. Hmm, but body text shows "搜索" in sidebar. The click happened (returned true?). Wait — did clickNav return true? I didn't log it. Possibly there are two elements containing 搜索? Or the sidebar uses different classes.
+
+Also interesting: the home page IS loading (推荐歌单 appeared after 4s — network works, feed loads).
+
+Let me check the sidebar DOM structure. Let me grep the renderer for sidebar__link.
+
+[assistant • grep]
+{"path":"E:\\deepseek 工作区\\kumone-windows\\src\\renderer\\src","pattern":"sidebar__link|搜索"}
+
+[tool • grep]
+Found 56 matches
+
+kumone-windows\src\renderer\src\styles\global.css
+Line 678: .sidebar__link {
+Line 690: .sidebar__link:hover {
+Line 696: .sidebar__link.is-active {
+Line 811: /* --- 顶部搜索条 -------------------------------------------------------- */
+Line 813: /* 顶部一行：返回在左，搜索居中。搜索条固定在这里，不随内容滚动（用户要求）。 */
+Line 871: /* 居中的胶囊搜索条：小巧精致，不占满整行。 */
+Line 1487:   /* 见 .sidebar__link.is-active 的注释：避免 1px 边框区域的渐变平铺细边。 */
+
+kumone-windows\src\renderer\src\styles\home.css
+Line 2:  * 首页 / 发现 / 搜索 / 播放页的样式。
+Line 309: /* --- 搜索：结果态的顶部输入框 ------------------------------------------- */
+Line 367: /* --- 搜索：空态（居中大搜索框 + 流动头像墙） ---------------------------- */
+
+kumone-windows\src\renderer\src\styles\detail.css
+Line 281: /* 搜索框：白玻璃底 + 胶囊圆角，对齐手机端的圆角搜索条。 */
+
+kumone-windows\src\renderer\src\styles\search-external.css
+Line 2:  * 搜索页「静默兜底」结果行的样式。
+
+kumone-windows\src\renderer\src\styles\together.css
+Line 431: /* 五个控件（性别 / 地区 / 最小年龄 / 最大年龄 / 搜索）自适应一行。 */
+
+kumone-windows\src\renderer\src\pages\Explore.tsx
+Line 63:  * 所以这两项改成关键词搜索，用歌曲列表呈现 —— 搜的是站内音频，不是第三方小说库；
+Line 72: /** 有声内容一页取多少（搜索接口按歌曲返回）。 */
+Line 160:   // 听书 / 儿童：走关键词搜索，歌单分类的页签与排序对它们没有意义。
+Line 250:  * 听书 / 儿童：用关键词搜索站内的有声音频，按歌曲列表展示。
+Line 252:  * 不走歌单接口，也不需要分页游标以外的东西 —— 搜索接口按 offset 翻页，
+Line 341:             <span>正在搜索有声内容…</span>
+Line 350:           <div>换个分类试试，或者到搜索页自己找。</div>
+
+kumone-windows\src\renderer\src\lib\artistPic.ts
+Line 4:  * 网易云歌曲级的 `ar`/`artists[]` 对象多数不带头像（实测搜索 / 热歌 / 日推里
+
+kumone-windows\src\renderer\src\App.tsx
+Line 66:   { name: 'search', label: '搜索', Icon: IconSearch },
+Line 78:  *  1. 一级页面（首页/发现/搜索/我的音乐/每日推荐/私人漫游/一起听/云盘/设置）之间通过
+Line 80:  *  2. 全局搜索框不再放在这一行（那样每个页面都会多一个搜索框，搜索页还会变成两个）——
+Line 81:  *     搜索框是搜索页自己的东西。
+Line 172:                     className={`sidebar__link${navigation.route.name === name ? ' is-active' : ''}`}
+Line 186:                   className={`sidebar__link${navigation.route.name === 'settings' ? ' is-active' : ''}`}
+Line 285:  * 详情页（歌单/专辑/歌手/搜索/播放页）仍然按路由挂载，因为它们带参数、
+
+kumone-windows\src\renderer\src\pages\NowPlaying.tsx
+Line 503:           <div>去首页挑一首，或者在搜索里找找想听的歌。</div>
+
+kumone-windows\src\renderer\src\components\PlayerBar.tsx
+Line 311:   // 站外曲目（汽水/酷狗/酷我 搜索来的歌）没有「首选音质」这一说：不允许切换，
+
+kumone-windows\src\renderer\src\pages\PlaylistPage.tsx
+Line 413:  * 「添加歌曲」对话框：站内搜索、勾选，最后写入 playlist:manipulateTracks。
+Line 507:         placeholder="搜索歌名、歌手或专辑"
+Line 508:         aria-label="搜索要添加的歌曲"
+Line 514:         {searching ? <div className="detail-pick__hint">搜索中</div> : null}
+
+kumone-windows\src\renderer\src\lib\relevance.ts
+Line 2:  * 搜索结果相关性判定。
+Line 4:  * 起因：网易云的搜索接口极其「宽容」——实测连 36 位随机字符串都能返回结果，
+Line 46:  * - 关键词为空 → 相关（不做兜底，避免空搜索触发站外请求）
+
+kumone-windows\src\renderer\src\pages\Search.tsx
+Line 2:  * 搜索页：综合 / 单曲 / 歌手 / 专辑 / 歌单五个标签，带输入联想。
+Line 5:  * 反复跳动；回车或点击联想才真正搜索。综合标签把四类结果各取一小批并排
+Line 118: /** 会话内头像池：进过一次搜索页之后就不再等接口。 */
+Line 175:   /** 页面自己那个输入框（顶部全局搜索框已取消，这里是唯一入口）。 */
+Line 203:   /** 空态：没有搜索词时显示居中的大搜索框 + 头像墙。 */
+Line 220:    * 关键词变化时发起一次搜索：从别处跳进来（带 initialKeywords）也走这条，
+Line 248:   // --- 搜索（网易云）----------------------------------------------------
+Line 335:    * 网易云搜索极其宽容（实测随机串都能返回 30 条），只看条数的话抖音热歌这类
+Line 342:     // 每次重算都让在途的旧兜底作废：否则上一次搜索发出的站外请求晚到一步，
+Line 464:             <h1 className="page__title">搜索</h1>
+Line 469:       {/* 空态：居中的大搜索框 + 背景流动的歌手头像；有词之后输入框回到顶部常规位置。 */}
+Line 521:       {error ? <div className="page__error">搜索失败：{error}</div> : null}
+Line 527:             <span>正在搜索…</span>
+Line 789:  * 空态：居中的大搜索框 + 背景里流动的歌手头像。
+Line 859:           placeholder="搜索歌曲、歌手"
+
+kumone-windows\src\renderer\src\pages\Settings.tsx
+Line 40:   { id: 'kugou', name: '酷狗音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' },
+Line 41:   { id: 'kuwo', name: '酷我音乐', hint: '站内搜索 + 时长/歌名/歌手严格匹配' },
+
+kumone-windows\src\renderer\src\pages\Together.tsx
+Line 400:                   雷达搜索
+Line 405:                 <p className="together__empty">还没有搜到听友。设置条件后点「雷达搜索」。</p>
+
+[assistant]
+Key insight from App.tsx line 66: `{ name: 'search', label: '搜索', Icon: IconSearch }` — the route name is 'search'. The sidebar links are `.sidebar__link` with label 搜索. My clickNav found a link whose textContent includes '搜索' and clicked it. But the click didn't navigate?? The body still showed home content.
+
+Wait, looking more carefully at the dump: the home page was shown. The click on 搜索 didn't take effect. Why? Possibly because clickNav clicked the FIRST match — there might be another element with class sidebar__link containing 搜索... only one.
+
+Hmm, or maybe the click DID navigate but the search page renders `page__title 搜索` + empty state with a big search input... but the dump showed the home content AND no search input! The body includes "未在播放 选择一首歌开始 顺序播放" player bar, and home feed. And inputs only sliders.
+
+Hold on — maybe the navigation happened via a different route mechanism: maybe there are multiple `.sidebar__link` nodes and the first one with '搜索' is correct... Let me check: in my debug dump, body still had 首页 content, meaning route stayed 'home'.
+
+Possibility: The click happened BEFORE the app finished booting the router. waitReady checks window.youyou exists — but the React app may still be mounting. Then clickNav clicked a link that existed in DOM but React event handlers weren't attached yet → no-op. Then my later body dump shows home.
+
+That's plausible: waitReady returns true as soon as window.youyou exists, but the sidebar links render after. I should wait for `.sidebar__link` presence AND for route stability before clicking. In my debug script, after waitReady I clicked immediately (wait 2s after). Hmm, I did wait 2s after waitReady... then clicked. Actually sequence: waitReady → clickNav → wait 2000 → dump. waitReady polls every 1200ms until window.youyou exists. Then clickNav immediately.
+
+Actually wait — another possibility: `click()` on the element works only if React's onClick is a synthetic event at the root — element.click() dispatches a real click event that bubbles — React handles it fine normally. test-back-and-quality.mjs uses the same approach and worked.
+
+Difference: test-back-and-quality waited for `document.querySelector('.sidebar__link')` to exist (up to 36s) then waited 2500ms before clicking. My waitReady only checks window.youyou. The preload exposes youyou very early; the DOM renders later. So my click was likely too early — React might not have attached listeners when the click fired (or the click fired before the router was ready). Also possible: the click fired when link existed but app still on the loading screen.
+
+Fix: waitFor sidebar__link presence + a settle delay before clicking. Let me update the lib's waitReady to wait for `.sidebar__link` presence (that's the signal test-back uses). I'll add waitUI(port) that waits for sidebar links and 2.5s settle.
+
+Also for typeSearch: the search page in EMPTY state shows a big centered search input (`placeholder="搜索歌曲、歌手"`). After typing keyword, input moves to top. My typeSearch finds first visible input — on search page that's the right one. But note: on the search page, typing requires the input to be focused? The synthetic setter + input event works per test-back. The Enter keydown works per test-back (they used keydown Enter).
+
+But caution: with emoji or special text, `setter.call(input, text)` sets value; then `dispatchEvent(new Event('input'))` — React onChange fires with target.value. Good.
+
+One more thing from the debug: after 4s, the home page loaded fully — meaning instance works; network works. And importantly the top search bar: "顶部搜索条" exists in global.css — there IS a top-row search... line 811-813: "顶部一行：返回在左，搜索居中" — that's the DETAIL pages' top row with a search pill? App.tsx comment says the global search box was removed (line 80-81) — "全局搜索框不再放在这一行". OK so search page has its own input only.
+
+Let me update the lib: add waitUI (sidebar link present), and change waitReady callers... Simpler: make waitReady also require sidebar link. Let me edit the lib.
+
+[assistant]
+<acp tokens="26" type="text">m00111</acp>
+Found it — my clicks fired before React mounted the sidebar. Let me fix the readiness check in the lib.
+
+[assistant • edit]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-lib.mjs","new_string":"/** 等待 CDP 就绪：window.youyou 存在 + 侧栏已渲染 + 落定 2.5 秒（保证 React 事件挂上）。 */\nexport async function waitReady(port, timeoutMs = 90_000, retryIfFail = true) {\n  const deadline = Date.now() + timeoutMs\n  let linked = false\n  for (;;) {\n    try {\n      const reply = await cdp(port, `Boolean(window.youyou) && Boolean(document.querySelector('.sidebar__link'))`)\n      if (reply.ok && reply.value === true) {\n        linked = true\n        break\n      }\n    } catch (cause) {\n      if (!retryIfFail) throw cause\n    }\n    if (Date.now() > deadline) return false\n    await wait(1200)\n  }\n  await wait(2500)\n  return linked\n}","old_string":"/** 等待 CDP 就绪（window.youyou 存在）。 */\nexport async function waitReady(port, timeoutMs = 60_000, retryIfFail = true) {\n  const deadline = Date.now() + timeoutMs\n  for (;;) {\n    try {\n      const reply = await cdp(port, `Boolean(window.youyou)`)\n      if (reply.ok && reply.value === true) return true\n    } catch (cause) {\n      if (!retryIfFail) throw cause\n    }\n    if (Date.now() > deadline) return false\n    await wait(1200)\n  }\n}"}
+
+[tool • edit]
+The file E:\deepseek 工作区\kumone-windows\scripts\test-qa-bug-lib.mjs has been updated successfully.
+
+[assistant]
+Also fix typeSearch: after navigation to search page, the empty-state big input has placeholder 搜索歌曲、歌手. But my typeSearch picks the first VISIBLE input — on the search page it's the right one. But wait — when the search page is NOT the active page (e.g., I click 搜索 nav, page renders), there may still be inputs from other hidden pages? Hidden pages use `hidden` attribute or display:none → offsetParent null → skipped. Good.
+
+But there's a subtlety: typeSearch uses `keydown` Enter — check Search.tsx: does it listen keydown or keypress? Let me check line ~460-530 of Search.tsx to see the handler, and how the input is wired.
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\src\\renderer\\src\\pages\\Search.tsx","limit":80,"offset":455}
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\src\renderer\src\pages\Search.tsx</path>
+<type>file</type>
+<content>
+455:   const loaded = songs.length + artists.length + albums.length + playlists.length
+456:   /** 并进单曲列表的汽水曲目（主进程已按「同名同歌手不重复」过滤）。 */
+457:   const mergedExternal = !fallbackActive ? (result?.external ?? []) : []
+458: 
+459:   return (
+460:     <div className={`page search${hero ? ' search--hero' : ''}`}>
+461:       {hero ? null : (
+462:         <header className="page__header">
+463:           <div>
+464:             <h1 className="page__title">搜索</h1>
+465:           </div>
+466:         </header>
+467:       )}
+468: 
+469:       {/* 空态：居中的大搜索框 + 背景流动的歌手头像；有词之后输入框回到顶部常规位置。 */}
+470:       {hero ? (
+471:         <HeroSearch
+472:           value={input}
+473:           artists={wallArtists}
+474:           onChange={(value) => setInput(value)}
+475:           onSubmit={() => submit(input)}
+476:         />
+477:       ) : (
+478:         <div className="search-bar">
+479:           <span className="search-bar__icon">
+480:             <IconSearch size={16} />
+481:           </span>
+482:           <input
+483:             className="search-bar__input"
+484:             value={input}
+485:             autoFocus
+486:             onChange={(event) => {
+487:               const value = event.target.value
+488:               setInput(value)
+489:               // 手动删空 → 立刻回到空态。
+490:               if (!value.trim()) clear()
+491:             }}
+492:             onKeyDown={(event) => {
+493:               if (event.key === 'Enter') submit(input)
+494:             }}
+495:           />
+496:           {input ? (
+497:             <button type="button" className="search-bar__clear" onClick={clear} aria-label="清空">
+498:               <IconClose size={15} />
+499:             </button>
+500:           ) : null}
+501:         </div>
+502:       )}
+503: 
+504:       {keywords ? (
+505:         <div className="toolbar search__tabs">
+506:           <div className="chip-row">
+507:             {TABS.map((item) => (
+508:               <button
+509:                 key={item.value}
+510:                 type="button"
+511:                 className={`chip${tab === item.value ? ' is-active' : ''}`}
+512:                 onClick={() => setTab(item.value)}
+513:               >
+514:                 {item.label}
+515:               </button>
+516:             ))}
+517:           </div>
+518:         </div>
+519:       ) : null}
+520: 
+521:       {error ? <div className="page__error">搜索失败：{error}</div> : null}
+522: 
+523:       {loading ? (
+524:         <div className="search__loading">
+525:           <div className="loading-state">
+526:             <IconDisc size={16} className="spin" />
+527:             <span>正在搜索…</span>
+528:           </div>
+529:           <div className="skeleton search__skeleton" />
+530:           <div className="skeleton search__skeleton" />
+531:         </div>
+532:       ) : null}
+533: 
+534:       {/* 静默刷新：细条 + 内容压暗，切页签/兜底找歌时不出现空白帧。 */}
+
+(Showing lines 455-534 of 1033. Use offset=535 to continue.)
+</content>
+
+[assistant]
+The onKeyDown uses `event.key === 'Enter'` — my synthetic KeyboardEvent('keydown', { key: 'Enter', bubbles: true }) matches. And onChange reads event.target.value — my setter + input event works.
+
+Note: the search input in "hero" empty state — HeroSearch has its own input (line 859 placeholder="搜索歌曲、歌手"). In hero mode there's `autoFocus`... the hero input is separate. My typeSearch picks the first visible input, which in hero state = hero's input. That works — React onChange on hero input sets input state. And Enter → onSubmit → submit(input).
+
+But WAIT — the crucial detail: onKeyDown handler is on the `.search-bar__input` (non-hero). The HeroSearch input — let me check it has its own submit handler on Enter. Line 789-880ish. Let me read the HeroSearch section quickly.
+
+[assistant • read]
+{"file_path":"E:\\deepseek 工作区\\kumone-windows\\src\\renderer\\src\\pages\\Search.tsx","limit":115,"offset":789}
+
+[tool • read]
+<path>E:\deepseek 工作区\kumone-windows\src\renderer\src\pages\Search.tsx</path>
+<type>file</type>
+<content>
+789:   return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
+790: }
+791: 
+792: /**
+793:  * 空态：居中的大搜索框 + 背景里流动的歌手头像。
+794:  *
+795:  * 头像层是纯装饰：`aria-hidden` + `pointer-events: none`，不参与点击，也不写说明文字。
+796:  */
+797: /**
+798:  * 空态要铺满可见区域：让 .search-hero 的下沿贴住外层滚动容器可视区的下沿。
+799:  *
+800:  * 用 rect 差算（而不是直接读 clientHeight），这样容器自己还有标题之类的
+801:  * 兄弟节点时也算得对；容器或自己尺寸一变就重量一次（隐藏状态下量到 0 会跳过，
+802:  * 等显示出来再算），所以任意窗口尺寸下都不会留缝。
+803:  */
+804: function useFillHeight(ref: React.RefObject<HTMLElement>): void {
+805:   useLayoutEffect(() => {
+806:     const node = ref.current
+807:     if (!node) return
+808:     const host = node.closest<HTMLElement>('.content') ?? node.parentElement
+809:     const apply = (): void => {
+810:       const box = host ?? node.parentElement
+811:       if (!box) return
+812:       const rect = box.getBoundingClientRect()
+813:       if (rect.height <= 0) return
+814:       const style = window.getComputedStyle(box)
+815:       const innerTop = rect.top + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.borderTopWidth) || 0)
+816:       const innerBottom = rect.bottom - (parseFloat(style.paddingBottom) || 0) - (parseFloat(style.borderBottomWidth) || 0)
+817:       const own = node.getBoundingClientRect()
+818:       const height = Math.round(innerBottom - Math.max(innerTop, own.top))
+819:       // 差不到 1px 就不动它，免得和 ResizeObserver 互相触发。
+820:       if (height > 0 && Math.abs(height - own.height) > 1) node.style.minHeight = `${height}px`
+821:     }
+822:     apply()
+823:     const raf = window.requestAnimationFrame(apply)
+824:     window.addEventListener('resize', apply)
+825:     let observer: ResizeObserver | undefined
+826:     if (typeof ResizeObserver !== 'undefined') {
+827:       observer = new ResizeObserver(apply)
+828:       observer.observe(node)
+829:       if (host && host !== node) observer.observe(host)
+830:     }
+831:     return () => {
+832:       window.cancelAnimationFrame(raf)
+833:       window.removeEventListener('resize', apply)
+834:       observer?.disconnect()
+835:     }
+836:   }, [ref])
+837: }
+838: 
+839: function HeroSearch({
+840:   value,
+841:   artists,
+842:   onChange,
+843:   onSubmit
+844: }: {
+845:   value: string
+846:   artists: WallArtist[]
+847:   onChange: (value: string) => void
+848:   onSubmit: () => void
+849: }): JSX.Element {
+850:   const heroRef = useRef<HTMLDivElement>(null)
+851:   useFillHeight(heroRef)
+852:   return (
+853:     <div className="search-hero" ref={heroRef}>
+854:       <AvatarWall artists={artists} />
+855:       <div className="search-hero__box">
+856:         <span className="search-hero__icon">
+857:           <IconSearch size={22} />
+858:         </span>
+859:         <input
+860:           className="search-hero__input"
+861:           value={value}
+862:           autoFocus
+863:           placeholder="搜索歌曲、歌手"
+864:           onChange={(event) => onChange(event.target.value)}
+865:           onKeyDown={(event) => {
+866:             if (event.key === 'Enter') onSubmit()
+867:           }}
+868:         />
+869:       </div>
+870:     </div>
+871:   )
+872: }
+873: 
+874: /** 头像：第三方图挂了就退回线性图标，不留破图。 */
+875: function WallAvatar({ url }: { url?: string }): JSX.Element {
+876:   const [broken, setBroken] = useState(false)
+877:   const src = url?.replace(/^http:\/\//, 'https://')
+878:   if (!src || broken) {
+879:     return (
+880:       <span className="avatar-wall__fallback">
+881:         <IconUser size={22} />
+882:       </span>
+883:     )
+884:   }
+885:   return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
+886: }
+887: 
+888: /**
+889:  * 背景头像墙：多行横向慢速滚动，相邻行方向相反。
+890:  *
+891:  * 行数按可用高度算（rows = ceil(高度 / 每行步长) + 1 行缓冲），每行个数按可用宽度算，
+892:  * 所以任意窗口尺寸下都铺得满、不留缝；每行渲染两份同样的头像（无缝循环靠 translateX(-50%)）。
+893:  */
+894: function AvatarWall({ artists }: { artists: WallArtist[] }): JSX.Element {
+895:   const wallRef = useRef<HTMLDivElement>(null)
+896:   const [box, setBox] = useState({ width: 0, height: 0 })
+897: 
+898:   // 量自己的尺寸；页面藏在 slot 里（display: none）时量到 0，显示出来会再触发一次。
+899:   useLayoutEffect(() => {
+900:     const node = wallRef.current
+901:     if (!node) return
+902:     const measure = (): void => setBox({ width: node.clientWidth, height: node.clientHeight })
+903:     measure()
+
+(Showing lines 789-903 of 1033. Use offset=904 to continue.)
+</content>
+
+[assistant]
+HeroSearch input handles Enter via onSubmit. Good — my typeSearch works for both states.
+
+Now let me re-run the rapid test with the fixed waitReady. Also re-run the debug to confirm search works now. Let me delete the debug script after confirming? I'll keep it — no, instruction says probe scripts only test-qa-bug-*.mjs — debug script is named test-qa-bug-debug-search.mjs which matches the glob. Fine, I'll remove it later.
+
+Re-run rapid test now.
+
+[assistant • pwsh]
+{"command":"node \"E:\\deepseek 工作区\\kumone-windows\\scripts\\test-qa-bug-rapid.mjs\"","description":"Re-run rapid-switch test with fixed readiness","run_in_background":true,"workdir":"E:\\deepseek 工作区\\kumone-windows"}
+
+[tool • pwsh]
+started background job pwsh-606

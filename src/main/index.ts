@@ -5,7 +5,7 @@
  * settings), the client loads its cookie jar (so the first screen knows whether
  * to show the login page), then handler registration, then windows.
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, screen, shell, Tray } from 'electron'
 import * as path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import * as fs from 'node:fs'
@@ -184,7 +184,16 @@ function createLyricsWindow(): BrowserWindow {
   window.setAlwaysOnTop(true, 'screen-saver')
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   if (settings.desktopLyricsPosition) {
-    window.setPosition(settings.desktopLyricsPosition.x, settings.desktopLyricsPosition.y)
+    // 手改 settings.json 把坐标写成天文数字时，启动也要钳回显示器并集：
+    // 写路径（lyrics:desktopMove）已钳制，这里是读路径兜底，窗口不会一出生就在屏外。
+    const displays = screen.getAllDisplays()
+    const left = Math.min(...displays.map((d) => d.bounds.x))
+    const top = Math.min(...displays.map((d) => d.bounds.y))
+    const right = Math.max(...displays.map((d) => d.bounds.x + d.bounds.width))
+    const bottom = Math.max(...displays.map((d) => d.bounds.y + d.bounds.height))
+    const x = Math.max(left - 200, Math.min(settings.desktopLyricsPosition.x, right - 40))
+    const y = Math.max(top - 200, Math.min(settings.desktopLyricsPosition.y, bottom - 40))
+    window.setPosition(x, y)
   }
 
   window.on('moved', () => {
@@ -446,6 +455,9 @@ async function bootstrap(): Promise<void> {
       })
       media.updateWindow(track, contextRef.value.player.snapshot().playing, 0)
     },
+    onTrackFailed: (track, externalKey) => {
+      sendEvent(contextRef.value, 'player:trackFailed', { id: track.id, externalKey })
+    },
     onError: (message) => sendEvent(contextRef.value, 'app:error', { message }),
     log
   })
@@ -494,6 +506,15 @@ async function bootstrap(): Promise<void> {
         }
       })
       .catch((cause) => log(`获取账户信息失败: ${String(cause)}`))
+    // 失效 cookie 会造成「假登录」（登录态显示已登录，但所有接口都拒绝）：
+    // 静默查一次登录状态，只有服务端明确说 301 才自动登出。
+    void api.loginStatus().then((valid) => {
+      if (valid) return
+      void api.logout().then(() => {
+        log('启动校验：登录已失效，自动登出')
+        sendEvent(context, 'auth:changed', { loggedIn: false })
+      })
+    })
   }
 
   registerAuthHandlers(context)

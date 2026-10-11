@@ -22,6 +22,8 @@ const inflight = new Map<number, Promise<string | undefined>>()
 const DETAIL_ART_SIZE = 96
 
 function fetchArtistPic(artistID: number): Promise<string | undefined> {
+  // 站外曲目的 artists[0].id = -1（合成歌手）：没有真实歌手可查，直接判「无头像」。
+  if (artistID <= 0) return Promise.resolve(undefined)
   const ongoing = inflight.get(artistID)
   if (ongoing) return ongoing
   const task = call('artist:detail', { id: artistID })
@@ -42,7 +44,7 @@ function fetchArtistPic(artistID: number): Promise<string | undefined> {
  */
 export function usePrefetchArtistPic(artistID: number | undefined, inline: string | undefined): void {
   useEffect(() => {
-    if (!artistID || inline || cache.has(artistID)) return
+    if (!artistID || artistID <= 0 || inline || cache.has(artistID)) return
     void fetchArtistPic(artistID).then((pic) => {
       const url = coverUrl(pic, DETAIL_ART_SIZE)
       if (!url) return
@@ -58,11 +60,11 @@ export function usePrefetchArtistPic(artistID: number | undefined, inline: strin
  */
 export function useArtistPic(artistID: number | undefined, inline: string | undefined): string | undefined {
   const [resolved, setResolved] = useState<string | undefined>(() =>
-    artistID ? cache.get(artistID) : undefined
+    artistID !== undefined && artistID > 0 ? cache.get(artistID) : undefined
   )
 
   useEffect(() => {
-    if (!artistID || inline) {
+    if (!artistID || artistID <= 0 || inline) {
       setResolved(undefined)
       return
     }

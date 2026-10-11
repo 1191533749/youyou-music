@@ -180,13 +180,35 @@ export async function searchKugou(keywords: string, limit: number): Promise<Exte
 
 // --- 酷我音乐 --------------------------------------------------------------
 
-/** 酷我搜索返回的是「单引号 JSON + HTML 实体」，需要先规范化。 */
+/** 酷我搜索返回的是「单引号 JSON + HTML 实体」，需要先规范化。
+ *
+ * 不能把 `'` 无脑全换成 `"`：字符串值里的撇号（G.E.M. 邓紫棋、
+ * `Don't` 之类）是合法内容，只有「结构引号」才需要转——判断依据是
+ * 前后最近的非空白字符是不是 JSON 结构符（{ [ , : 或 } ] , :）。
+ */
 export function normalizeKuwoJSON(text: string): any {
-  const normalized = text
-    .replace(/'/g, '"')
+  let out = ''
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "'") {
+      out += text[i]
+      continue
+    }
+    let p = i - 1
+    while (p >= 0 && /\s/.test(text[p])) p--
+    let n = i + 1
+    while (n < text.length && /\s/.test(text[n])) n++
+    const prev = p >= 0 ? text[p] : ''
+    const next = n < text.length ? text[n] : ''
+    if ('[{,:'.includes(prev) || '}],:'.includes(next)) out += '"'
+    else out += "'"
+  }
+  const normalized = out
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '\\"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
   return JSON.parse(normalized)
 }
 
@@ -280,9 +302,10 @@ export interface ResolvedExternalAudio {
 }
 
 /**
- * 解析站外曲目的可播放地址：依次走 汽水 → 酷狗 → 酷我 → QQ
+ * 解析站外曲目的可播放地址：依次走 汽水 → 酷我 → 酷狗 → QQ
  * （四个实现都会做「时长 ±5 秒 + 歌名归一化 + 版本标记 + 歌手」严格匹配，
- * 宁可不播也不放错歌）。
+ * 宁可不播也不放错歌）。酷狗排在酷我后面：实测其匿名移动接口对流行歌
+ * 几乎一律回「需要付费」，命中率太低，而酷我现在会在换链前探测试听占位。
  *
  * 歌单来的曲目带着平台自己的 `songMid`：那首 QQ 音乐的歌先直接在 QQ 取地址——
  * 这是唯一「平台自己认定」的匹配，比任何同名搜索都准；拿不到（VIP/付费）再退到
@@ -309,8 +332,8 @@ export async function resolveExternalAudio(
       : []),
     ...(songMid ? [{ id: 'qq' as AudioSourceID, run: () => resolveQqByMid(songMid, qq) }] : []),
     { id: 'qishui' as AudioSourceID, run: () => resolveQishui(synthetic) },
-    { id: 'kugou' as AudioSourceID, run: () => resolveKugou(synthetic) },
     { id: 'kuwo' as AudioSourceID, run: () => resolveKuwo(synthetic) },
+    { id: 'kugou' as AudioSourceID, run: () => resolveKugou(synthetic) },
     { id: 'qq' as AudioSourceID, run: () => resolveQq(synthetic, undefined, qq) }
   ]
   for (const attempt of attempts) {

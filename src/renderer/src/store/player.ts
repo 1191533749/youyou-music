@@ -9,6 +9,69 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { call, onEvent } from '../lib/ipc'
 import type { PlayerStateDTO, RepeatMode, TrackDTO } from '@shared/types'
 
+/**
+ * 主进程广播「这一首所有音源都彻底失败、已从队列剔除」的 id 集合。
+ * 列表组件（SongList / 外部曲目行）据此把该行从页面上拿掉——
+ * 对应「放不出来的歌为什么还展示着」这条反馈。
+ */
+let failedIds = new Set<number>()
+/** 站外曲目在渲染层以 `source:sourceId` 为键，单独一套集合。 */
+let failedExternalKeys = new Set<string>()
+const failedListeners = new Set<() => void>()
+
+/** 订阅失败剔除集合：任何组件里用到的行都会随集合变化自动隐藏。 */
+export function useFailedTrackIds(): Set<number> {
+  const [ids, setIds] = useState<Set<number>>(() => failedIds)
+  useEffect(() => {
+    const sync = () => setIds(failedIds)
+    failedListeners.add(sync)
+    const unsubscribe = onEvent(
+      'player:trackFailed',
+      ({ id, externalKey }: { id: number; externalKey?: string }) => {
+        let changed = false
+        if (!failedIds.has(id)) {
+          failedIds = new Set(failedIds).add(id)
+          changed = true
+        }
+        if (externalKey && !failedExternalKeys.has(externalKey)) {
+          failedExternalKeys = new Set(failedExternalKeys).add(externalKey)
+          changed = true
+        }
+        if (changed) failedListeners.forEach((listener) => listener())
+      }
+    )
+    return () => {
+      failedListeners.delete(sync)
+      unsubscribe()
+    }
+  }, [])
+  return ids
+}
+
+/** 订阅站外曲目失败键集合（`source:sourceId`）。 */
+export function useFailedExternalKeys(): Set<string> {
+  const [keys, setKeys] = useState<Set<string>>(() => failedExternalKeys)
+  useEffect(() => {
+    const sync = () => setKeys(failedExternalKeys)
+    failedListeners.add(sync)
+    const unsubscribe = onEvent(
+      'player:trackFailed',
+      (payload: { id: number; externalKey?: string }) => {
+        const externalKey = payload.externalKey
+        if (externalKey && !failedExternalKeys.has(externalKey)) {
+          failedExternalKeys = new Set(failedExternalKeys).add(externalKey)
+          failedListeners.forEach((listener) => listener())
+        }
+      }
+    )
+    return () => {
+      failedListeners.delete(sync)
+      unsubscribe()
+    }
+  }, [])
+  return keys
+}
+
 const EMPTY_STATE: PlayerStateDTO = {
   queue: [],
   index: -1,

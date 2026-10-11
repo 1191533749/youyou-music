@@ -56,6 +56,8 @@ export interface AlbumDetailDTO {
 export interface ArtistDetailDTO {
   artist: ArtistSummaryDTO
   hotSongs: TrackDTO[]
+  /** 汽水音乐里该歌手的可播版本（完整档位已逐条验证），界面与热门歌并排展示。 */
+  external?: ExternalTrackDTO[]
 }
 
 export interface ToplistDTO {
@@ -337,6 +339,8 @@ export type IPCResponse<C extends IPCChannel> = IPCContract[C]['response']
 export interface IPCEvents {
   'player:state': PlayerStateDTO
   'player:track': { track?: TrackDTO }
+  /** 一首歌所有音源都彻底失败、已从队列剔除：列表页据此把该行隐藏。 */
+  'player:trackFailed': { id: number; externalKey?: string }
   'auth:changed': { loggedIn: boolean; profile?: UserProfileDTO }
   'lyrics:line': { trackID: number; lines: LyricsDTO }
   'app:error': { message: string }
@@ -454,6 +458,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
 export const IPC_EVENT_NAMES: IPCEventName[] = [
   'player:state',
   'player:track',
+  'player:trackFailed',
   'auth:changed',
   'lyrics:line',
   'app:error',

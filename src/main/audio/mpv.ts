@@ -138,6 +138,9 @@ export class MpvController extends EventEmitter {
       this.socket?.destroy()
       this.socket = undefined
       this.state.running = false
+      // 挂在半路的命令全部失败掉，别让调用方 await 一个永远不会回的 promise。
+      for (const pending of this.pending.values()) pending.reject(new Error('mpv 已退出'))
+      this.pending.clear()
       this.emitState()
       this.emit('exit')
     })
@@ -262,6 +265,11 @@ export class MpvController extends EventEmitter {
       case 'end-file':
         this.state.loading = false
         if (event.reason === 'eof' || event.reason === 'error') {
+          // 曲目结束/加载失败后 mpv 会立刻进入 idle，但 'idle' 事件是异步的。
+          // 先把 idle 置好再推状态：否则 controller 会在 track-end 之后收到一份
+          // 「idle 仍为 false」的陈旧状态，把 playing 扶回 true（EOF 幽灵播放态）。
+          this.state.idle = true
+          this.state.position = 0
           this.emitTrackEnd()
         }
         this.emitState()
@@ -375,6 +383,11 @@ export class MpvController extends EventEmitter {
 
   /** Loads a URL or local file and starts playback from `start` seconds. */
   async play(url: string, start = 0): Promise<void> {
+    // mpv 进程可能已经退出（崩溃/被任务管理器结束）：播放前先确保它活着，
+    // 这样下一次播放能自愈，不需要重启整个应用。
+    if (!this.process || this.process.exitCode !== null || !this.socket || this.socket.destroyed) {
+      await this.start()
+    }
     this.state.loading = true
     this.emitState()
     await this.command(['loadfile', url, 'replace'])

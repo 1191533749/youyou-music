@@ -282,8 +282,9 @@ function Backdrop(): JSX.Element {
  * 侧栏一级页面：切来切去**不重新挂载**，回到页面时内容与滚动位置都还在，
  * 不会出现「点一下先转圈、像重新加载了一遍」的感觉。
  *
- * 详情页（歌单/专辑/歌手/搜索/播放页）仍然按路由挂载，因为它们带参数、
- * 且数量不可控（常驻会越堆越多）。
+ * 详情页（歌单/专辑/歌手/播放页）仍然按路由挂载，因为它们带参数、
+ * 且数量不可控（常驻会越堆越多）。搜索页也常驻：从结果点进详情再返回时
+ * 保留搜索词与已加载结果（它没有参数依赖，常驻安全）。
  */
 const KEEP_ALIVE_PAGES = [
   'home',
@@ -293,7 +294,8 @@ const KEEP_ALIVE_PAGES = [
   'fm',
   'together',
   'cloud',
-  'settings'
+  'settings',
+  'search'
 ] as const
 
 type KeepAliveName = (typeof KEEP_ALIVE_PAGES)[number]
@@ -320,6 +322,9 @@ function renderKeepAlivePage(name: KeepAliveName, authLoggedIn: boolean): JSX.El
       return authLoggedIn ? <Cloud /> : <Login />
     case 'settings':
       return <Settings />
+    case 'search':
+      // 常驻：搜索词与结果留在组件 state 里，进详情返回不丢。
+      return <Search />
   }
 }
 

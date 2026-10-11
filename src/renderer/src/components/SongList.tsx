@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TrackDTO } from '@shared/types'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
+import { useFailedTrackIds } from '../store/player'
 import { IconHeart, IconHeartFilled, IconMore, IconMusic, IconPause, IconPlay } from './Icons'
 
 export interface SongListProps {
@@ -46,6 +47,16 @@ export default function SongList({
 }: SongListProps): JSX.Element {
   const [menuFor, setMenuFor] = useState<number | undefined>()
   const sentinel = useRef<HTMLDivElement | null>(null)
+  const failedIds = useFailedTrackIds()
+  // 放不出来的歌（主进程已确认彻底失败）不再展示：带上原始下标过滤，
+  // 既保持 onPlay 收到的下标与页面 tracks 数组一致，序号列也保持连续。
+  const visible = useMemo(
+    () =>
+      tracks
+        .map((track, index) => ({ track, index }))
+        .filter(({ track }) => !failedIds.has(track.id)),
+    [tracks, failedIds]
+  )
   // Notifying on scroll is unreliable here: the list itself does not scroll,
   // its ancestor (.content) does, so a scroll listener on the list never fires.
   // An observer on a sentinel row works regardless of which ancestor scrolls.
@@ -78,13 +89,13 @@ export default function SongList({
     return parts.join(' ')
   }, [showAlbum, showIndex])
 
-  if (tracks.length === 0) {
+  if (visible.length === 0) {
     return <div className="placeholder">{emptyMessage}</div>
   }
 
   return (
     <div className="song-list">
-      {tracks.map((track, index) => {
+      {visible.map(({ track, index }) => {
         const disabled = track.playability !== 'playable'
         const liked = likedTrackIDs?.has(track.id) ?? false
         return (

@@ -234,11 +234,16 @@ export class NeteaseAPI {
     payload: Record<string, unknown> = {},
     options: {
       cookieOverrides?: Record<string, string>
+      /** 剥掉登录态按匿名请求（登录态被风控时的兜底）。 */
+      anonymous?: boolean
       decode?: (json: any) => T
       decoded?: DecodedOptions
     } = {}
   ): Promise<T> {
-    const json = await this.client.eapi(path, payload, { cookieOverrides: options.cookieOverrides })
+    const json = await this.client.eapi(path, payload, {
+      cookieOverrides: options.cookieOverrides,
+      anonymous: options.anonymous
+    })
     const checked = options.decoded?.allowNon200 ? json : NeteaseClient.unwrap(json, path)
     return options.decode ? options.decode(checked) : (checked as T)
   }
@@ -399,6 +404,28 @@ export class NeteaseAPI {
 
   async userAccount(): Promise<UserProfile | undefined> {
     return this.weapi('/w/nuser/account/get', {}, { decode: (j) => toUserProfile(j.profile) })
+  }
+
+  /**
+   * 检查 cookie 是否仍然有效（启动时静默校验，防「假登录」）。
+   *
+   * /login/status 在有效登录下 `data.code=200`；cookie 失效时 `data.code=301`。
+   * 只把「服务端明确说 301」当成失效：网络失败、限流（-460/405 会以业务错
+   * 形式返回）、空响应一律按「无法判断」返回 true——绝不把网络问题误判成
+   * 登录失效，把好好的用户登出去。
+   */
+  async loginStatus(): Promise<boolean> {
+    try {
+      const result = await this.client.eapi('/login/status', {})
+      if (result && typeof result === 'object') {
+        if (result.code === 301) return false
+        const data = result.data
+        if (data && typeof data === 'object' && data.code === 301) return false
+      }
+    } catch {
+      // 业务错/网络错都不算失效证据。
+    }
+    return true
   }
 
   // MARK: - User library
@@ -929,9 +956,11 @@ export class NeteaseAPI {
     }
     /*
      * 风控回落：搜索是高频 eapi，偶发被风控返回「检测到您的网络环境存在风险」
-     * （business 错误）。先延时重试同一请求，再换 weapi 通道（/cloudsearch/get/web
-     * 与 /cloudsearch/pc 同响应结构、共用同一 decode）各试一次；网络类错误由
-     * client 传输层自行重试，这里只兜 business 错误。
+     * （business 错误）。先延时重试同一请求；还不行且当前是登录态，就剥掉
+     * MUSIC_U 按匿名身份再试一次（匿名 eapi 实测稳定得多，-460/405 都少见）；
+     * 最后换 weapi 通道（/cloudsearch/get/web 与 /cloudsearch/pc 同响应结构、
+     * 共用同一 decode）各试一次；网络类错误由 client 传输层自行重试，这里只兜
+     * business 错误。
      */
     try {
       return await this.eapi('/cloudsearch/pc', payload, { decode })
@@ -943,6 +972,16 @@ export class NeteaseAPI {
         return await this.eapi('/cloudsearch/pc', payload, { decode })
       } catch (second) {
         if (!(second instanceof NeteaseAPIError) || second.kind !== 'business') throw second
+        if (this.client.isLoggedIn) {
+          console.warn(`[netease] /cloudsearch/pc 重试仍业务错误 ${second.code}，剥登录态按匿名重试`)
+          try {
+            return await this.eapi('/cloudsearch/pc', payload, { decode, anonymous: true })
+          } catch (third) {
+            if (!(third instanceof NeteaseAPIError) || third.kind !== 'business') throw third
+            console.warn(`[netease] /cloudsearch/pc 匿名仍业务错误 ${third.code}，改用 weapi /cloudsearch/get/web`)
+            return this.weapi('/cloudsearch/get/web', payload, { decode })
+          }
+        }
         console.warn(`[netease] /cloudsearch/pc 重试仍业务错误 ${second.code}，改用 weapi /cloudsearch/get/web`)
         return this.weapi('/cloudsearch/get/web', payload, { decode })
       }

@@ -69,14 +69,20 @@ interface CacheStub {
   ) => Promise<string | undefined>
 }
 
-function build(options: { cache: CacheStub; unblockSource?: boolean; quality?: () => string }) {
+function build(options: {
+  cache: CacheStub
+  unblockSource?: boolean
+  quality?: () => string
+  unblockResolve?: (track: Track, attempted: Set<string>) => Promise<unknown>
+}) {
   const mpv = new FakeMpv()
   const api = new Proxy({}, { get: () => () => Promise.reject(new Error('stub: no netease')) }) as never
   const enabled = options.unblockSource === true
   const unblock = {
     enabled,
-    resolve: async (_track: Track, attempted: Set<string>) => {
+    resolve: async (track: Track, attempted: Set<string>) => {
       if (!enabled) throw new Error('stub: no third-party source')
+      if (options.unblockResolve) return options.unblockResolve(track, attempted)
       return {
         source: { id: 'kuwo', url: 'https://stub/real.mp3', displayName: '酷我音乐', bitrate: 320 },
         attempted
@@ -208,6 +214,152 @@ describe('后台整首缓存不抢播放带宽', () => {
     await vi.advanceTimersByTimeAsync(1)
     console.log(`结果：暂停后下载次数=${cacheCalls}`)
     expect(cacheCalls).toBe(1)
+    await player.shutdown()
+  })
+})
+
+describe('mpv 异常退出与幽灵播放态', () => {
+  it('mpv 进程退出时不再假装播放中，并给出可恢复的错误', async () => {
+    const { player, mpv } = build({
+      unblockSource: true,
+      cache: {
+        audioPath: async () => undefined,
+        cacheAudio: async () => undefined
+      }
+    })
+    await player.setQueue([TRACK], 0)
+    expect(player.snapshot().playing).toBe(true)
+
+    mpv.emit('exit')
+    const snapshot = player.snapshot()
+    console.log(
+      `结果：playing=${snapshot.playing} position=${snapshot.position} loading=${snapshot.loading} ` +
+        `error=${snapshot.error ?? '-'}`
+    )
+    expect(snapshot.playing).toBe(false)
+    expect(snapshot.position).toBe(0)
+    expect(snapshot.loading).toBe(false)
+    expect(snapshot.error).toBe('播放器已停止，请重新播放')
+    await player.shutdown()
+  })
+
+  it('清空队列后 mpv 迟到的属性推送不能把 playing 扶回 true', async () => {
+    const { player, mpv } = build({
+      unblockSource: true,
+      cache: {
+        audioPath: async () => undefined,
+        cacheAudio: async () => undefined
+      }
+    })
+    await player.setQueue([TRACK], 0)
+    expect(player.snapshot().playing).toBe(true)
+
+    // 登出/清空队列：控制器自己置 playing=false。
+    await player.clearQueue()
+    expect(player.snapshot().playing).toBe(false)
+
+    // 之后 mpv 把清空前的旧状态补推过来（idle=false、paused=false）——
+    // 这正是幽灵播放态的成因，必须被忽略。
+    mpv.emit('state', {
+      position: 2.8,
+      duration: 200,
+      idle: false,
+      paused: false,
+      loading: false,
+      muted: false,
+      volume: 80,
+      running: true
+    })
+    const snapshot = player.snapshot()
+    console.log(`结果：playing=${snapshot.playing} position=${snapshot.position} track=${snapshot.track ? '有' : '无'}`)
+    expect(snapshot.playing).toBe(false)
+    expect(snapshot.position).toBe(0)
+    expect(snapshot.track).toBeUndefined()
+    await player.shutdown()
+  })
+
+  it('clearQueue 作废还在飞的 playIndex 解析：不会把空队列复活成播放中', async () => {
+    const { player, mpv } = build({
+      unblockSource: true,
+      unblockResolve: async () => {
+        // 模拟一次慢解析：clearQueue 时它还在半路。
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        return {
+          source: { id: 'kuwo', url: 'https://stub/slow.mp3', displayName: '酷我音乐', bitrate: 320 },
+          attempted: new Set<string>()
+        }
+      },
+      cache: {
+        audioPath: async () => undefined,
+        cacheAudio: async () => undefined
+      }
+    })
+    // 不等它播起来，趁解析在半路就清空队列。
+    const playing = player.setQueue([TRACK], 0)
+    await player.clearQueue()
+    await playing
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const snapshot = player.snapshot()
+    console.log(
+      `结果：playing=${snapshot.playing} track=${snapshot.track ? '有' : '无'} opened=${mpv.opened.length} ` +
+        `queue=${snapshot.queue.length}`
+    )
+    expect(snapshot.playing).toBe(false)
+    expect(snapshot.queue).toHaveLength(0)
+    expect(snapshot.track).toBeUndefined()
+    // 关键证据：被作废的解析绝不能再去 loadfile（否则空队列却有声音）。
+    expect(mpv.opened).toHaveLength(0)
+    await player.shutdown()
+  })
+
+  it('队列自然播完后：EOF 迟到的状态不扶回播放中，再按播放能从头重播', async () => {
+    const { player, mpv } = build({
+      unblockSource: true,
+      cache: {
+        audioPath: async () => undefined,
+        cacheAudio: async () => undefined
+      }
+    })
+    await player.setQueue([TRACK], 0)
+    expect(player.snapshot().playing).toBe(true)
+
+    // 单曲队列、repeat=off：EOF 后没有下一首 → playing=false。
+    mpv.emit('track-end')
+    expect(player.snapshot().playing).toBe(false)
+
+    // EOF 前后的陈旧推送（idle 仍为 false）——必须继续忽略，不能扶回 true。
+    mpv.emit('state', {
+      position: 0,
+      duration: 200,
+      idle: false,
+      paused: false,
+      loading: false,
+      muted: false,
+      volume: 80,
+      running: true
+    })
+    mpv.emit('state', {
+      position: 0,
+      duration: 200,
+      idle: true,
+      paused: false,
+      loading: false,
+      muted: false,
+      volume: 80,
+      running: true
+    })
+    const frozen = player.snapshot()
+    console.log(`结果：EOF 后 playing=${frozen.playing} position=${frozen.position}`)
+    expect(frozen.playing).toBe(false)
+    expect(frozen.position).toBe(0)
+
+    // 此时按播放必须重新载入文件（mpv 里什么都没有），而不是无声地假装在播。
+    await player.play()
+    const resumed = player.snapshot()
+    console.log(`结果：play 后 playing=${resumed.playing} opened=${mpv.opened.length}`)
+    expect(mpv.opened).toHaveLength(2)
+    expect(resumed.playing).toBe(true)
     await player.shutdown()
   })
 })

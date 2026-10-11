@@ -136,6 +136,8 @@ export interface PlayerDeps {
   onScrobbleStart?: (track: Track, sourceID: number) => void
   onScrobbleFinish?: (track: Track, sourceID: number, seconds: number) => void
   onTrackChanged?: (track: Track | undefined) => void
+  /** 一首歌所有音源都彻底失败、被自动跳过时回调：渲染层据此把该行从列表里拿掉。 */
+  onTrackFailed?: (track: Track, externalKey?: string) => void
   onError?: (message: string) => void
   log?: (message: string) => void
   /**
@@ -188,7 +190,7 @@ interface QueueEntry {
    * 站外曲目（汽水/酷狗/酷我搜索来的歌）：音频地址已在主进程解析好，
    * 播放时跳过网易云的解析链路。
    */
-  preResolved?: { url: string; sourceName: string }
+  preResolved?: { url: string; sourceName: string; sourceId?: string }
   /**
    * 站外曲目本体：平台歌单整条入队时，每首歌都要在播放时（或坏链换源时）
    * 走一次「本平台直取 + 其余音源严格匹配」，所以队列里留着它。
@@ -231,6 +233,11 @@ export class PlayerController extends EventEmitter {
   private resolveGeneration = 0
   /** 每首歌已尝试失败过的第三方音源，避免重复撞死源。 */
   private unblockAttempts = new Map<number, Set<AudioSourceID>>()
+  /**
+   * 本会话内整首解析彻底失败过的曲目：再次碰到直接快失败（不再为它重走
+   * 几十秒的解析链），配合队列剔除保证「放不出来的歌」不会反复拦路。
+   */
+  private deadTracks = new Set<number>()
   /** 搜索时后台预解析好的第三方直链缓存：命中即跳过联网解析（尤其第三方那几秒）。 */
   private prefetchedSources = new Map<number, { resolved: ResolvedPlayback; at: number }>()
   /** 正在后台预解析中的曲目：播放命中时直接 await 它，复用同一次解析，不再开第二条链路。 */
@@ -254,6 +261,12 @@ export class PlayerController extends EventEmitter {
   private loadedTrackId?: number
   /** 随机模式下预先 roll 好的下一首下标，供 lookahead 预解析、pickNext 消费。 */
   private shuffleNext?: number
+  /**
+   * 队列已自然播完（onTrackEnd 时没有下一首）。此时 mpv 处于 idle、没有载入
+   * 任何文件：play() 必须重新 playIndex 而不是 setPaused(false)（那样会变成
+   * 「显示播放中但没有声音」的幽灵态）。
+   */
+  private ended = false
 
   constructor(private readonly deps: PlayerDeps) {
     super()
@@ -262,6 +275,18 @@ export class PlayerController extends EventEmitter {
       void this.onTrackEnd()
     })
     this.deps.mpv.on('state', (state: MpvState) => this.onMpvState(state))
+    // mpv 进程意外退出（崩溃/被强杀）时，不能假装还在播。正常关闭应用走
+    // shutdown 里的 mpv.stop()，那时队列已经清空，这个分支不会生效。
+    this.deps.mpv.on('exit', () => {
+      if (this.queue.length === 0) return
+      this.playing = false
+      this.position = 0
+      this.duration = 0
+      this.loading = false
+      this.error = '播放器已停止，请重新播放'
+      this.stopPositionTimer()
+      this.emitSnapshot()
+    })
   }
 
   // MARK: - Snapshot
@@ -299,10 +324,21 @@ export class PlayerController extends EventEmitter {
     if (!this.suppressMuteEcho) this.muteState = state.muted
     this.volume = state.volume
     this.loading = state.loading
+    // 队列已经空了（登出/清空队列）之后，mpv 迟到的属性推送（idle=false、
+    // paused=false）不能把状态扶回「播放中」，否则会出现 track=null 但
+    // playing=true 的幽灵播放态，一直冻住。
+    if (this.queue.length === 0 || this.index < 0 || this.index >= this.queue.length) {
+      this.playing = false
+      this.loading = false
+      this.position = 0
+      return
+    }
     // mpv 真出声音的那一刻就当作「播放中」：播放/暂停按钮必须立刻跟着走，
     // 不能等整条解析+验证链跑完——验证（尤其第三方音源）最长几十秒，
     // 期间按钮会一直像「按了没反应」，用户就是这么抱怨的。
-    if (!state.idle && !state.loading && !state.paused) {
+    // `!this.ended`：队列自然播完后，EOF 前后迟到的属性推送（idle 仍为 false）
+    // 不能再把状态扶回「播放中」——那正是 EOF 幽灵播放态的成因。
+    if (!this.ended && !state.idle && !state.loading && !state.paused) {
       this.playing = true
     } else if (state.paused) {
       this.playing = false
@@ -340,7 +376,10 @@ export class PlayerController extends EventEmitter {
    * 播放一首站外曲目（汽水/酷狗/酷我 搜索来的歌）。
    * 音频地址由调用方解析好，这里只把它作为队列里的唯一一首歌播放。
    */
-  async playExternal(track: Track, resolved: { url: string; sourceName: string }): Promise<void> {
+  async playExternal(
+    track: Track,
+    resolved: { url: string; sourceName: string; sourceId?: string }
+  ): Promise<void> {
     this.queue = [{ track, playability: 'playable', preResolved: resolved }]
     this.index = 0
     this.consecutiveFailures = 0
@@ -412,10 +451,17 @@ export class PlayerController extends EventEmitter {
     this.index = -1
     this.loadedTrackId = undefined
     this.shuffleNext = undefined
+    // 作废所有还在飞的解析/预取：否则 playIndex 解析完成后会照常
+    // `playing = true` + loadfile，把已经清空的队列「复活」成幽灵播放态。
+    this.resolveGeneration += 1
+    this.prefetchedSources.clear()
+    this.prefetchInflight.clear()
+    this.loading = false
     await this.deps.mpv.unload().catch(() => undefined)
     this.playing = false
     this.position = 0
     this.duration = 0
+    this.stopPositionTimer()
     this.emitSnapshot()
   }
 
@@ -434,6 +480,7 @@ export class PlayerController extends EventEmitter {
   ): Promise<void> {
     if (index < 0 || index >= this.queue.length) return
     const generation = ++this.resolveGeneration
+    this.ended = false
     this.switching = true
     this.index = index
     this.error = undefined
@@ -441,6 +488,9 @@ export class PlayerController extends EventEmitter {
     this.servedBitrate = undefined
     this.servedFrom = undefined
     this.loading = true
+    // 解析还没出结果时如实呈报「未在播放」：外部源坏链要等 ~20 秒超时，
+    // 之前这里沿用上一首的 playing=true，UI 会假显示「在播但进度为 0」。
+    this.playing = false
     this.scrobbleSent = false
     this.position = 0
     this.duration = this.queue[index].track.durationMS / 1000
@@ -474,7 +524,9 @@ export class PlayerController extends EventEmitter {
                   level: 'standard',
                   claimedLevel: undefined,
                   cached: false,
-                  cacheVariant: 'netease',
+                  // 归属真实来源：坏链时 markSourceFailed 才能把源记进 attempted，
+                  // 否则 4 个候选会全打同一条坏 URL。
+                  cacheVariant: entry.preResolved.sourceId ?? 'netease',
                   servedFrom: entry.preResolved.sourceName
                 }
               : await withTimeout(
@@ -589,17 +641,32 @@ export class PlayerController extends EventEmitter {
       // 歌还是那一首。抛回去由 reloadCurrentTrack 退回原来那一档。
       if (options.qualityReload) throw cause
       // 拿不到可播版本时**自动跳下一首**，不要把「版权/受限」这类原因摆到用户面前。
-      // 只有整条队列都放过一遍还是不行，才给一句中性提示。
-      if (this.queue.length > 1 && this.consecutiveFailures < this.queue.length - 1) {
-        this.consecutiveFailures += 1
+      // 失败这首无论有没有下一首都先从队列剔除：本批不会再碰到，渲染层收到
+      // player:trackFailed 把行隐藏（搜出来放不了？那就别再展示它）。
+      const MAX_AUTO_SKIP = 5
+      this.consecutiveFailures += 1
+      this.deadTracks.add(entry.track.id)
+      const failed = entry.track
+      // 站外曲目在渲染层以 `source:sourceId` 为键展示，一并带出去好定位行。
+      const externalKey = entry.external ? `${entry.external.source}:${entry.external.sourceId}` : undefined
+      this.queue.splice(this.index, 1)
+      this.deps.onTrackFailed?.(failed, externalKey)
+      if (this.index < this.queue.length && this.consecutiveFailures < MAX_AUTO_SKIP) {
+        // 队列少了一位，index 原地正好就是「下一首」。
         this.error = undefined
-        void this.next(false)
-        return
+        void this.playIndex(this.index)
+      } else if (this.repeatMode === 'all' && this.queue.length > 0 && this.consecutiveFailures < MAX_AUTO_SKIP) {
+        this.error = undefined
+        void this.playIndex(0)
+      } else {
+        // 连续失败给一个绝对上限：全是坏歌的极端列表最多跳 5 首就停，
+        // 不会无限滑下去，也不会把用户晾在空错误上。
+        this.consecutiveFailures = 0
+        this.error = '暂时无法播放，请稍后再试'
+        this.playing = false
+        this.deps.onError?.(this.error)
       }
-      this.consecutiveFailures = 0
-      this.error = '暂时无法播放，请稍后再试'
-      this.playing = false
-      this.deps.onError?.(this.error)
+      return
     } finally {
       if (generation === this.resolveGeneration) {
         this.loading = false
@@ -651,11 +718,19 @@ export class PlayerController extends EventEmitter {
     const variant = resolved.cacheVariant
     if (variant && variant !== 'netease') {
       this.attemptedSources(entry.track.id).add(variant as AudioSourceID)
+    } else if (entry.external) {
+      // preResolved 没带 sourceId（旧队列路径）时，按曲目所属平台记入：
+      // 至少保证下一个候选不会重复解析回同一个平台的同一条坏地址。
+      this.attemptedSources(entry.track.id).add(entry.external.source)
     }
     if (entry.preResolvedFull === resolved) {
       entry.preResolvedFull = undefined
       entry.preProbe = undefined
     }
+    // 预取缓存里存的可能是同一条坏地址：不删掉的话，候选循环 2-4 会一直
+    // 复用同一个坏 URL 重试四遍（表现为日志里反复「同源打转」）。
+    this.prefetchedSources.delete(entry.track.id)
+    this.prefetchInflight.delete(entry.track.id)
   }
 
   /**
@@ -779,12 +854,26 @@ export class PlayerController extends EventEmitter {
    * 解析（不再开第二条链路）；都没有才走真正的解析链。
    */
   private async resolveSource(track: Track, entry?: QueueEntry): Promise<ResolvedPlayback> {
+    // 本会话内已确认彻底失败的歌：直接快失败，不再为它重走几十秒的解析链。
+    if (this.deadTracks.has(track.id)) {
+      throw new NeteaseAPIError('business', { code: -1, message: '暂时无法播放这首歌' })
+    }
+    // 测试钩子：强制整条解析链失败，验证「失败即剔除、快速换下一首、列表不再展示」。
+    if (process.env.YOYOU_FAIL_RESOLVE === '1') {
+      throw new NeteaseAPIError('business', { code: -1, message: '测试钩子：强制解析失败' })
+    }
     // 站外曲目（平台歌单里的歌）没有网易云 ID，整条链路都不一样，单独走。
     if (entry?.external) return this.resolveExternalEntry(entry)
     const key = track.id
     const prefetched = this.prefetchedSources.get(key)
     if (prefetched) {
-      if (Date.now() - prefetched.at < PREFETCH_TTL_MS) {
+      // 预热缓存里可能正是刚判定坏链的源（后台预解析不经过候选循环的
+      // attempted 检查）：命中前先对照「别再撞」集合，坏源直接作废换下一条链。
+      const attempted = this.attemptedSources(key)
+      const variant = prefetched.resolved.cacheVariant
+      const tainted =
+        typeof variant === 'string' && variant !== 'netease' && attempted.has(variant as AudioSourceID)
+      if (Date.now() - prefetched.at < PREFETCH_TTL_MS && !tainted) {
         this.deps.log?.(`复用预热音源：${track.name} 来自 ${prefetched.resolved.servedFrom ?? '?'}`)
         return prefetched.resolved
       }
@@ -1089,6 +1178,12 @@ export class PlayerController extends EventEmitter {
 
   async play(): Promise<void> {
     if (this.index < 0) return
+    // 队列自然播完后再按播放：mpv 此时没有载入任何文件，直接 setPaused(false)
+    // 只会得到「显示播放中但无声」的幽灵态——重新播当前这首。
+    if (this.ended) {
+      await this.playIndex(this.index)
+      return
+    }
     await this.deps.mpv.setPaused(false)
     this.playing = true
     this.startPositionTimer()
@@ -1247,6 +1342,7 @@ export class PlayerController extends EventEmitter {
       this.duration = entry.track.durationMS / 1000
       this.loading = false
       this.error = undefined
+      this.ended = false
       this.playing = wasPlaying
       if (wasPlaying) {
         this.startPositionTimer()
@@ -1311,6 +1407,7 @@ export class PlayerController extends EventEmitter {
     }
     const target = this.pickNext(false)
     if (target < 0) {
+      this.ended = true
       this.playing = false
       this.stopPositionTimer()
       this.emitSnapshot()

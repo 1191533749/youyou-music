@@ -218,6 +218,7 @@ export class NeteaseClient {
     for (const [k, v] of Object.entries(extra)) if (all[k] === undefined) all[k] = v
     for (const [k, v] of Object.entries(overrides)) all[k] = v
     return Object.entries(all)
+      .filter(([, v]) => v !== undefined && v !== '')
       .map(([k, v]) => `${k}=${v}`)
       .join('; ')
   }
@@ -423,21 +424,33 @@ export class NeteaseClient {
     return parseJSON(text, path)
   }
 
-  /** POST to `https://interface.music.163.com/eapi<path>` with eapi encryption. */
+  /** POST to `https://interface.music.163.com/eapi<path>` with eapi encryption.
+   *
+   * `anonymous: true` 会剥掉 MUSIC_U/__csrf（请求体 header 与 Cookie 一起），
+   * 用于登录态被风控（-460「网络环境存在风险」/ 405「操作频繁」）时按
+   * 匿名身份兜底——匿名 eapi 实测稳定得多。
+   */
   async eapi(
     path: string,
     payload: Record<string, unknown> = {},
-    options: { cookieOverrides?: Record<string, string> } = {}
+    options: { cookieOverrides?: Record<string, string>; anonymous?: boolean } = {}
   ): Promise<any> {
     const auth = this.authState()
     const apiPath = `/api${path}`
     const header = eapiHeader()
-    if (this.cookies.MUSIC_U) header.MUSIC_U = this.cookies.MUSIC_U
-    if (this.cookies.__csrf) header.__csrf = this.cookies.__csrf
+    if (!options.anonymous) {
+      if (this.cookies.MUSIC_U) header.MUSIC_U = this.cookies.MUSIC_U
+      if (this.cookies.__csrf) header.__csrf = this.cookies.__csrf
+    }
     const body = { ...payload, header }
     const form = encryptEapi(apiPath, JSON.stringify(body))
 
-    const cookieHeader = this.cookieHeader({ os: 'pc', appver: '3.1.17' }, options.cookieOverrides ?? {})
+    const cookieHeader = this.cookieHeader(
+      { os: 'pc', appver: '3.1.17' },
+      options.anonymous
+        ? { ...(options.cookieOverrides ?? {}), MUSIC_U: '', __csrf: '' }
+        : (options.cookieOverrides ?? {})
+    )
     const text = await this.performRaw(
       `https://interface.music.163.com/eapi${path}`,
       encodeForm(form),

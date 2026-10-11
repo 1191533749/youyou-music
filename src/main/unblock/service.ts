@@ -10,6 +10,7 @@ import {
   AUDIO_SOURCE_NAMES,
   PROVIDERS,
   type AudioSourceID,
+  type AudioSourceProvider,
   type ResolvedAudioSource
 } from './providers.js'
 import type { QualityLevel } from '@shared/types'
@@ -24,6 +25,8 @@ export interface UnblockResolution {
 export interface UnblockServiceDeps {
   isEnabled: () => boolean
   enabledSources: () => AudioSourceID[]
+  /** 按音源覆盖真实解析器（测试注入替身，不依赖外网）。 */
+  providers?: Partial<Record<AudioSourceID, AudioSourceProvider>>
   log?: (message: string) => void
 }
 
@@ -54,7 +57,8 @@ export class UnblockService {
       if (attempted.has(id)) continue
       attemptedNow.add(id)
       try {
-        const source = await PROVIDERS[id](track, preferred)
+        const resolve = this.deps.providers?.[id] ?? PROVIDERS[id]
+        const source = await resolve(track, preferred)
         if (source) {
           this.deps.log?.(`换源成功：${track.name} 来自 ${AUDIO_SOURCE_NAMES[id]}`)
           return { source, attempted: attemptedNow }

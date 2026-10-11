@@ -23,6 +23,7 @@ import {
   usePlayerStore,
   useToast
 } from '../lib/contract'
+import ExternalRows from '../components/ExternalRows'
 import { isSearchRelevant } from '../lib/relevance'
 import { IconClose, IconDisc, IconLayers, IconMusic, IconPlay, IconPlus, IconSearch, IconUser } from '../components/Icons'
 import type { SearchResultDTO } from '@shared/ipc'
@@ -64,9 +65,6 @@ const WALL_GAP = 18
 const WALL_STEP = WALL_ITEM_SIZE + WALL_GAP
 /** 一行至少这么多个头像；不够就轮着用同一批，保证任何宽度都铺得满。 */
 const WALL_ROW_MIN = 16
-
-/** 站外行：序号 | 封面 | 歌名 | 歌手 | 专辑 | 时长（比 SongList 多一列封面）。 */
-const EXTERNAL_COLUMNS = '34px 40px minmax(0, 1fr) minmax(110px, 200px) minmax(120px, 220px) 60px'
 
 /**
  * 页内切换（页签 / 音源）的内存缓存。
@@ -710,79 +708,6 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
       {toast.node}
     </div>
   )
-}
-
-/**
- * 站外曲目行列表：兜底结果与「并进单曲列表的汽水曲目」共用同一套行。
- * `offset` 让并进列表的行号接着网易云的序号往下排。
- */
-function ExternalRows(props: {
-  items: ExternalTrackDTO[]
-  offset?: number
-  playingKey?: string
-  currentName?: string
-  onPlay: (item: ExternalTrackDTO) => void
-}): JSX.Element {
-  const { items, offset = 0, playingKey, currentName, onPlay } = props
-  return (
-    <div className="song-list">
-      {items.map((item, index) => {
-        const key = `${item.source}:${item.sourceId}`
-        // 主进程播放的是由站外曲目合成的曲目，歌名保持一致，用它来标当前行。
-        const current = !!currentName && currentName === item.name
-        const busy = playingKey === key
-        return (
-          <div
-            key={key}
-            className={`song-row song-row--external${current ? ' is-current' : ''}`}
-            style={{ gridTemplateColumns: EXTERNAL_COLUMNS }}
-            onDoubleClick={() => onPlay(item)}
-            title={`${item.name} — ${item.artists}`}
-          >
-            <div className="song-row__index">{offset + index + 1}</div>
-            <div className="ext-row__cover">
-              <ExternalCover url={item.coverUrl} />
-            </div>
-            <div className="song-row__title">
-              <button
-                type="button"
-                className="song-row__play"
-                disabled={busy}
-                onClick={() => onPlay(item)}
-                title={busy ? '正在匹配完整音源' : '播放'}
-                aria-label={busy ? '正在匹配完整音源' : `播放 ${item.name}`}
-              >
-                {busy ? <IconDisc size={14} className="spin" /> : <IconPlay size={14} />}
-              </button>
-              <div style={{ minWidth: 0 }}>
-                <div className="song-row__name">{item.name}</div>
-                <div className="song-row__sub">{item.artists}</div>
-              </div>
-            </div>
-            <div className="song-row__artist">{item.artists}</div>
-            <div className="song-row__album">{item.album ?? '—'}</div>
-            <div className="song-row__duration">{formatDuration(item.durationMS / 1000)}</div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/** 站外封面：第三方 CDN 加载失败或没有封面时退回线性音符图标。 */
-function ExternalCover({ url }: { url?: string }): JSX.Element {
-  const [broken, setBroken] = useState(false)
-  // 换关键词后列表会复用行，这里按 URL 重置破图标记，重新尝试加载。
-  useEffect(() => setBroken(false), [url])
-  const src = url?.replace(/^http:\/\//, 'https://')
-  if (!src || broken) {
-    return (
-      <span className="ext-row__cover-fallback">
-        <IconMusic size={18} />
-      </span>
-    )
-  }
-  return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
 }
 
 /**

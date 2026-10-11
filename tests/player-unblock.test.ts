@@ -86,6 +86,8 @@ function buildPlayer(options: {
   unblock: boolean
   /** 注入假的音源探测：不注入就走真实探测（默认行为）。 */
   probe?: (url: string, timeoutMS: number) => Promise<StreamProbeResult>
+  /** 覆盖第三方音源解析器（测试替身，避免依赖外网波动）。 */
+  providers?: ConstructorParameters<typeof UnblockService>[0]['providers']
 }) {
   const client = new NeteaseClient({ cookieDirectory: mkdtempSync(join(tmpdir(), 'youyou-unblock-')) })
   const api = new NeteaseAPI(client)
@@ -93,6 +95,7 @@ function buildPlayer(options: {
   const unblock = new UnblockService({
     isEnabled: () => options.unblock,
     enabledSources: () => ['qishui', 'kugou', 'kuwo'],
+    providers: options.providers,
     log: () => undefined
   })
   const player = new PlayerController({
@@ -114,14 +117,23 @@ function buildPlayer(options: {
 
 describe('受限歌曲换源播放', () => {
   it('开启换源后，VIP 单曲能拿到可播放地址并标记来源', async () => {
-    // 注入「体积合格」的探测结果：这里只验证解析链路的接线（拿到第三方地址、
-    // 标记来源、不再进静音校验），探测本身由下面的真实网络用例覆盖。
+    // 注入「体积合格」的探测结果 + 替身音源：这里只验证解析链路的接线
+    // （拿到第三方地址、标记来源、不再进静音校验），真实接口由下面的用例覆盖。
     const probed: string[] = []
     const { player, mpv } = buildPlayer({
       unblock: true,
       probe: async (url) => {
         probed.push(url)
         return { ok: true, status: 206, totalBytes: 12_000_000, elapsedMS: 5 }
+      },
+      providers: {
+        qishui: async () => null,
+        kugou: async () => null,
+        kuwo: async () => ({
+          id: 'kuwo',
+          displayName: '酷我音乐',
+          url: 'https://example.com/full-audio.mp3'
+        })
       }
     })
     await player.setQueue([VIP_TRACK], 0)

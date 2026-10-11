@@ -65,13 +65,22 @@ function profileDTO(context: AppContext, profile: {
 export function registerAuthHandlers(context: AppContext): void {
   defineHandler('auth:state', async () => {
     if (!context.client.isLoggedIn) return { loggedIn: false }
-    try {
-      const profile = await context.api.userAccount()
-      return { loggedIn: true, profile: profile ? profileDTO(context, profile) : undefined }
-    } catch {
-      // A valid cookie jar with a failing profile call is still a login.
-      return { loggedIn: true }
+    // 冷启动限流高发（恢复会话后的几秒内账户接口偶发空响应）：像扫码登录路径
+    // 一样重试几次，别让「已登录但没昵称头像」一路拖到重启才恢复。
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const profile = await context.api.userAccount()
+        if (profile) {
+          setKnownUID(profile.userId)
+          return { loggedIn: true, profile: profileDTO(context, profile) }
+        }
+      } catch (cause) {
+        context.log(`启动获取账户信息失败(第 ${attempt + 1} 次): ${String(cause)}`)
+      }
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300))
     }
+    // A valid cookie jar with a failing profile call is still a login.
+    return { loggedIn: true }
   })
 
   defineHandler('auth:qrStart', async (): Promise<QRLoginStateDTO> => {

@@ -21,7 +21,7 @@ export {
 } from './format'
 export { activeIndexOf, wordProgress, isEmptyLyrics } from './lyricsUtils'
 export { useAsync, usePaged, useDebounced, type AsyncState } from './hooks'
-export { usePlayerStore, repeatLabel, type PlayerStore } from '../store/player'
+export { usePlayerStore, useFailedTrackIds, useFailedExternalKeys, repeatLabel, type PlayerStore } from '../store/player'
 export { useAuthStore, type AuthStore } from '../store/auth'
 export { useNavigation, type Route, type NavigationStore } from '../store/navigation'
 export { default as SongList, ArtCard } from '../components/SongList'

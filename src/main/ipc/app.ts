@@ -2,7 +2,7 @@
  * App-level IPC: info, settings, cache, lyrics delivery and desktop-lyric
  * window control.
  */
-import { app, dialog, shell } from 'electron'
+import { app, dialog, screen, shell } from 'electron'
 import type { OpenDialogOptions } from 'electron'
 import { execFile } from 'node:child_process'
 import { promises as fsp } from 'node:fs'
@@ -212,7 +212,16 @@ export function registerAppHandlers(context: AppContext): void {
   })
 
   defineHandler('lyrics:desktopMove', async ({ x, y }) => {
-    await context.settings.update({ desktopLyricsPosition: { x, y } })
+    // 桌面歌词窗口可以被拖到显示器外（或值被写成天文数字）后就再也找不回来：
+    // 钳制到所有显示器并集的可见范围内，保证下次启动还能看到它。
+    const displays = screen.getAllDisplays()
+    const left = Math.min(...displays.map((d) => d.bounds.x))
+    const top = Math.min(...displays.map((d) => d.bounds.y))
+    const right = Math.max(...displays.map((d) => d.bounds.x + d.bounds.width))
+    const bottom = Math.max(...displays.map((d) => d.bounds.y + d.bounds.height))
+    const safeX = Math.max(left - 200, Math.min(Math.round(Number(x) || 0), right - 40))
+    const safeY = Math.max(top - 200, Math.min(Math.round(Number(y) || 0), bottom - 40))
+    await context.settings.update({ desktopLyricsPosition: { x: safeX, y: safeY } })
   })
 
   defineHandler('lyrics:desktopResize', async ({ height, width }) => {

@@ -8,7 +8,7 @@
  * 会复用同一个组件实例，所以外层用 key={id} 强制重建，换歌手时游标才不会串。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AlbumSummaryDTO, ArtistSummaryDTO, TrackDTO } from '@shared/types'
+import type { AlbumSummaryDTO, ArtistSummaryDTO, ExternalTrackDTO, TrackDTO } from '@shared/types'
 import FishAvatar, { useImageReady } from '../components/FishAvatar'
 import {
   call,
@@ -26,6 +26,7 @@ import { useAsync, usePaged } from '../lib/hooks'
 import { applyLikeOverrides, clearLikeOverride, markLike } from '../lib/likes'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import Dialog from '../components/Dialog'
+import ExternalRows from '../components/ExternalRows'
 import { useToast, type ToastKind } from '../components/Toast'
 import { IconCheck, IconMore, IconMusic, IconPlay, IconPlus } from '../components/Icons'
 
@@ -75,6 +76,8 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
   }, [id])
 
   const hotSongs = detail?.hotSongs ?? []
+  // 汽水音乐里该歌手的可播版本（主进程已过滤掉只有 30 秒试听的），与热门歌并排展示。
+  const external = detail?.external ?? []
   // 渲染用的集合要套一层本地覆盖：overview 刷新可能还是旧数据，不能盖掉刚点的喜欢。
   const likedIDs = useMemo(() => applyLikeOverrides(liked), [liked])
   const artist = detail?.artist
@@ -102,6 +105,28 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
     void player.append(hotSongs)
     notify(`已加入播放队列（${hotSongs.length} 首）`, 'success')
   }, [hotSongs, notify, player])
+
+  /**
+   * 点播站外曲目：主进程会严格匹配到完整音频，匹配不到直接抛错。
+   * 同一时刻只允许一条在途，避免连点排出一串播放请求。
+   */
+  const [playingKey, setPlayingKey] = useState<string | undefined>()
+  const playExternal = useCallback(
+    async (item: ExternalTrackDTO): Promise<void> => {
+      const key = `${item.source}:${item.sourceId}`
+      if (playingKey) return
+      setPlayingKey(key)
+      try {
+        await call('player:playExternal', { item })
+        notify(`正在播放：${item.name}${item.artists ? ` - ${item.artists}` : ''}`, 'success')
+      } catch (cause) {
+        notify(cause instanceof Error ? cause.message : '播放失败，换一首试试', 'error')
+      } finally {
+        setPlayingKey(undefined)
+      }
+    },
+    [playingKey, notify]
+  )
 
   const toggleFollow = useCallback(async () => {
     const next = !isFollowed
@@ -245,17 +270,30 @@ function ArtistDetail({ id }: { id: number }): JSX.Element {
           <h2 className="section__title">热门单曲</h2>
           <span className="section__more">{hotSongs.length} 首</span>
         </div>
-        {hotSongs.length === 0 ? (
+        {hotSongs.length === 0 && external.length === 0 ? (
           <div className="page__empty">这位歌手暂无热门单曲</div>
         ) : (
-          <SongList
-            tracks={hotSongs}
-            onPlay={(index) => void player.playTracks(hotSongs, index)}
-            currentTrackID={player.current?.id}
-            likedTrackIDs={likedIDs}
-            onToggleLike={auth.loggedIn ? (track) => void toggleLike(track) : undefined}
-            emptyMessage="这位歌手暂无热门单曲"
-          />
+          <>
+            {hotSongs.length > 0 ? (
+              <SongList
+                tracks={hotSongs}
+                onPlay={(index) => void player.playTracks(hotSongs, index)}
+                currentTrackID={player.current?.id}
+                likedTrackIDs={likedIDs}
+                onToggleLike={auth.loggedIn ? (track) => void toggleLike(track) : undefined}
+                emptyMessage="这位歌手暂无热门单曲"
+              />
+            ) : null}
+            {external.length > 0 ? (
+              <ExternalRows
+                items={external}
+                offset={hotSongs.length}
+                playingKey={playingKey}
+                currentName={player.current?.name}
+                onPlay={(item) => void playExternal(item)}
+              />
+            ) : null}
+          </>
         )}
       </section>
 

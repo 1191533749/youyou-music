@@ -10,6 +10,7 @@
  */
 import { QUALITY_OPTIONS, type QualityLevel } from '@shared/types'
 import type { Track } from '../netease/models.js'
+import { probeStream } from '../player/streamProbe.js'
 
 export type AudioSourceID = 'qishui' | 'kugou' | 'kuwo' | 'qq'
 
@@ -381,7 +382,17 @@ export async function resolveKuwo(track: Track): Promise<ResolvedAudioSource | n
   )
   const found = /http[^\s$"]+/.exec(text)
   if (!found) return null
-  return { id: 'kuwo', displayName: AUDIO_SOURCE_NAMES.kuwo, url: found[0] }
+  const url = found[0]
+
+  // 实测酷我对不少歌曲返回的是 4 秒「试听」占位文件（体积完全相同、内容
+  // 是版权提示音）。换链前先探一下体积，明显装不下这首歌时直接判失败，
+  // 把机会让给下一个音源，别把坏地址带进播放候选循环。
+  const probe = await probeStream(url, 5_000)
+  if (probe.ok && probe.totalBytes !== undefined) {
+    const expectedSeconds = (track.durationMS ?? 0) / 1000
+    if (expectedSeconds > 30 && probe.totalBytes < expectedSeconds * 8_000) return null
+  }
+  return { id: 'kuwo', displayName: AUDIO_SOURCE_NAMES.kuwo, url }
 }
 
 // ---------------------------------------------------------------------------
@@ -607,10 +618,12 @@ export async function resolveQqByMid(
   }
 }
 
-export const PROVIDERS: Record<
-  AudioSourceID,
-  (track: Track, preferred?: QualityLevel) => Promise<ResolvedAudioSource | null>
-> = {
+export type AudioSourceProvider = (
+  track: Track,
+  preferred?: QualityLevel
+) => Promise<ResolvedAudioSource | null>
+
+export const PROVIDERS: Record<AudioSourceID, AudioSourceProvider> = {
   qishui: resolveQishui,
   kugou: resolveKugou,
   kuwo: resolveKuwo,

@@ -19,6 +19,7 @@ import {
 } from './mappers.js'
 import { SearchType } from '../netease/api.js'
 import { playability } from '../netease/models.js'
+import { qishuiHasFullTrack } from '../unblock/providers.js'
 import type { AppContext } from '../context.js'
 import type { ToplistDTO } from '@shared/ipc'
 import type { ExternalTrackDTO } from '@shared/types'
@@ -40,6 +41,41 @@ function searchKey(name: string, artist: string): string {
 /** Tracks that are unplayable are kept, but flagged — the UI greys them out. */
 function tracks(context: AppContext, list: Track[]) {
   return toTracksDTO(list, ctx(context))
+}
+
+/**
+ * 发现型列表（搜索、歌手页）只展示「点了就能完整播放」的单曲：播不了的条目
+ * 放在列表里，用户点了只会白等（用户反馈「搜出来的/歌手页里放不了的歌 显示它干嘛」）。
+ * 判定只看原始权限，不理会换源开关——换源开关只影响灰态展示，不代表这一条
+ * 一定换得到完整音源；同名同歌手的汽水版本由下方 `filterQishuiFull` 补进列表。
+ */
+function playableTracks(context: AppContext, list: Track[]): Track[] {
+  const mapping = ctx(context)
+  return list.filter(
+    (track) =>
+      playability(track, track.embeddedPrivilege, mapping.isLoggedIn, mapping.vipType) ===
+      'playable'
+  )
+}
+
+/**
+ * 逐条验证汽水曲目是否有完整档位：付费曲只有一档 30 秒试听，那种点开就「跳」，
+ * 不进列表。每批 6 条并发，接口慢也不会互相拖垮。
+ */
+async function filterQishuiFull(items: ExternalTrackDTO[]): Promise<ExternalTrackDTO[]> {
+  const kept: ExternalTrackDTO[] = []
+  for (let index = 0; index < items.length; index += 6) {
+    const batch = items.slice(index, index + 6)
+    const checks = await Promise.all(
+      batch.map(async (item) =>
+        (await qishuiHasFullTrack(item.sourceId, item.durationMS).catch(() => false))
+          ? item
+          : undefined
+      )
+    )
+    for (const item of checks) if (item) kept.push(item)
+  }
+  return kept
 }
 
 /** 一次想攒多少首漫游曲；攒满就不再打接口。 */
@@ -315,14 +351,17 @@ export function registerExploreHandlers(context: AppContext): void {
     /*
      * 汽水那边有的版本并进单曲列表：网易云没版权/只有 VIP 版时，用户要找的往往就是
      * 这一版（用户反馈「渡情 对唱 我是在汽水音乐看到的」）。同名同歌手的条目不重复展示。
+     * 并入前逐条确认汽水给的是完整档位（付费曲只有 30 秒试听的不收，收进来点开就「跳」）。
+     * 校验限时 4 秒：超时就整批放弃并入（宁可少展示，不能把整页拖慢）。
      */
     let external: ExternalTrackDTO[] | undefined
     if (wantsSongs) {
       const seen = new Set(playableSongs.map((song) => searchKey(song.name, song.artists[0]?.name ?? '')))
       const fromQishui = await searchExternal('qishui', keywords, 12).catch(() => [] as ExternalTrackDTO[])
-      external = fromQishui.filter(
+      const deduped = fromQishui.filter(
         (item) => !seen.has(searchKey(item.name, item.artists.split(/[/&、,，;；]/)[0] ?? ''))
       )
+      external = await withTimeout(filterQishuiFull(deduped), 4_000).catch(() => deduped)
     }
 
     // 后台预解析顶部曲目的第三方直链：用户点第一首歌时不必再等第三方解析那几秒。
@@ -407,9 +446,30 @@ export function registerExploreHandlers(context: AppContext): void {
 
   defineHandler('artist:detail', async ({ id }) => {
     const response = await context.api.artist(id)
+    // 歌手页是发现型页面：只展示原始权限上就能完整播放的热门歌（用户反馈
+    // 「点进歌手里 好多歌曲播放不了 也在跳过」），放不了的版本交给汽水同名曲补。
+    const hotSongs = playableTracks(context, response.hotSongs ?? [])
+    const artistName = response.artist?.name ?? ''
+    let external: ExternalTrackDTO[] | undefined
+    if (artistName) {
+      const seen = new Set(
+        hotSongs.map((song) => searchKey(song.name, song.artists[0]?.name ?? ''))
+      )
+      const fromQishui = await searchExternal('qishui', artistName, 12).catch(
+        () => [] as ExternalTrackDTO[]
+      )
+      const deduped = fromQishui
+        .filter(
+          (item) =>
+            !seen.has(searchKey(item.name, item.artists.split(/[/&、,，;；]/)[0] ?? ''))
+        )
+        .slice(0, 12)
+      external = await withTimeout(filterQishuiFull(deduped), 4_000).catch(() => deduped)
+    }
     return {
       artist: toArtistDTO(response.artist),
-      hotSongs: tracks(context, response.hotSongs)
+      hotSongs: tracks(context, hotSongs),
+      external
     }
   })
 
