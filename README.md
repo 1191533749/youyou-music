@@ -1,12 +1,24 @@
 # 悠悠音乐 · Windows
 
+<div align="center">
+
+[![Release](https://img.shields.io/github/v/release/1191533749/youyou-music?style=flat-square&label=Release&color=ff6a3d)](https://github.com/1191533749/youyou-music/releases/latest)
+[![Download](https://img.shields.io/badge/下载-免安装%20%2F%20安装版-ff6a3d?style=flat-square&logo=github&logoColor=white)](https://github.com/1191533749/youyou-music/releases/latest)
+![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D6?style=flat-square&logo=windows&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![License](https://img.shields.io/badge/License-LGPL--3.0-blue?style=flat-square)
+[![Website](https://img.shields.io/badge/官网-yy.ytw.asia-ff6a3d?style=flat-square&logo=googlechrome&logoColor=white)](https://yy.ytw.asia)
+
+</div>
+
 官方网站：**<https://yy.ytw.asia>** · 源码与发布：**<https://github.com/1191533749/youyou-music>**
 
 Windows 桌面音乐客户端：**Electron + React + TypeScript** 实现，音频后端为 **mpv**。
 账号体系对接网易云音乐（扫码登录），支持在线播放、歌单/专辑/歌手、每日推荐、私人漫游、云盘、
 桌面歌词、全屏播放页与「一起听」。
 
-**最新版本 v0.4.1** · 支持 **Windows 10 / 11（64 位）**（Electron 33 已不支持 Windows 7/8/8.1，也没有 32 位产物）
+**最新版本 v0.4.2** · 支持 **Windows 10 / 11（64 位）**（Electron 33 已不支持 Windows 7/8/8.1，也没有 32 位产物）
 
 ## 预览
 
@@ -40,6 +52,16 @@ Windows 桌面音乐客户端：**Electron + React + TypeScript** 实现，音�
 | 应用图标 | ✅ 已嵌入 | 红色小鱼图标写入 exe（图标 + 产品名 + 版本信息），安装包同款 |
 
 ## 更新日志
+
+### v0.4.2
+
+- **搜索结果只展示点了就能完整播放的歌**：返回前逐首实测，放不出来的不展示
+- **新增聚合音源**：按歌曲 ID 直取直链，灰歌与 VIP 歌也能完整播放
+- 搜「歌名 + 歌手」不再漏掉 VIP 原唱（此前只剩翻唱）
+- 网易云 CDN 双主机互换：单台 CDN 连不上时自动换镜像主机
+- **播放失败绝不自动跳下一首**：原地换音源 / 换档位 / 换主机重试，不切歌、不删行
+- 首页卡片长歌手名在卡片内截断，不再溢出到相邻卡片
+- mpv 启动失败静默重试，界面不再出现技术错误文案
 
 ### v0.4.1
 
