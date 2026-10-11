@@ -107,18 +107,41 @@ async function main() {
       /* 没有 origin 也无妨 */
     }
     execFileSync('git', ['remote', 'add', 'origin', remote])
-    execFileSync('git', ['push', '-u', 'origin', 'HEAD'], { stdio: 'inherit' })
+    // 推送失败不阻断发布：脚本是幂等的，源码/标签可能早已推上去；
+    // 网络抖动时宁可先把 Release 资产传完，推送下轮再补。
+    try {
+      execFileSync('git', ['push', '-u', 'origin', 'HEAD'], { stdio: 'inherit' })
+    } catch {
+      log('推送 HEAD 失败（网络抖动），继续创建/补传 Release 资产')
+    }
     // --force：tag 要始终指向最新提交（远端已有同名 tag 时覆盖）。
-    execFileSync('git', ['push', 'origin', releaseTag, '--force'], { stdio: 'inherit' })
+    try {
+      execFileSync('git', ['push', 'origin', releaseTag, '--force'], { stdio: 'inherit' })
+    } catch {
+      log(`推送 tag ${releaseTag} 失败（网络抖动），继续创建/补传 Release 资产`)
+    }
   }
   log(`推送源码与 tag ${releaseTag}${dryRun ? '（dry-run）' : ' 完成'}`)
 
-  // 3. Release
+  // 3. Release（幂等：已存在就复用，绝不因「已存在」而 422）
   let release
-  try {
-    release = await api('GET', `/repos/${login}/youyou-music/releases/tags/${releaseTag}`)
-    log(`Release ${releaseTag} 已存在`)
-  } catch {
+  let exists = false
+  for (let attempt = 0; attempt < 5 && !exists; attempt += 1) {
+    try {
+      release = await api('GET', `/repos/${login}/youyou-music/releases/tags/${releaseTag}`)
+      exists = true
+      log(`Release ${releaseTag} 已存在`)
+    } catch (cause) {
+      if (String(cause.message).includes('HTTP 404')) break // 确实不存在，去创建
+      if (attempt < 4) {
+        log(`读取 Release 失败，1.5s 后重试（${attempt + 1}/4）`)
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+      } else {
+        throw cause
+      }
+    }
+  }
+  if (!exists) {
     if (dryRun) {
       log(`将创建 Release ${releaseTag}（dry-run）`)
     } else {
@@ -152,23 +175,38 @@ async function main() {
       continue
     }
     const bytes = readFileSync(file)
-    const upload = await fetch(
-      `https://uploads.github.com/repos/${login}/youyou-music/releases/${release.id}/assets?name=${encodeURIComponent(name)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'YouyouMusic-Release',
-          'Content-Type': 'application/octet-stream',
-          'Content-Length': String(bytes.length)
-        },
-        body: bytes
+    // 上传网络会抖：单个资产失败重试几次，而不是让整条发布失败重跑。
+    let uploaded = false
+    for (let attempt = 0; attempt < 5 && !uploaded; attempt += 1) {
+      try {
+        const upload = await fetch(
+          `https://uploads.github.com/repos/${login}/youyou-music/releases/${release.id}/assets?name=${encodeURIComponent(name)}`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+              'User-Agent': 'YouyouMusic-Release',
+              'Content-Type': 'application/octet-stream',
+              'Content-Length': String(bytes.length)
+            },
+            body: bytes
+          }
+        )
+        if (upload.ok) {
+          uploaded = true
+        } else {
+          const text = await upload.text()
+          throw new Error(`HTTP ${upload.status} ${text.slice(0, 200)}`)
+        }
+      } catch (cause) {
+        if (attempt < 4) {
+          log(`上传 ${name} 失败，2s 后重试（${attempt + 1}/4）：${String(cause.message).split('\n')[0]}`)
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+        } else {
+          throw cause
+        }
       }
-    )
-    if (!upload.ok) {
-      const text = await upload.text()
-      throw new Error(`上传失败 ${name}: HTTP ${upload.status} ${text.slice(0, 200)}`)
     }
     log(`已上传 ${name} (${(statSync(file).size / 1024 / 1024).toFixed(1)} MB)`)
   }
