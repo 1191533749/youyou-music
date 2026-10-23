@@ -81,23 +81,70 @@ export function initGlassBlur(): number {
   return applyGlassBlur(readGlassBlur())
 }
 
-/** 壁纸图片地址。带版本号：换图后 URL 变了，不会被 Chromium 的图片缓存挡住。 */
+/** 壁纸图片/视频地址。带版本号：换图后 URL 变了，不会被 Chromium 的缓存挡住。 */
 export function wallpaperUrl(version: number): string {
   return `youyou-wallpaper://current?v=${version}`
 }
 
-/** 有壁纸：根节点打上 data-wallpaper，并把地址交给 CSS 的 --wallpaper。 */
-export function applyWallpaper(version: number): void {
-  const root = document.documentElement
-  root.setAttribute('data-wallpaper', '1')
-  root.style.setProperty('--wallpaper', `url('${wallpaperUrl(version)}')`)
+/** 壁纸类型：图片铺满，视频静音循环。 */
+export type WallpaperKind = 'image' | 'video'
+
+/** 当前壁纸状态：由 Backdrop 里的 WallpaperLayer 渲染（图片层或视频层）。 */
+export interface WallpaperState {
+  set: boolean
+  version: number
+  kind: WallpaperKind
+  /** 0–1：背景不透明度（100% = 完全显示，0 = 只剩玻璃光斑）。 */
+  opacity: number
 }
 
-/** 清除壁纸：去掉标记与变量，背景回退成皮肤色晕。 */
-export function clearWallpaper(): void {
+let wallpaperState: WallpaperState = { set: false, version: 0, kind: 'image', opacity: 1 }
+const wallpaperListeners = new Set<(state: WallpaperState) => void>()
+
+/** WallpaperLayer 订阅壁纸变化（换壁纸、改不透明度都会通知）。 */
+export function subscribeWallpaper(listener: (state: WallpaperState) => void): () => void {
+  wallpaperListeners.add(listener)
+  return () => {
+    wallpaperListeners.delete(listener)
+  }
+}
+
+export function currentWallpaper(): WallpaperState {
+  return wallpaperState
+}
+
+function publish(next: WallpaperState): void {
+  wallpaperState = next
   const root = document.documentElement
-  root.removeAttribute('data-wallpaper')
-  root.style.removeProperty('--wallpaper')
+  // data-wallpaper 只用于 CSS 里把光斑/噪点压暗；图片/视频本身由 React 层渲染。
+  if (next.set) root.setAttribute('data-wallpaper', '1')
+  else root.removeAttribute('data-wallpaper')
+  for (const listener of wallpaperListeners) listener(next)
+}
+
+/** 有壁纸：更新状态，壁纸层立刻换成新图片/视频。 */
+export function applyWallpaper(
+  version: number,
+  kind: WallpaperKind = 'image',
+  backgroundOpacity = 100
+): void {
+  const opacity = Math.min(1, Math.max(0, backgroundOpacity / 100))
+  publish({ set: true, version, kind, opacity })
+}
+
+/** 清除壁纸：去掉标记，背景回退成皮肤色晕。 */
+export function clearWallpaper(): void {
+  publish({ set: false, version: 0, kind: 'image', opacity: 1 })
+}
+
+/**
+ * 调整背景不透明度：先立刻应用（滑杆跟手），再写回主进程设置（重启后保持）。
+ * 没设壁纸时也照样记下，等以后选壁纸就用这个值。
+ */
+export async function applyBackgroundOpacity(percent: number): Promise<void> {
+  const clamped = Math.min(100, Math.max(0, Math.round(percent)))
+  publish({ ...wallpaperState, opacity: clamped / 100 })
+  await call('settings:update', { backgroundOpacity: clamped })
 }
 
 /**
@@ -107,18 +154,31 @@ export function clearWallpaper(): void {
 export async function initWallpaper(): Promise<void> {
   const settings = await tryCall('settings:get')
   if (!settings) return
-  if (settings.wallpaperSet) applyWallpaper(settings.wallpaperVersion)
-  else clearWallpaper()
+  if (settings.wallpaperSet) {
+    applyWallpaper(
+      settings.wallpaperVersion,
+      settings.wallpaperKind ?? 'image',
+      settings.backgroundOpacity ?? 100
+    )
+  } else {
+    clearWallpaper()
+  }
 }
 
-/** 设置页「选择图片」：弹系统文件框，成功后立刻换背景。 */
-export async function pickWallpaper(): Promise<{ set: boolean; version: number }> {
+/** 设置页「选择图片/视频」：弹系统文件框，成功后立刻换背景。 */
+export async function pickWallpaper(): Promise<{
+  set: boolean
+  version: number
+  kind?: WallpaperKind
+}> {
   const result = await call('settings:pickWallpaper')
-  if (result.set) applyWallpaper(result.version)
+  if (result.set) {
+    applyWallpaper(result.version, result.kind ?? 'image', wallpaperState.opacity * 100)
+  }
   return result
 }
 
-/** 设置页「清除壁纸」：主进程删掉图片记录，渲染层同时撤掉背景。 */
+/** 设置页「清除壁纸」：主进程删掉图片/视频记录，渲染层同时撤掉背景。 */
 export async function removeWallpaper(): Promise<void> {
   await call('settings:clearWallpaper')
   clearWallpaper()
