@@ -3,7 +3,7 @@
  * window control.
  */
 import { app, dialog, screen, shell } from 'electron'
-import type { OpenDialogOptions } from 'electron'
+import type { OpenDialogOptions, Rectangle } from 'electron'
 import { execFile } from 'node:child_process'
 import { promises as fsp } from 'node:fs'
 import * as path from 'node:path'
@@ -11,10 +11,72 @@ import { defineHandler } from './registry.js'
 import { toLyricsDTO } from '../lyrics/service.js'
 import { resolveMpvBinary } from '../audio/mpv.js'
 import { isPortableBuild } from '../update/service.js'
+import { SearchType } from '../netease/api.js'
 import { encodeQR } from '../qrcode.js'
 import { setLogCollectorEnabled } from '../logCollector.js'
 import { QUALITY_OPTIONS, type SettingsDTO } from '@shared/types'
 import type { AppContext } from '../context.js'
+
+/** 站外曲目（负 ID）的「同名同歌手」网易云歌词 ID 缓存：歌不变就不用反复搜。 */
+const externalLyricCache = new Map<number, number | null>()
+
+/** 可作为背景视频的扩展名（其余按图片处理）。 */
+const VIDEO_WALLPAPER_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.m4v'])
+
+/** 精简模式（悬浮播放条）的窗口尺寸：面板 58 + 凸起唱片探出 14 = 72，窗口里不留空带。 */
+const COMPACT_SIZE = { width: 420, height: 72 }
+
+/** 进精简模式前的窗口位置与大小，退出时恢复。 */
+let compactRestoreBounds: Rectangle | undefined
+
+/** 精简模式状态与「精简队列」面板展开后的窗口高度。 */
+let compactMode = false
+const COMPACT_QUEUE_HEIGHT = 420
+
+/** 标题/歌手名归一：去括号注释、小写、只留字母数字，比较用。 */
+function lyricNorm(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\([^)]*\)|（[^）]*）|\[[^\]]*\]|【[^】]*】/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
+/** 站外曲目兜底：按「歌名 + 歌手」在网易云搜一次，严格命中才返回它的歌曲 ID。 */
+async function findLyricTrack(
+  context: AppContext,
+  name: string,
+  artist?: string
+): Promise<number | undefined> {
+  try {
+    const result = await context.api.search(name, SearchType.songs, 12)
+    const wanted = lyricNorm(name)
+    if (!wanted) return undefined
+    const wantedArtist = artist ? lyricNorm(artist) : ''
+    let best: number | undefined
+    let bestScore = 0
+    for (const song of result.songs ?? []) {
+      const title = lyricNorm(song.name)
+      if (!title) continue
+      let score = 0
+      if (title === wanted) score += 10
+      else if (title.includes(wanted) || wanted.includes(title)) score += 4
+      if (!score) continue
+      if (wantedArtist) {
+        const artists = song.artists.map((entry) => lyricNorm(entry.name)).join(' ')
+        if (artists.includes(wantedArtist) || wantedArtist.includes(artists)) score += 8
+        else score -= 6
+      }
+      if (score > bestScore) {
+        bestScore = score
+        best = song.id
+      }
+    }
+    // 只有「标题完全一致」（10 分）才认，宁缺毋滥。
+    return bestScore >= 10 ? best : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export function registerAppHandlers(context: AppContext): void {
   defineHandler('app:info', async () => {
@@ -97,8 +159,13 @@ export function registerAppHandlers(context: AppContext): void {
   defineHandler('settings:pickWallpaper', async () => {
     const window = context.mainWindow()
     const options: OpenDialogOptions = {
-      title: '选择壁纸图片',
-      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
+      title: '选择背景图片或视频',
+      filters: [
+        {
+          name: '图片或视频',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'mp4', 'webm', 'mov', 'm4v']
+        }
+      ],
       properties: ['openFile']
     }
     const result = window
@@ -106,25 +173,35 @@ export function registerAppHandlers(context: AppContext): void {
       : await dialog.showOpenDialog(options)
     const current = context.settings.current
     if (result.canceled || result.filePaths.length === 0) {
-      return { set: current.wallpaperSet, version: current.wallpaperVersion }
+      return {
+        set: current.wallpaperSet,
+        version: current.wallpaperVersion,
+        kind: current.wallpaperKind
+      }
     }
     const source = result.filePaths[0]
+    const ext = path.extname(source).toLowerCase() || '.png'
+    const kind = VIDEO_WALLPAPER_EXTENSIONS.has(ext) ? 'video' : 'image'
     const stat = await fsp.stat(source)
-    if (stat.size > 16 * 1024 * 1024) throw new Error('壁纸图片太大（最大 16MB）')
+    // 视频要循环播放，体积上限放宽；图片仍然是 16MB。
+    const limit = kind === 'video' ? 512 * 1024 * 1024 : 16 * 1024 * 1024
+    if (stat.size > limit) {
+      throw new Error(kind === 'video' ? '背景视频太大（最大 512MB）' : '背景图片太大（最大 16MB）')
+    }
     const dir = path.join(app.getPath('userData'), 'wallpaper')
     await fsp.mkdir(dir, { recursive: true })
-    // 清掉旧的 wallpaper.*，只保留最新一张，协议处理器按文件名前缀找。
+    // 清掉旧的 wallpaper.*，只保留最新一个，协议处理器按文件名前缀找。
     for (const entry of await fsp.readdir(dir).catch(() => [] as string[])) {
       if (entry.startsWith('wallpaper.')) await fsp.unlink(path.join(dir, entry)).catch(() => undefined)
     }
-    const ext = path.extname(source).toLowerCase() || '.png'
     const target = path.join(dir, `wallpaper${ext}`)
     await fsp.copyFile(source, target)
     const next = await context.settings.update({
       wallpaperSet: true,
-      wallpaperVersion: (current.wallpaperVersion ?? 0) + 1
+      wallpaperVersion: (current.wallpaperVersion ?? 0) + 1,
+      wallpaperKind: kind
     })
-    return { set: next.wallpaperSet, version: next.wallpaperVersion }
+    return { set: next.wallpaperSet, version: next.wallpaperVersion, kind: next.wallpaperKind }
   })
 
   defineHandler('settings:clearWallpaper', async () => {
@@ -199,11 +276,27 @@ export function registerAppHandlers(context: AppContext): void {
 
   // --- lyrics ---
 
-  defineHandler('lyrics:get', async ({ trackID }) => {
+  defineHandler('lyrics:get', async ({ trackID, name, artist }) => {
     // 站外曲目用负数 ID（汽水/酷狗/酷我 搜索来的歌）：网易云没有它们的歌词，
-    // 直接返回空结果，不去打接口、也不刷日志。
+    // 但同名同歌手的歌网易云通常有——按歌名+歌手搜一次，严格命中才取它的歌词；
+    // 搜不到 / 不匹配才给空结果（歌词给错了比没有更糟）。
     if (trackID <= 0) {
-      return { trackID, lines: [], isInstrumental: false, empty: true }
+      if (externalLyricCache.has(trackID)) {
+        const hit = externalLyricCache.get(trackID)
+        if (hit == null) {
+          return { trackID, lines: [], isInstrumental: false, empty: true }
+        }
+        const parsed = await context.lyrics.get(hit)
+        return toLyricsDTO(trackID, parsed)
+      }
+      const matchID = name ? await findLyricTrack(context, name, artist) : undefined
+      externalLyricCache.set(trackID, matchID ?? null)
+      if (externalLyricCache.size > 200) externalLyricCache.clear()
+      if (matchID === undefined) {
+        return { trackID, lines: [], isInstrumental: false, empty: true }
+      }
+      const parsed = await context.lyrics.get(matchID)
+      return toLyricsDTO(trackID, parsed)
     }
     const parsed = await context.lyrics.get(trackID)
     return toLyricsDTO(trackID, parsed)
@@ -263,6 +356,63 @@ export function registerAppHandlers(context: AppContext): void {
     context.mainWindow()?.minimize()
   })
 
+  /**
+   * 精简模式：主窗口缩成一条悬浮播放条（置顶、不可调整大小），再切回来恢复
+   * 之前的窗口位置与大小。渲染层负责画精简条本身。
+   */
+  defineHandler('window:setCompact', async ({ compact }) => {
+    const window = context.mainWindow()
+    if (!window || window.isDestroyed()) return false
+    if (compact) {
+      if (!window.isMaximized() && !window.isFullScreen()) {
+        compactRestoreBounds = window.getBounds()
+      }
+      if (window.isMaximized()) window.unmaximize()
+      if (window.isFullScreen()) window.setFullScreen(false)
+      window.setResizable(false)
+      window.setMinimumSize(COMPACT_SIZE.width, COMPACT_SIZE.height)
+      window.setAlwaysOnTop(true, 'floating')
+      // 主窗口本身是 transparent 的：这里只保证底色全透明，圆角/唱片之外直接露桌面。
+      window.setBackgroundColor('#00000000')
+      const base = window.getBounds()
+      window.setBounds({
+        x: base.x,
+        y: base.y,
+        width: COMPACT_SIZE.width,
+        height: COMPACT_SIZE.height
+      })
+      compactMode = true
+      return true
+    }
+    compactMode = false
+    window.setResizable(true)
+    window.setMinimumSize(960, 620)
+    window.setAlwaysOnTop(false)
+    // 透明窗口底色始终透明；普通界面由 body 自己铺满浅色底。
+    window.setBackgroundColor('#00000000')
+    if (compactRestoreBounds) {
+      window.setBounds(compactRestoreBounds)
+      compactRestoreBounds = undefined
+    }
+    return false
+  })
+
+  // 精简模式自己的播放队列：展开时把窗口往上长高（底边保持不动），列表画在条上方。
+  defineHandler('window:setCompactQueue', async ({ open }) => {
+    const window = context.mainWindow()
+    if (!window || window.isDestroyed() || !compactMode) return false
+    const bounds = window.getBounds()
+    const height = open ? COMPACT_QUEUE_HEIGHT : COMPACT_SIZE.height
+    if (bounds.height === height) return true
+    window.setBounds({
+      x: bounds.x,
+      y: Math.max(0, bounds.y + bounds.height - height),
+      width: COMPACT_SIZE.width,
+      height
+    })
+    return true
+  })
+
   defineHandler('window:toggleMaximize', async () => {
     const window = context.mainWindow()
     if (!window || window.isDestroyed()) return false
@@ -274,6 +424,12 @@ export function registerAppHandlers(context: AppContext): void {
   defineHandler('window:isMaximized', async () => {
     const window = context.mainWindow()
     return !!window && !window.isDestroyed() && window.isMaximized()
+  })
+
+  // 真全屏的最终裁判：渲染层在收起控件前先问一次，避免状态不同步时误收。
+  defineHandler('window:isFullScreen', async () => {
+    const window = context.mainWindow()
+    return !!window && !window.isDestroyed() && window.isFullScreen()
   })
 
   defineHandler('window:close', async () => {
