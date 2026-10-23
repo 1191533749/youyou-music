@@ -190,6 +190,16 @@ export function IconQueue(props: IconProps): JSX.Element {
   )
 }
 
+/** 精简模式：一大一小两块叠在一起的圆角矩形（参考图里的按钮样式）。 */
+export function IconCompact(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <rect x="4" y="4.5" width="11" height="9" rx="2" />
+      <rect x="11.5" y="11.5" width="8.5" height="7" rx="2" />
+    </Base>
+  )
+}
+
 export function IconVolume(props: IconProps): JSX.Element {
   return (
     <Base {...props}>
@@ -223,6 +233,15 @@ export function IconHeartFilled(props: IconProps): JSX.Element {
         d="M12 19s-6.5-4-6.5-8.3A3.7 3.7 0 0 1 12 8.2a3.7 3.7 0 0 1 6.5 2.5C18.5 15 12 19 12 19Z"
         fill="currentColor"
       />
+    </Base>
+  )
+}
+
+export function IconBrokenHeart(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <path d="M12 19s-6.5-4-6.5-8.3A3.7 3.7 0 0 1 12 8.2a3.7 3.7 0 0 1 6.5 2.5C18.5 15 12 19 12 19Z" />
+      <path d="m12 8.5-1.7 2.7 1.7 1.5-1.8 2.5" />
     </Base>
   )
 }
