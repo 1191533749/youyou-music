@@ -162,6 +162,9 @@ export default function NowPlaying(): JSX.Element {
     )
   )
   const [queueOpen, setQueueOpen] = useState(false)
+  /** 队列拖拽重排：dragIndex = 正在拖的那首，dropIndex = 指针所在的插入槽（0..length）。 */
+  const [dragIndex, setDragIndex] = useState<number | undefined>(undefined)
+  const [dropIndex, setDropIndex] = useState<number | undefined>(undefined)
   const [settings, setSettings] = useState<SettingsDTO | undefined>()
   const [lyrics, setLyrics] = useState<LyricsDTO | undefined>()
   const [lyricsLoading, setLyricsLoading] = useState(false)
@@ -276,7 +279,12 @@ export default function NowPlaying(): JSX.Element {
     setLyricsLoading(true)
     setLyricsError(undefined)
     setLyrics(undefined)
-    void call('lyrics:get', { trackID })
+    void call('lyrics:get', {
+      trackID,
+      // 站外曲目（负 ID）带上歌名+歌手：主进程用它去网易云找「同名同歌手」的歌词。
+      name: current?.name,
+      artist: current?.artists?.[0]?.name
+    })
       .then((value) => {
         if (!cancelled) setLyrics(value)
       })
@@ -743,7 +751,48 @@ export default function NowPlaying(): JSX.Element {
             {state.queue.map((track, index) => (
               <li
                 key={`${track.id}-${index}`}
-                className={`np-queue__item${index === state.index ? ' is-current' : ''}`}
+                draggable
+                onDragStart={(event) => {
+                  // 用原始下标作为拖拽载荷；落点在下拉时按指针在行的上半/下半算。
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', String(index))
+                  setDragIndex(index)
+                }}
+                onDragOver={(event) => {
+                  if (dragIndex === undefined) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  const slot = event.clientY - rect.top > rect.height / 2 ? index + 1 : index
+                  if (slot !== dropIndex) setDropIndex(slot)
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  if (dragIndex === undefined) {
+                    setDragIndex(undefined)
+                    setDropIndex(undefined)
+                    return
+                  }
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  const slot = event.clientY - rect.top > rect.height / 2 ? index + 1 : index
+                  const to = dragIndex < slot ? slot - 1 : slot
+                  if (to !== dragIndex) void player.move(dragIndex, to)
+                  setDragIndex(undefined)
+                  setDropIndex(undefined)
+                }}
+                onDragEnd={() => {
+                  setDragIndex(undefined)
+                  setDropIndex(undefined)
+                }}
+                className={`np-queue__item${index === state.index ? ' is-current' : ''}${
+                  index === dragIndex ? ' is-dragging' : ''
+                }${
+                  dropIndex === index && dragIndex !== undefined
+                    ? ' is-drop-before'
+                    : index === state.queue.length - 1 && dropIndex === index + 1 && dragIndex !== undefined
+                      ? ' is-drop-after'
+                      : ''
+                }`}
               >
                 <button
                   type="button"
