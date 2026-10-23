@@ -334,14 +334,31 @@ function PlaylistCard({
  */
 function ToplistCard({ toplist, onOpen }: { toplist: ToplistDTO; onOpen: () => void }): JSX.Element {
   const [broken, setBroken] = useState(false)
-  const cover = coverUrl(toplist.coverImgUrl, 320)
+  /** 带 param 的缩略图被 CDN 偶发 403 时，退回原图再试一次。 */
+  const [retried, setRetried] = useState(false)
+  const baseCover = coverUrl(toplist.coverImgUrl, 320)
+  const cover = retried && baseCover ? baseCover.replace(/[?&]param=\d+y\d+/g, '').replace(/\?$/, '') : baseCover
   // 封面加载失败退回占位：榜单封面图偶尔加载不到，不能露出浏览器的破图图标。
-  useEffect(() => setBroken(false), [cover])
+  useEffect(() => {
+    setBroken(false)
+    setRetried(false)
+  }, [baseCover])
   return (
     <button type="button" className="card home-toplist" onClick={onOpen} title={toplist.name}>
       <div className="card__art">
         {cover && !broken ? (
-          <img src={cover} alt="" loading="eager" onError={() => setBroken(true)} />
+          <img
+            src={cover}
+            alt=""
+            loading="eager"
+            onError={() => {
+              if (!retried && baseCover && /[?&]param=/.test(baseCover)) {
+                setRetried(true)
+                return
+              }
+              setBroken(true)
+            }}
+          />
         ) : (
           <span className="card__placeholder">
             <IconLayers size={26} />
