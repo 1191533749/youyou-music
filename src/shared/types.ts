@@ -235,10 +235,14 @@ export interface SettingsDTO {
   theme: 'system' | 'light' | 'dark'
   /** UI language: follow the system, or force one. */
   language: 'system' | 'zh-Hans' | 'en'
-  /** 自定义壁纸已设置：渲染层通过 youyou-wallpaper:// 协议读取图片。 */
+  /** 自定义壁纸已设置：渲染层通过 youyou-wallpaper:// 协议读取图片或视频。 */
   wallpaperSet: boolean
   /** 每次换壁纸 +1，渲染层用它拼 URL 做缓存失效。 */
   wallpaperVersion: number
+  /** 壁纸类型：图片（背景铺满）或视频（静音循环播放）。 */
+  wallpaperKind: 'image' | 'video'
+  /** 背景不透明度（0-100）：100 完全显示，0 只剩模糊光斑。 */
+  backgroundOpacity: number
   /** Unlock grey tracks from third-party sources. */
   unblockGreyTracks: boolean
   /**
@@ -281,6 +285,8 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   language: 'system',
   wallpaperSet: false,
   wallpaperVersion: 0,
+  wallpaperKind: 'image',
+  backgroundOpacity: 100,
   unblockGreyTracks: true,
   unblockSources: ['gdstudio', 'qishui', 'kugou', 'kuwo', 'qq'],
   unblockSourcesMigrated: true,
