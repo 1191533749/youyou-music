@@ -172,6 +172,14 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
           out.wallpaperVersion = Math.floor(value)
         }
         break
+      case 'wallpaperKind':
+        if (value === 'image' || value === 'video') out.wallpaperKind = value
+        break
+      case 'backgroundOpacity':
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          out.backgroundOpacity = Math.min(100, Math.max(0, Math.round(value)))
+        }
+        break
       case 'language':
         if (value === 'system' || value === 'zh-Hans' || value === 'en') out.language = value
         break
