@@ -272,6 +272,9 @@ export interface IPCContract {
   'player:setQueue': { request: { tracks: TrackDTO[]; startIndex?: number }; response: PlayerStateDTO }
   'player:append': { request: { tracks: TrackDTO[] }; response: PlayerStateDTO }
   'player:removeAt': { request: { indices: number[] }; response: PlayerStateDTO }
+  /** 拖拽重排：把第 from 首挪到第 to 首（正在播放的曲目跟着走）。 */
+  'player:move': { request: { from: number; to: number }; response: PlayerStateDTO }
+  'player:playIndex': { request: { index: number }; response: PlayerStateDTO }
   'player:clearQueue': { request: void; response: PlayerStateDTO }
   'player:setQuality': { request: { quality: string }; response: PlayerStateDTO }
   'player:trackInfo': {
@@ -281,7 +284,7 @@ export interface IPCContract {
   'player:audioDevices': { request: void; response: AudioDeviceDTO[] }
 
   // --- lyrics ---
-  'lyrics:get': { request: { trackID: number }; response: LyricsDTO }
+  'lyrics:get': { request: { trackID: number; name?: string; artist?: string }; response: LyricsDTO }
   'lyrics:desktopToggle': { request: { visible: boolean }; response: void }
   'lyrics:desktopMove': { request: { x: number; y: number }; response: void }
   /** 桌面歌词窗口按内容自适配高度：窗口只罩住当前行，不占整条透明区域。 */
@@ -294,8 +297,12 @@ export interface IPCContract {
   'window:toggleFullScreen': { request: void; response: boolean }
   'window:setFullScreen': { request: { fullscreen: boolean }; response: boolean }
   'window:minimize': { request: void; response: void }
+  /** 精简模式：窗口缩成悬浮播放条（true）或恢复原样（false）。 */
+  'window:setCompact': { request: { compact: boolean }; response: boolean }
+  'window:setCompactQueue': { request: { open: boolean }; response: boolean }
   'window:toggleMaximize': { request: void; response: boolean }
   'window:isMaximized': { request: void; response: boolean }
+  'window:isFullScreen': { request: void; response: boolean }
   'window:close': { request: void; response: void }
 
   // --- update ---
@@ -311,7 +318,10 @@ export interface IPCContract {
   'settings:get': { request: void; response: SettingsDTO }
   'settings:update': { request: Partial<SettingsDTO>; response: SettingsDTO }
   /** 选择本地图片作为程序背景壁纸：主进程复制到 userData 并通过自定义协议提供。 */
-  'settings:pickWallpaper': { request: void; response: { set: boolean; version: number } }
+  'settings:pickWallpaper': {
+    request: void
+    response: { set: boolean; version: number; kind?: 'image' | 'video' }
+  }
   'settings:clearWallpaper': { request: void; response: { set: boolean; version: number } }
   'app:info': { request: void; response: AppInfoDTO }
   'app:cacheUsage': { request: void; response: CacheUsageDTO }
@@ -423,6 +433,8 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'player:setQueue',
   'player:append',
   'player:removeAt',
+  'player:move',
+  'player:playIndex',
   'player:clearQueue',
   'player:setQuality',
   'player:trackInfo',
@@ -435,8 +447,11 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'window:toggleFullScreen',
   'window:setFullScreen',
   'window:minimize',
+  'window:setCompact',
+  'window:setCompactQueue',
   'window:toggleMaximize',
   'window:isMaximized',
+  'window:isFullScreen',
   'window:close',
   'update:check',
   'update:install',
