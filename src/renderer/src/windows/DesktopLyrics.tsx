@@ -149,7 +149,11 @@ export default function DesktopLyrics(): JSX.Element {
       return
     }
     let cancelled = false
-    void call('lyrics:get', { trackID })
+    void call('lyrics:get', {
+      trackID,
+      name: player?.track?.name,
+      artist: player?.track?.artists?.[0]?.name
+    })
       .then((result) => {
         if (!cancelled) setLyrics(result)
       })
