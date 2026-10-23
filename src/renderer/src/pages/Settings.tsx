@@ -26,6 +26,7 @@ import { SKINS, applySkin, readSkin, type SkinId } from '../lib/skin'
 import {
   BLUR_MAX,
   BLUR_MIN,
+  applyBackgroundOpacity,
   applyGlassBlur,
   pickWallpaper,
   readGlassBlur,
@@ -218,7 +219,8 @@ export default function Settings(): JSX.Element {
       setStored((current) => ({
         ...(current ?? DEFAULT_SETTINGS),
         wallpaperSet: true,
-        wallpaperVersion: result.version
+        wallpaperVersion: result.version,
+        wallpaperKind: result.kind ?? 'image'
       }))
     } catch (cause) {
       toast.show(cause instanceof Error ? cause.message : '选择壁纸失败', 'error')
@@ -243,6 +245,15 @@ export default function Settings(): JSX.Element {
   /** 模糊度：本地记录 + 立刻写根节点变量；CSS 变量一换，全应用的玻璃当场跟着变。 */
   const changeBlur = (value: number): void => {
     setBlur(applyGlassBlur(value))
+  }
+
+  /** 背景不透明度：草稿值让滑杆跟手，写回主进程设置保证重启后保持。 */
+  const [opacityDraft, setOpacityDraft] = useState<number | undefined>()
+  const changeOpacity = (value: number): void => {
+    setOpacityDraft(value)
+    void applyBackgroundOpacity(value).then(() =>
+      setStored((current) => ({ ...(current ?? DEFAULT_SETTINGS), backgroundOpacity: value }))
+    )
   }
 
   /** 界面一律读它：真值缺失时退到默认值，控件因此永远可用。 */
@@ -634,12 +645,12 @@ export default function Settings(): JSX.Element {
         </div>
       </section>
 
-      {/* 背景：壁纸（图片存主进程，渲染层用 youyou-wallpaper:// 读）+ 毛玻璃模糊度（本地记录）。 */}
+      {/* 背景：自定义图片/视频（存主进程，渲染层用 youyou-wallpaper:// 读）+ 不透明度 + 毛玻璃模糊度。 */}
       <section className="settings__group">
         <h2>背景</h2>
         <div className="settings__row">
           <div className="settings__row-label">
-            <span>自定义壁纸</span>
+            <span>自定义背景</span>
           </div>
           <div className="settings__row-control">
             <button
@@ -648,7 +659,7 @@ export default function Settings(): JSX.Element {
               disabled={wallpaperBusy}
               onClick={() => void chooseWallpaper()}
             >
-              {settings.wallpaperSet ? '更换图片' : '选择图片'}
+              {settings.wallpaperSet ? '更换图片/视频' : '选择图片/视频'}
             </button>
             {settings.wallpaperSet ? (
               <button
@@ -657,9 +668,24 @@ export default function Settings(): JSX.Element {
                 disabled={wallpaperBusy}
                 onClick={() => void dropWallpaper()}
               >
-                清除壁纸
+                清除背景
               </button>
             ) : null}
+          </div>
+        </div>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>背景不透明度</span>
+          </div>
+          <div className="settings__row-control">
+            <DraftRange
+              value={opacityDraft ?? settings.backgroundOpacity}
+              min={0}
+              max={100}
+              label="背景不透明度"
+              onChange={changeOpacity}
+            />
+            <span className="settings__row-hint">{opacityDraft ?? settings.backgroundOpacity}%</span>
           </div>
         </div>
         <div className="settings__row">
