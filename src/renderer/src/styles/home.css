@@ -1387,6 +1387,19 @@
   color: var(--accent);
 }
 
+/* 拖拽重排：拖起的那首半透明，落点用一条 accent 线标出来。 */
+.np-queue__item.is-dragging {
+  opacity: 0.4;
+}
+
+.np-queue__item.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.np-queue__item.is-drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .np-queue__play {
   display: flex;
   align-items: center;
@@ -1396,6 +1409,11 @@
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   text-align: left;
+  cursor: grab;
+}
+
+.np-queue__item.is-dragging .np-queue__play {
+  cursor: grabbing;
 }
 
 .np-queue__index {
