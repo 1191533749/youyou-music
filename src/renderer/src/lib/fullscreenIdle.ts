@@ -5,15 +5,18 @@
  * 不掺和 app 内的全屏播放页。做法是在 `<html>` 上挂 `fullscreen-idle` 类，
  * 由 CSS 负责顶栏 / 底部控制条 / 全局播放条的淡出与禁用点击（detail.css）。
  *
- * 全屏状态来源：主进程广播的 `window:fullscreen`（payload `{ fullscreen: boolean }`）。
- * 订阅仍然包在 try/catch 里 —— 万一事件名还没登记进 preload 白名单
- * （`src/preload/index.ts:39` 对未登记事件直接返回空操作），就按 false 处理，
- * 再由下面的窗口尺寸兜底判断，功能不会因为事件缺失而整体失效。
+ * 全屏状态来源：主进程广播的 `window:fullscreen`（payload `{ fullscreen: boolean }`，
+ * 已在 `src/shared/ipc.ts` 的事件白名单里登记）。
+ *
+ * 早先还按「视口盖满整屏」兜底判断，结果在**最大化窗口 + 任务栏自动隐藏**的电脑上
+ * 视口正好等于屏幕尺寸，被误判成真全屏：用户放着不动 3 秒，底部播放条就被收起来了。
+ * 既然事件可靠，就只认事件，彻底不再猜尺寸。
  *
  * 只要是真全屏，超时后一定隐藏：不看鼠标停在哪、也不看上一秒点过哪个按钮
  * （焦点仍留在按钮上也不例外），任何鼠标 / 键盘 / 滚轮操作都会立刻唤醒控件。
  */
 import { useEffect } from 'react'
+import { call } from './ipc'
 
 /** 挂到 <html> 上的类名，CSS 约定见 styles/detail.css。 */
 export const IDLE_CLASS = 'fullscreen-idle'
@@ -37,7 +40,7 @@ function subscribeFullscreen(listener: (fullscreen: boolean) => void): (() => vo
     })
     return typeof dispose === 'function' ? (dispose as () => void) : undefined
   } catch {
-    // 桥接还没就绪：当作没有事件，靠下面的尺寸兜底。
+    // 桥接还没就绪：当作没有事件（不猜尺寸，宁可这次不隐藏）。
     return undefined
   }
 }
@@ -46,7 +49,6 @@ export function useFullscreenIdle(): void {
   useEffect(() => {
     const root = document.documentElement
     let fullscreen = false
-    let receivedEvent = false
     let timer: number | undefined
 
     const clearTimer = (): void => {
@@ -55,9 +57,18 @@ export function useFullscreenIdle(): void {
       timer = undefined
     }
 
-    const hide = (): void => {
+    const hide = async (): Promise<void> => {
       timer = undefined
-      // 无条件收起：用户要求真全屏下 3 秒无操作必隐藏，不因焦点停在按钮上而推迟。
+      // 收起前问一次主进程：窗口此刻是不是真全屏。
+      // 只靠事件记状态会在事件丢失/顺序错乱时“以为一直在全屏”，
+      // 于是普通最大化窗口里鼠标一停也把播放条收掉（用户实际遇到的那个 bug）。
+      const really = await call('window:isFullScreen').catch(() => false)
+      if (!really) {
+        fullscreen = false
+        root.classList.remove(IDLE_CLASS)
+        return
+      }
+      // 真全屏下无条件收起：3 秒无操作必隐藏，不因焦点停在按钮上而推迟。
       root.classList.add(IDLE_CLASS)
     }
 
@@ -65,7 +76,7 @@ export function useFullscreenIdle(): void {
     const wake = (): void => {
       root.classList.remove(IDLE_CLASS)
       clearTimer()
-      if (fullscreen) timer = window.setTimeout(hide, IDLE_DELAY_MS)
+      if (fullscreen) timer = window.setTimeout(() => void hide(), IDLE_DELAY_MS)
     }
 
     const setFullscreen = (next: boolean): void => {
@@ -78,30 +89,7 @@ export function useFullscreenIdle(): void {
       }
     }
 
-    const off = subscribeFullscreen((value) => {
-      receivedEvent = true
-      setFullscreen(value)
-    })
-
-    /**
-     * 兜底：主进程的事件还没上线时，用窗口尺寸判断是不是真全屏。
-     * 窗口是无边框的（src/main/index.ts:106），最大化时高度≈可用高度（扣掉任务栏），
-     * 真全屏才等于整块屏幕高度，所以按「两个方向都盖满」判断，宁可漏判不误判。
-     *
-     * 用户反复强调「真全屏 3 秒必须隐藏」：即使主进程事件整条链路丢了，
-     * 视口盖满整屏也必须立刻认作真全屏——所以「视口=全屏」时无条件置 true，
-     * 只有视口非全屏时才把判定权交回事件（退出全屏的事件若丢失，mousemove
-     * 会唤醒控件，最坏只是多显示几秒，绝不会「该隐藏时不隐藏」）。
-     */
-    const syncByViewport = (): void => {
-      const viewportFull =
-        window.innerWidth >= window.screen.width - 1 && window.innerHeight >= window.screen.height - 1
-      if (viewportFull) {
-        setFullscreen(true)
-      } else if (!receivedEvent) {
-        setFullscreen(false)
-      }
-    }
+    const off = subscribeFullscreen((value) => setFullscreen(value))
 
     let lastMove = 0
     const onMouseMove = (): void => {
@@ -112,9 +100,6 @@ export function useFullscreenIdle(): void {
     }
     const onInteraction = (): void => wake()
 
-    syncByViewport()
-    const viewportTimer = window.setInterval(syncByViewport, 2000)
-    window.addEventListener('resize', syncByViewport)
     window.addEventListener('mousemove', onMouseMove, { passive: true })
     window.addEventListener('mousedown', onInteraction, { passive: true })
     window.addEventListener('keydown', onInteraction)
@@ -123,8 +108,6 @@ export function useFullscreenIdle(): void {
     return () => {
       clearTimer()
       off?.()
-      window.clearInterval(viewportTimer)
-      window.removeEventListener('resize', syncByViewport)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mousedown', onInteraction)
       window.removeEventListener('keydown', onInteraction)
