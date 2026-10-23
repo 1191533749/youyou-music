@@ -479,6 +479,26 @@ export class PlayerController extends EventEmitter {
     this.emitSnapshot()
   }
 
+  /**
+   * 拖拽重排：把第 from 首挪到第 to 首。
+   * 正在播放的那首被挪动时 index 跟着走，播放不中断（只改队列顺序，不重新起播）。
+   */
+  async moveInQueue(from: number, to: number): Promise<void> {
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return
+    if (from === to) return
+    if (from < 0 || to < 0 || from >= this.queue.length || to >= this.queue.length) return
+    const [entry] = this.queue.splice(from, 1)
+    this.queue.splice(to, 0, entry)
+    if (this.index === from) {
+      this.index = to
+    } else if (from < this.index && to >= this.index) {
+      this.index -= 1
+    } else if (from > this.index && to <= this.index) {
+      this.index += 1
+    }
+    this.emitSnapshot()
+  }
+
   async removeAt(indices: number[]): Promise<void> {
     const remove = new Set(indices)
     const current = this.queue[this.index]?.track.id
