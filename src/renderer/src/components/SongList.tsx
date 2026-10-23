@@ -200,9 +200,15 @@ export function ArtCard({
   onClick?: () => void
 }): JSX.Element {
   const [broken, setBroken] = useState(false)
+  /** 缩放参数失败后重试一次不带 param 的原图（网易云 CDN 偶发对 param 变体 403）。 */
+  const [retried, setRetried] = useState(false)
   // 换卡（列表复用同一组件实例）时重置破图标记，重新尝试加载。
-  useEffect(() => setBroken(false), [imageUrl])
-  const url = imageUrl?.replace(/^http:\/\//, 'https://')
+  useEffect(() => {
+    setBroken(false)
+    setRetried(false)
+  }, [imageUrl])
+  const httpsUrl = imageUrl?.replace(/^http:\/\//, 'https://')
+  const url = retried && httpsUrl ? httpsUrl.replace(/[?&]param=\d+y\d+/g, '').replace(/\?$/, '') : httpsUrl
   const showFallback = !url || broken
   return (
     <button type="button" className="card" onClick={onClick} title={title}>
@@ -212,7 +218,20 @@ export function ArtCard({
             <IconMusic size={26} />
           </span>
         ) : (
-          <img src={url} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" onError={() => setBroken(true)} />
+          <img
+            src={url}
+            alt=""
+            loading={eager ? 'eager' : 'lazy'}
+            decoding="async"
+            onError={() => {
+              // 带 param 的缩略图挂了就退回原图再试一次，仍失败才显示占位。
+              if (!retried && httpsUrl && /[?&]param=/.test(httpsUrl)) {
+                setRetried(true)
+                return
+              }
+              setBroken(true)
+            }}
+          />
         )}
         {badge ? <span className="card__badge">{badge}</span> : null}
       </div>
