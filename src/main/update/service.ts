@@ -23,6 +23,8 @@ export interface UpdateAsset {
   size?: number
   /** 提供时下载完成后必须校验 SHA-256，不一致就拒绝执行。 */
   sha256?: string
+  /** 备用下载地址（自建镜像）：主地址下载失败时按顺序重试，哈希校验同样生效。 */
+  fallbacks?: string[]
 }
 
 export interface UpdateManifest {
@@ -43,10 +45,25 @@ export interface UpdateCheckResult {
 const GITHUB_OWNER = '1191533749'
 const GITHUB_REPO = 'youyou-music'
 
-export function updateFeedURL(): string {
+/** 官方自建更新源：由发布流程同步，国内直连（不依赖代理、不受 GitHub 抖动影响）。 */
+export const MIRROR_FEED = 'https://yy.ytw.asia/update/latest.json'
+
+/**
+ * 更新源顺序（用户 0.4.3 后要求的「稳妥链路」）：
+ *  1. 环境变量覆盖（测试/内网）；
+ *  2. 自建镜像清单（国内直连、检查只需一次请求，绝大多数用户走这条）；
+ *  3. GitHub Releases（海外线路，镜像不可用时兜底）；
+ * 都不行时由 IPC 层打开官网下载页兜底。
+ */
+export function updateFeedURLs(): string[] {
   const override = process.env.YOYOU_UPDATE_URL
-  if (override) return override
-  return `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+  if (override) return [override]
+  return [MIRROR_FEED, `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`]
+}
+
+/** 兼容旧调用：返回第一个更新源。 */
+export function updateFeedURL(): string {
+  return updateFeedURLs()[0]
 }
 
 /** 'x.y.z' 三段数字比较；a > b 返回 1，相等 0，a < b 返回 -1。无法解析时按 0 处理。 */
@@ -230,35 +247,66 @@ export function releaseToManifest(release: GitHubRelease): UpdateManifest {
  * 返回比当前版本新的资产；网络失败返回空结果（更新失败不能影响听歌）。
  * `currentOverride` 供测试注入（vitest 里 electron 的 app 不可用）。
  */
-export async function checkForUpdates(currentOverride?: string): Promise<UpdateCheckResult> {
-  const current = currentOverride ?? safeAppVersion()
-  const empty: UpdateCheckResult = { current, assets: [], updateType: null }
+/** 拉取并归一化单个更新源；任何失败都返回 null（换下一个源继续）。 */
+async function fetchManifest(feed: string): Promise<UpdateManifest | null> {
   try {
-    const raw = await httpsJSONWithRetry<GitHubRelease | UpdateManifest>(updateFeedURL(), 8000)
-    // 两种来源：GitHub Release 原始 JSON，或直接给我们的清单格式（YOYOU_UPDATE_URL 用）。
+    const raw = await httpsJSONWithRetry<GitHubRelease | UpdateManifest>(feed, 8000)
+    // 两种来源：GitHub Release 原始 JSON，或直接给我们的清单格式（YOYOU_UPDATE_URL / 自建镜像用）。
     const manifest =
       'assets' in raw && Array.isArray(raw.assets) && !('tag_name' in raw)
         ? (raw as unknown as UpdateManifest)
         : await withGitHubHashes(raw as GitHubRelease)
-    if (!manifest.version || compareVersions(manifest.version, current) <= 0) return empty
-    // 完整性校验绝不降级（fail-closed）：任何拿不到 SHA-256 的资产一律拒绝安装。
-    // GitHub 源由 withGitHubHashes 挂哈希；自定义清单必须自带哈希，缺了就整批作废。
-    const assets = manifest.assets.filter((asset) => /^[0-9a-f]{64}$/i.test(asset.sha256 ?? ''))
-    if (manifest.assets.length > 0 && assets.length === 0) return empty
-    return {
-      current,
-      latest: { ...manifest, assets },
-      assets,
-      updateType: assets.some((asset) => asset.kind === 'installer')
-        ? 'installer'
-        : assets.some((asset) => asset.kind === 'portable')
-          ? 'portable'
-          : null
-    }
+    if (!manifest.version || !Array.isArray(manifest.assets)) return null
+    return manifest
   } catch (cause) {
     // 更新失败不影响听歌：界面照常显示「检查失败」，但日志里要留下真实原因。
-    console.warn(`[update] 检查更新失败：${describeCause(cause)}`)
-    return empty
+    console.warn(`[update] 更新源不可用（${feed}）：${describeCause(cause)}`)
+    return null
+  }
+}
+
+export async function checkForUpdates(currentOverride?: string): Promise<UpdateCheckResult> {
+  const current = currentOverride ?? safeAppVersion()
+  const empty: UpdateCheckResult = { current, assets: [], updateType: null }
+  // 链路：GitHub → 自建镜像（任一可用即可；两个都拿到时用版本更高的那份）。
+  const manifests: UpdateManifest[] = []
+  for (const feed of updateFeedURLs()) {
+    const manifest = await fetchManifest(feed)
+    if (manifest) manifests.push(manifest)
+  }
+  const newest = manifests
+    .filter((manifest) => compareVersions(manifest.version, current) > 0)
+    .sort((a, b) => compareVersions(b.version, a.version))[0]
+  if (!newest) return empty
+  // 完整性校验绝不降级（fail-closed）：任何拿不到 SHA-256 的资产一律拒绝安装。
+  // GitHub 源由 withGitHubHashes 挂哈希；自建镜像清单必须自带哈希，缺了就整批作废。
+  const assets = newest.assets
+    .filter((asset) => /^[0-9a-f]{64}$/i.test(asset.sha256 ?? ''))
+    .map((asset) => {
+      // 同版本、同 kind、同哈希的其它源地址挂成备用下载线路（GitHub 下载被重置时自动换镜像）。
+      const fallbacks: string[] = []
+      for (const other of manifests) {
+        if (other === newest || compareVersions(other.version, newest.version) !== 0) continue
+        for (const candidate of other.assets) {
+          if (candidate.kind !== asset.kind) continue
+          if (!/^[0-9a-f]{64}$/i.test(candidate.sha256 ?? '')) continue
+          if (candidate.sha256!.toLowerCase() !== asset.sha256!.toLowerCase()) continue
+          if (candidate.url === asset.url || fallbacks.includes(candidate.url)) continue
+          fallbacks.push(candidate.url)
+        }
+      }
+      return fallbacks.length > 0 ? { ...asset, fallbacks } : asset
+    })
+  if (newest.assets.length > 0 && assets.length === 0) return empty
+  return {
+    current,
+    latest: { ...newest, assets },
+    assets,
+    updateType: assets.some((asset) => asset.kind === 'installer')
+      ? 'installer'
+      : assets.some((asset) => asset.kind === 'portable')
+        ? 'portable'
+        : null
   }
 }
 
@@ -306,8 +354,25 @@ function safeAppVersion(): string {
   }
 }
 
-/** 下载一个资产到临时目录，返回本地路径；带回进度回调（0–1）。 */
-export function downloadAsset(asset: UpdateAsset, onProgress?: (fraction: number) => void): Promise<string> {
+/**
+ * 下载一个资产到临时目录，返回本地路径；带回进度回调（0–1）。
+ * 主地址（GitHub）失败时按 `asset.fallbacks` 依次换自建镜像，哈希校验对每一路都生效。
+ */
+export async function downloadAsset(asset: UpdateAsset, onProgress?: (fraction: number) => void): Promise<string> {
+  const urls = [asset.url, ...(asset.fallbacks ?? [])]
+  let lastError: unknown
+  for (const [index, url] of urls.entries()) {
+    try {
+      return await downloadFrom(url, asset, index === 0 ? onProgress : undefined)
+    } catch (cause) {
+      lastError = cause
+      console.warn(`[update] 下载失败（${url}）：${describeCause(cause)}`)
+    }
+  }
+  throw lastError ?? new Error('下载失败')
+}
+
+function downloadFrom(url: string, asset: UpdateAsset, onProgress?: (fraction: number) => void): Promise<string> {
   const dir = path.join(os.tmpdir(), 'youyou-update')
   mkdirSync(dir, { recursive: true })
   const target = path.join(dir, asset.name)
@@ -328,7 +393,7 @@ export function downloadAsset(asset: UpdateAsset, onProgress?: (fraction: number
       reject(new Error('下载超时'))
     }, 15 * 60 * 1000)
     getFollowingRedirects(
-      asset.url,
+      url,
       { 'User-Agent': 'YouyouMusic-Updater' },
       (response: {
         statusCode?: number
@@ -516,9 +581,12 @@ export function applyUpdate(asset: UpdateAsset, localPath: string): void {
   }
 
   // 把脚本落成 .ps1 再用 -File 启动：比 -Command 传一大串内嵌引号可靠得多。
+  // **必须带 UTF-8 BOM**：Windows PowerShell 5.1 读无 BOM 的文件会按系统 ANSI(GBK) 解码，
+  // 中文路径（如「悠悠音乐便携版0.4.x.exe」「D:\软件下载\…」）会变成乱码，
+  // Copy-Item 直接报「路径中具有非法字符」→ 替换永远失败（2026-10-24 实测）。
   const ps1Path = path.join(os.tmpdir(), 'youyou-apply.ps1')
   try {
-    writeFileSync(ps1Path, script, 'utf8')
+    writeFileSync(ps1Path, `\uFEFF${script}`, 'utf8')
   } catch {
     /* ignore */
   }
