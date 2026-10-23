@@ -9,6 +9,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, 
 import * as path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import * as fs from 'node:fs'
+import { Readable } from 'node:stream'
 import { SettingsStore } from './storage/settings.js'
 import { CacheStore } from './storage/cache.js'
 import { DailyHistoryStore } from './storage/dailyHistory.js'
@@ -34,6 +35,7 @@ import type { AppContext } from './context.js'
 import type { PlayerSnapshot } from './player/controller.js'
 import { bootLog } from './diagnostics.js'
 import { initLogCollector, recordLog } from './logCollector.js'
+import { startTelemetry } from './telemetry.js'
 import { DEFAULT_SETTINGS, QUALITY_OPTIONS } from '@shared/types'
 
 // The self-check runs against a throwaway profile so it neither reads the
@@ -128,7 +130,10 @@ function createMainWindow(): BrowserWindow {
     show: false,
     // 无边框：顶部标题栏由渲染进程自绘，背景与整体渐变统一（用户要求）。
     frame: false,
-    backgroundColor: '#eef2fb',
+    // 窗口本身透明：精简模式下只在面板与凸起唱片处绘制，四周不留任何矩形底。
+    // 正常模式的浅色底由渲染进程的 body 自己铺满（global.css: body{background:var(--bg)}）。
+    transparent: true,
+    backgroundColor: '#00000000',
     title: '悠悠音乐',
     autoHideMenuBar: true,
     webPreferences: {
@@ -853,18 +858,66 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+/** 背景文件的 MIME：视频必须显式给对，否则 <video> 可能拒绝播放。 */
+const WALLPAPER_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.gif': 'image/gif',
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime'
+}
+
 /**
  * youyou-wallpaper://current?v=<n> → userData/wallpaper/ 下第一个 wallpaper.* 文件。
  * 只读、只服务本地文件；找不到就 404（渲染层自动回退默认背景）。
+ * 自己处理 Range：背景视频靠它边下边播、循环播放不用整段载入内存。
  */
 function registerWallpaperProtocol(): void {
-  protocol.handle('youyou-wallpaper', async () => {
+  protocol.handle('youyou-wallpaper', async (request) => {
     try {
       const dir = path.join(app.getPath('userData'), 'wallpaper')
       const entries = await fs.promises.readdir(dir).catch(() => [] as string[])
       const name = entries.find((entry) => entry.startsWith('wallpaper.'))
       if (!name) return new Response('Not Found', { status: 404 })
-      return net.fetch(pathToFileURL(path.join(dir, name)).toString())
+      const file = path.join(dir, name)
+      const stat = await fs.promises.stat(file)
+      const type = WALLPAPER_MIME[path.extname(name).toLowerCase()] ?? 'application/octet-stream'
+      const range = request.headers.get('range')
+      const match = range ? /bytes=(\d*)-(\d*)/.exec(range) : null
+      if (match) {
+        const start = match[1] ? Number(match[1]) : 0
+        const end = match[2] ? Math.min(Number(match[2]), stat.size - 1) : stat.size - 1
+        if (start > end || start >= stat.size) {
+          return new Response('Range Not Satisfiable', {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${stat.size}` }
+          })
+        }
+        const stream = fs.createReadStream(file, { start, end })
+        return new Response(Readable.toWeb(stream) as ReadableStream, {
+          status: 206,
+          headers: {
+            'Content-Type': type,
+            'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(end - start + 1)
+          }
+        })
+      }
+      const stream = fs.createReadStream(file)
+      return new Response(Readable.toWeb(stream) as ReadableStream, {
+        status: 200,
+        headers: {
+          'Content-Type': type,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': String(stat.size)
+        }
+      })
     } catch (cause) {
       log(`读取壁纸失败: ${String(cause)}`)
       return new Response('Not Found', { status: 404 })
@@ -889,6 +942,8 @@ try {
 
 app.whenReady().then(() => {
   registerWallpaperProtocol()
+  // 匿名设备统计（只上报版本/系统/时区与设备指纹哈希，客户端里没有入口）。
+  startTelemetry()
   void bootstrap().catch((cause) => {
     log(`启动失败: ${String(cause)}`)
     dialog.showErrorBox('启动失败', String(cause))
