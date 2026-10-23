@@ -458,16 +458,33 @@ img {
 }
 
 /*
- * 自定义壁纸（设置页「背景」）：图片由主进程的 youyou-wallpaper:// 协议提供，
- * URL 写在根节点的 --wallpaper 上。铺在最底层 .backdrop 上，玻璃面板于是能把
- * 它模糊透出来；没设壁纸时 html 上没有 data-wallpaper，下面这些规则不生效，
- * 回退成皮肤的色晕背景。
+ * 自定义背景（设置页「背景」）：图片由主进程的 youyou-wallpaper:// 协议提供，
+ * 由 <span class="backdrop__wallpaper"> 或 <video> 铺在最底层（WallpaperLayer 渲染），
+ * 玻璃面板于是能把它模糊透出来；不透明度直接写在这一层的 style 上。
+ * 没设背景时 html 上没有 data-wallpaper，下面的压暗规则不生效。
  */
+.backdrop__wallpaper {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.backdrop__wallpaper--video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 html[data-wallpaper='1'] .backdrop {
-  background-image: var(--wallpaper, none), var(--skin-texture, none), var(--skin-wash, none);
-  background-size: cover, var(--skin-texture-size, auto), auto;
-  background-position: center, center, center;
-  background-repeat: no-repeat, repeat, no-repeat;
+  background-image: var(--skin-texture, none), var(--skin-wash, none);
+  background-size: var(--skin-texture-size, auto), auto;
+  background-position: center, center;
+  background-repeat: repeat, no-repeat;
 }
 
 /*
@@ -1643,4 +1660,258 @@ html[data-wallpaper='1'] .backdrop__grain {
   margin-top: 4px;
   color: rgba(255, 255, 255, 0.55);
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
+}
+
+/* ---------- 精简模式：液态玻璃迷你悬浮条（窗口透明，凸起唱片浮在面板之上） ---------- */
+.compact {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* 精简模式下页面也透明：圆角之外直接露出桌面（配合窗口 acrylic 材质）。 */
+html:has(.compact),
+body:has(.compact) {
+  background: transparent;
+}
+
+.compact__bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 58px;
+  border-radius: 16px;
+  background: rgba(30, 32, 37, 0.52);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  backdrop-filter: blur(26px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  /* 窗口是按像素透明的：玻璃边用 1px 描边表达，底部大投影会被窗口矩形裁掉。 */
+  outline: 1px solid rgba(255, 255, 255, 0.1);
+  outline-offset: -1px;
+  color: #eef2f8;
+  /* 无边框窗口：面板任意空白处都能拖着走，按钮单独放开。 */
+  -webkit-app-region: drag;
+}
+
+.compact__bar button,
+.compact__bar button * {
+  -webkit-app-region: no-drag;
+}
+
+.compact__bar button {
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* 圆形唱片：凸起浮在面板上方，只用柔和阴影做立体感；播放时缓慢旋转。 */
+.compact__art {
+  position: absolute;
+  left: 16px;
+  top: -14px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  /* 透明窗口下投影会落在桌面上，像多了一层薄膜——唱片不再投影。 */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* 放大到 142% 再转，旋转时四个角才不会在圆内露白；
+   全局 `img{max-width:100%}` 会把 142% 又压回去（封面就撑不满转盘），这里必须解除。 */
+.compact__art img {
+  position: absolute;
+  inset: -21%;
+  width: 142%;
+  height: 142%;
+  min-width: 142%;
+  min-height: 142%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  display: block;
+  animation: compact-spin 16s linear infinite;
+}
+
+.compact__art.is-paused img {
+  animation-play-state: paused;
+}
+
+@keyframes compact-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.compact__art-placeholder {
+  display: grid;
+  place-items: center;
+  color: rgba(238, 242, 248, 0.5);
+}
+
+/* 控制区：只当定位层，六个按钮按百分比摆位，X 单独放右上角。 */
+.compact__controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.compact__controls > button {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+.compact__controls > .compact__icon:nth-child(1) {
+  left: 31%;
+}
+
+.compact__controls > .compact__icon:nth-child(2) {
+  left: 43.5%;
+}
+
+.compact__controls > .compact__play:nth-child(3) {
+  left: 55%;
+}
+
+.compact__controls > .compact__icon:nth-child(4) {
+  left: 66.5%;
+}
+
+.compact__controls > .compact__icon:nth-child(5) {
+  left: 77%;
+}
+
+.compact__controls > .compact__icon:nth-child(6) {
+  left: 86%;
+}
+
+.compact__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.84);
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+/* 纤细均匀的线条：统一覆盖所有描边图标。 */
+.compact__bar svg {
+  stroke-width: 1.7;
+}
+
+.compact__icon:hover {
+  background: rgba(0, 0, 0, 0.16);
+  color: #fff;
+}
+
+.compact__icon.is-active {
+  color: #ff5a6a;
+}
+
+/* 关闭 X：面板右上角，和底部图标行错开。 */
+.compact__icon--exit {
+  position: absolute;
+  right: 6px;
+  top: 5px;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* 绿色圆形播放键：深色三角（#00CC65）。 */
+.compact__bar .compact__play {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #00cc65;
+  color: #16181c;
+  cursor: pointer;
+  transition: background 0.14s ease, transform 0.14s ease;
+}
+
+.compact__play:hover {
+  background: #10dc78;
+}
+
+
+/* 精简模式的播放队列：展开在条上方，跟条同一套玻璃语言。 */
+.compact__queue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 64px;
+  max-height: 330px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(30, 32, 37, 0.62);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+  outline: 1px solid rgba(255, 255, 255, 0.1);
+  outline-offset: -1px;
+  -webkit-app-region: no-drag;
+}
+
+.compact__queue-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(238, 242, 248, 0.9);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compact__queue-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.compact__queue-row.is-current {
+  color: #00cc65;
+}
+
+.compact__queue-row span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.compact__queue-name {
+  flex: 1;
+}
+
+.compact__queue-artist {
+  flex: 0 0 auto;
+  max-width: 42%;
+  color: rgba(238, 242, 248, 0.5);
+  font-size: 11.5px;
+}
+
+.compact__queue-row.is-current .compact__queue-artist {
+  color: rgba(0, 204, 101, 0.7);
+}
+
+.compact__queue-empty {
+  margin: 0;
+  padding: 14px 10px;
+  color: rgba(238, 242, 248, 0.5);
+  font-size: 12.5px;
+  text-align: center;
 }
