@@ -32,3 +32,6 @@ website/xz/
 website/downloads/
 # 宝塔在站点目录里生成的环境文件（含服务器路径，属服务器侧配置）
 website/.user.ini
+
+# 多轮构建的临时输出目录（release-build2/…），体积大不入库
+release-build*/
