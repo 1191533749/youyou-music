@@ -251,6 +251,16 @@ export function registerPlayerHandlers(context: AppContext): void {
     return context.player.snapshot()
   })
 
+  defineHandler('player:playIndex', async ({ index }) => {
+    await context.player.playIndex(index, { keepQueue: true })
+    return context.player.snapshot()
+  })
+
+  defineHandler('player:move', async ({ from, to }) => {
+    await context.player.moveInQueue(from, to)
+    return context.player.snapshot()
+  })
+
   defineHandler('player:clearQueue', async () => {
     await context.player.clearQueue()
     return context.player.snapshot()
