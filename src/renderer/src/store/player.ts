@@ -112,6 +112,10 @@ export interface PlayerStore {
   setShuffle: (shuffle: boolean) => Promise<void>
   setRepeat: (mode: RepeatMode) => Promise<void>
   removeAt: (indices: number[]) => Promise<void>
+  /** 拖拽重排：把第 from 首挪到第 to 首。 */
+  move: (from: number, to: number) => Promise<void>
+  /** 直接播队列里的第 index 首（精简模式的队列面板用）。 */
+  playIndex: (index: number) => Promise<void>
   clearQueue: () => Promise<void>
   setQuality: (quality: string) => Promise<void>
   append: (tracks: TrackDTO[]) => Promise<void>
@@ -154,6 +158,8 @@ export function usePlayerStore(): PlayerStore {
       setShuffle: (shuffle) => command('player:setShuffle', { shuffle }),
       setRepeat: (mode) => command('player:setRepeat', { mode }),
       removeAt: (indices) => command('player:removeAt', { indices }),
+      move: (from, to) => command('player:move', { from, to }),
+      playIndex: (index) => command('player:playIndex', { index }),
       clearQueue: () => command('player:clearQueue'),
       setQuality: (quality) => command('player:setQuality', { quality }),
       append: (tracks) => command('player:append', { tracks })
