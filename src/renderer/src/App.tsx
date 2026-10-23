@@ -35,12 +35,23 @@ import {
   IconCalendar,
   IconClose,
   IconCloud,
+  IconCompact,
   IconCompass,
+  IconDisc,
+  IconBrokenHeart,
   IconGift,
+  IconHeart,
+  IconHeartFilled,
   IconHome,
   IconLibrary,
   IconMaximize,
   IconMinimize,
+  IconMusic,
+  IconNext,
+  IconPause,
+  IconPlay,
+  IconPrevious,
+  IconQueue,
   IconRadio,
   IconRestore,
   IconSearch,
@@ -49,6 +60,8 @@ import {
   LogoMark
 } from './components/Icons'
 import { call, onEvent } from './lib/ipc'
+import { clearLikeOverride, isLiked, markLike } from './lib/likes'
+import { currentWallpaper, subscribeWallpaper, wallpaperUrl } from './lib/appearance'
 import { applyLyricFont } from './lib/fonts'
 import {
   checkForUpdateInteractive,
@@ -95,6 +108,16 @@ function Shell(): JSX.Element {
   const auth = useAuthStore()
   const player = usePlayerStore()
   const [error, setError] = useState<string | undefined>()
+  /** 精简模式：窗口缩成一条悬浮播放条（主进程改窗口尺寸与置顶，见 window:setCompact）。 */
+  const [compact, setCompact] = useState(false)
+  const enterCompact = (): void => {
+    setCompact(true)
+    void call('window:setCompact', { compact: true })
+  }
+  const exitCompact = (): void => {
+    setCompact(false)
+    void call('window:setCompact', { compact: false })
+  }
   const [info, setInfo] = useState<AppInfoDTO | undefined>()
   /**
    * 侧栏账号头像：只在预加载真的成功后才挂 <img>，失败/被拦截时退回 .sidebar__account-fallback。
@@ -142,6 +165,27 @@ function Shell(): JSX.Element {
     return onEvent('app:error', (payload) => setError(payload.message))
   }, [])
 
+  useEffect(() => {
+    // 空格 = 播放/暂停（全局）。之前只有播放按钮拿到键盘焦点时，浏览器的原生
+    // 空格才会“点击”它；用户要的是整窗状态下按空格直接控制播放。
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space' || event.repeat) return
+      if (event.ctrlKey || event.altKey || event.metaKey) return
+      const target = event.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        // 输入框/选择器里不劫持，避免打字、选值被空格打断。
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return
+      }
+      // 拦掉默认行为：焦点若正好在按钮上，原生空格会触发按钮点击，与这里的
+      // toggle 叠加成“切换两次”，看起来就像没反应。
+      event.preventDefault()
+      void player.toggle()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [player])
+
   if (auth.loading) {
     return (
       <>
@@ -154,12 +198,16 @@ function Shell(): JSX.Element {
     )
   }
 
+  if (compact) {
+    return <CompactBar onExit={exitCompact} />
+  }
+
   return (
     <>
       <Backdrop />
       {updatePrompt}
       <div className="app-root">
-        <TitleBar />
+        <TitleBar onCompact={enterCompact} />
         <div className="app">
           {/* 品牌移到顶部标题栏；侧栏只保留导航与账号。 */}
           <aside className="sidebar">
@@ -231,7 +279,7 @@ function Shell(): JSX.Element {
 }
 
 /** 顶部标题栏：无边框窗口自绘，品牌在左、窗口控制按钮在右，背景透明与整体统一。 */
-function TitleBar(): JSX.Element {
+function TitleBar({ onCompact }: { onCompact: () => void }): JSX.Element {
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
@@ -246,6 +294,15 @@ function TitleBar(): JSX.Element {
         <span className="titlebar__name">悠悠音乐</span>
       </div>
       <div className="titlebar__controls">
+        <button
+          type="button"
+          className="titlebar__btn"
+          aria-label="精简模式"
+          title="精简模式"
+          onClick={onCompact}
+        >
+          <IconCompact size={15} />
+        </button>
         <button type="button" className="titlebar__btn" aria-label="最小化" onClick={() => void call('window:minimize')}>
           <IconMinimize size={15} />
         </button>
@@ -269,11 +326,262 @@ function TitleBar(): JSX.Element {
 function Backdrop(): JSX.Element {
   return (
     <div className="backdrop" aria-hidden>
+      <WallpaperLayer />
       <span className="backdrop__blob backdrop__blob--a" />
       <span className="backdrop__blob backdrop__blob--b" />
       <span className="backdrop__blob backdrop__blob--c" />
       <span className="backdrop__blob backdrop__blob--d" />
       <span className="backdrop__grain" />
+    </div>
+  )
+}
+
+/**
+ * 自定义背景层（图片铺满 / 视频静音循环）。不透明度跟着设置里的滑杆走，
+ * 视频用 youyou-wallpaper:// 协议读主进程 userData 里的文件。
+ */
+function WallpaperLayer(): JSX.Element | null {
+  const [wallpaper, setWallpaper] = useState(currentWallpaper())
+  useEffect(() => subscribeWallpaper(setWallpaper), [])
+  if (!wallpaper.set) return null
+  const url = wallpaperUrl(wallpaper.version)
+  if (wallpaper.kind === 'video') {
+    return (
+      <video
+        className="backdrop__wallpaper backdrop__wallpaper--video"
+        src={url}
+        autoPlay
+        muted
+        loop
+        playsInline
+        style={{ opacity: wallpaper.opacity }}
+        aria-hidden
+      />
+    )
+  }
+  return (
+    <div
+      className="backdrop__wallpaper"
+      style={{ backgroundImage: `url('${url}')`, opacity: wallpaper.opacity }}
+      aria-hidden
+    />
+  )
+}
+
+/**
+ * 精简模式：一条悬浮播放条（封面、喜欢、上一首/播放/下一首、播放模式、队列、退出）。
+ * 背后铺当前封面的模糊放大图，观感对齐参考图。
+ */
+function CompactBar({ onExit }: { onExit: () => void }): JSX.Element {
+  const player = usePlayerStore()
+  const navigation = useNavigation()
+  const auth = useAuthStore()
+  const { state, current } = player
+  const artURL =
+    coverUrl(current?.album.picUrl, 240) ?? coverUrl(current?.artists[0]?.picUrl, 240)
+  const artReady = useImageReady(artURL)
+
+  const [playIntent, setPlayIntent] = useState<boolean | undefined>(undefined)
+  const intentTimer = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    setPlayIntent(undefined)
+    window.clearTimeout(intentTimer.current)
+  }, [state.playing])
+  useEffect(() => () => window.clearTimeout(intentTimer.current), [])
+  const shownPlaying = playIntent ?? state.playing
+  const togglePlayback = (): void => {
+    setPlayIntent(!shownPlaying)
+    window.clearTimeout(intentTimer.current)
+    intentTimer.current = window.setTimeout(() => setPlayIntent(undefined), 1500)
+    void player.toggle()
+  }
+
+  // 精简模式自己的播放队列：点列表按钮在条上方展开，不跳回主窗口。
+  const [queueOpen, setQueueOpen] = useState(false)
+  const toggleQueue = (): void => {
+    const next = !queueOpen
+    setQueueOpen(next)
+    void call('window:setCompactQueue', { open: next })
+  }
+  useEffect(() => {
+    void call('window:setCompactQueue', { open: false })
+    setQueueOpen(false)
+  }, [])
+
+  const [liked, setLiked] = useState(false)
+  const trackId = current?.id
+  useEffect(() => {
+    if (!auth.loggedIn || trackId === undefined) {
+      setLiked(false)
+      return
+    }
+    let cancelled = false
+    void call('library:overview')
+      .then((overview) => {
+        if (!cancelled) setLiked(isLiked(trackId, overview.likedTrackIDs))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [auth.loggedIn, trackId])
+
+  const toggleLike = async (): Promise<void> => {
+    if (!current) return
+    const next = !liked
+    setLiked(next)
+    markLike(current.id, next)
+    try {
+      await call('library:likeTrack', { id: current.id, like: next })
+    } catch {
+      clearLikeOverride(current.id)
+      setLiked(!next)
+    }
+  }
+
+  /** 精简条的「破碎爱心（不喜欢）」：网易云曲目上报不喜欢拿替换曲，然后统一切下一曲。 */
+  const dislikeCurrent = async (): Promise<void> => {
+    const track = current
+    if (!track) return
+    if (track.id > 0) {
+      try {
+        await call('home:dislikeDaily', { trackID: track.id })
+      } catch {
+        // 未登录 / 接口失败：仍然按「跳过」处理
+      }
+    }
+    await player.next()
+  }
+
+  const openFull = (openQueue = false): void => {
+    if (queueOpen) {
+      setQueueOpen(false)
+      void call('window:setCompactQueue', { open: false })
+    }
+    onExit()
+    navigation.push(openQueue ? { name: 'nowPlaying', openQueue: true } : { name: 'nowPlaying' })
+  }
+
+  return (
+    <div className="compact">
+      <div className="compact__bar">
+        {queueOpen ? (
+          <div className="compact__queue" role="listbox" aria-label="播放队列">
+            {state.queue.length === 0 ? (
+              <p className="compact__queue-empty">队列是空的</p>
+            ) : (
+              state.queue.map((track, index) => (
+                <button
+                  key={`${track.id}-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === state.index}
+                  className={`compact__queue-row${index === state.index ? ' is-current' : ''}`}
+                  title={`${track.name} - ${track.artists.map((a) => a.name).join('/')}`}
+                  onClick={() => {
+                    void player.playIndex(index)
+                    setQueueOpen(false)
+                    void call('window:setCompactQueue', { open: false })
+                  }}
+                >
+                  <span className="compact__queue-name">{track.name}</span>
+                  <span className="compact__queue-artist">
+                    {track.artists.map((a) => a.name).join('/')}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className={`compact__art${shownPlaying ? '' : ' is-paused'}`}
+          title="打开播放页"
+          onClick={() => openFull()}
+        >
+          {artURL && artReady ? (
+            <img src={artURL} alt="" />
+          ) : (
+            <span className="compact__art-placeholder" aria-hidden="true">
+              <IconMusic size={18} />
+            </span>
+          )}
+        </button>
+        <div className="compact__controls">
+        <button
+          type="button"
+          className={`compact__icon${liked ? ' is-active' : ''}`}
+          title={liked ? '取消喜欢' : '喜欢'}
+          aria-label={liked ? '取消喜欢' : '喜欢'}
+          onClick={() => void toggleLike()}
+        >
+          {liked ? <IconHeartFilled size={17} /> : <IconHeart size={17} />}
+        </button>
+        <button
+          type="button"
+          className="compact__icon"
+          title="上一首"
+          aria-label="上一首"
+          onClick={() => void player.previous()}
+        >
+          <IconPrevious size={17} />
+        </button>
+        <button
+          type="button"
+          className="compact__play"
+          title={shownPlaying ? '暂停' : '播放'}
+          aria-label={shownPlaying ? '暂停' : '播放'}
+          aria-pressed={shownPlaying}
+          aria-busy={state.loading}
+          onClick={togglePlayback}
+        >
+          {state.loading ? (
+            <IconDisc size={18} className="spin" />
+          ) : shownPlaying ? (
+            <IconPause size={18} />
+          ) : (
+            <IconPlay size={18} />
+          )}
+        </button>
+        <button
+          type="button"
+          className="compact__icon"
+          title="下一首"
+          aria-label="下一首"
+          onClick={() => void player.next()}
+        >
+          <IconNext size={17} />
+        </button>
+        <button
+          type="button"
+          className="compact__icon"
+          title="不喜欢（跳过当前）"
+          aria-label="不喜欢（跳过当前）"
+          onClick={() => void dislikeCurrent()}
+        >
+          <IconBrokenHeart size={17} />
+        </button>
+        <button
+          type="button"
+          className={`compact__icon${queueOpen ? ' is-active' : ''}`}
+          title="播放队列"
+          aria-label="播放队列"
+          aria-pressed={queueOpen}
+          onClick={toggleQueue}
+        >
+          <IconQueue size={17} />
+        </button>
+        </div>
+        <button
+          type="button"
+          className="compact__icon compact__icon--exit"
+          title="退出精简模式"
+          aria-label="退出精简模式"
+          onClick={onExit}
+        >
+          <IconClose size={15} />
+        </button>
+      </div>
     </div>
   )
 }
