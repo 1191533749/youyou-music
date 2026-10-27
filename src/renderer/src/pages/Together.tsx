@@ -20,6 +20,8 @@ import type { RefObject } from 'react'
 import { usePlayerStore } from '../store/player'
 import { useTogetherStore } from '../store/together'
 import { useAuthStore } from '../store/auth'
+import { useAccountStore } from '../store/account'
+import { relayIdentity } from '../lib/relayIdentity'
 import { useNavigation } from '../store/navigation'
 import { call } from '../lib/ipc'
 import { IconGift, IconHeart, IconMusic, IconSend, IconUser } from '../components/Icons'
@@ -147,6 +149,14 @@ export default function Together(): JSX.Element {
   const together = useTogetherStore()
   const player = usePlayerStore()
   const auth = useAuthStore()
+  const account = useAccountStore()
+  /** 自建账号或网易云账号任一登录即可使用一起听。 */
+  /** 中继身份：悠悠账号优先、网易云兜底（连接本身由 App 外壳在启动时负责）。 */
+  const identity = relayIdentity(auth, account)
+  const signedIn = identity.signedIn
+  const relayUid = identity.uid
+  const relayNickname = identity.nickname
+  const relayAvatar = identity.avatar
   const navigation = useNavigation()
   const { state } = together
 
@@ -165,27 +175,6 @@ export default function Together(): JSX.Element {
   const [useCustom, setUseCustom] = useState(false)
   const [customAmount, setCustomAmount] = useState('')
 
-  // 登录**且账号资料就绪**（auth.profile.userId 到手）后才自动连中继：连得太早时 hello
-  // 里还没有 uid 与头像，服务器会按「听友N」把本人登记成一个无头像的陌生听友——雷达上
-  // 那个幽灵听友其实就是自己。connect 时把 uid/昵称/头像直接灌进第一条 hello，保证
-  // 服务器从第一刻起就按真实账号登记。用户不需要点任何按钮，也没有断开入口（断线由
-  // relay 客户端自己重连）。退出登录会重置标记，重新登录时再次自动连接。
-  const autoConnected = useRef(false)
-  const profileUserId = auth.profile?.userId
-  useEffect(() => {
-    if (!auth.loggedIn || profileUserId == null) {
-      autoConnected.current = false
-      return
-    }
-    if (autoConnected.current) return
-    autoConnected.current = true
-    together.connect({
-      uid: String(profileUserId),
-      nickname: auth.profile?.nickname,
-      avatar: auth.profile?.avatarUrl
-    })
-  }, [auth.loggedIn, profileUserId, together])
-
   // 登录后拉一次账号资料（性别 / 年龄 / 地区 / 签名），灌进 profile 供找听友使用。
   const detailLoaded = useRef(false)
   useEffect(() => {
@@ -194,7 +183,7 @@ export default function Together(): JSX.Element {
     void call('auth:userDetail')
       .then((info) => {
         together.setProfile({
-          uid: String(auth.profile?.userId ?? ''),
+          uid: relayUid,
           nickname: auth.profile?.nickname,
           avatar: auth.profile?.avatarUrl,
           gender: info.gender,
@@ -209,10 +198,10 @@ export default function Together(): JSX.Element {
 
   // 昵称始终跟随登录账号。
   useEffect(() => {
-    if (!auth.profile?.nickname) return
-    together.setProfile({ nickname: auth.profile.nickname, avatar: auth.profile.avatarUrl })
+    if (!relayNickname) return
+    together.setProfile({ nickname: relayNickname, avatar: relayAvatar })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.profile?.nickname, auth.profile?.avatarUrl])
+  }, [relayNickname, relayAvatar])
 
   // 房主广播播放状态（store 内已做 900ms 节流）。
   const { track, playing, position } = player.state
@@ -244,7 +233,7 @@ export default function Together(): JSX.Element {
         <h1 className="page__title">一起听</h1>
       </header>
 
-      {auth.loading ? null : !auth.loggedIn ? (
+      {auth.loading || account.loading ? null : !signedIn ? (
         <section className="together__gate glass">
           <span className="together__gate-icon">
             <IconUser size={22} />
@@ -268,11 +257,11 @@ export default function Together(): JSX.Element {
           <section className="together__connect glass">
             <div className="together__me">
               <span className="together__me-avatar">
-                <ListenerAvatar src={auth.profile?.avatarUrl} size={19} />
+                <ListenerAvatar src={relayAvatar} size={19} />
               </span>
               <div className="together__me-info">
-                <span className="together__me-name">{auth.profile?.nickname ?? state.profile.nickname ?? '未命名听友'}</span>
-                <span className="together__me-meta">{myMeta || '资料同步中…'}</span>
+                <span className="together__me-name">{relayNickname ?? state.profile.nickname ?? '未命名听友'}</span>
+                <span className="together__me-meta">{myMeta || (auth.loggedIn ? '资料同步中…' : '悠悠账号')}</span>
                 {state.profile.signature ? <span className="together__me-sign">{state.profile.signature}</span> : null}
               </div>
             </div>
@@ -542,7 +531,7 @@ export default function Together(): JSX.Element {
       {/* 赠礼动效浮层：只吃最新一条事件，按 at 去重，纯装饰不拦截点击。 */}
       <GiftOverlay event={state.giftEvents[state.giftEvents.length - 1]} />
 
-      {auth.loggedIn && rechargeOpen ? (
+      {signedIn && rechargeOpen ? (
         <div className="together__modal">
           <div className="together__dialog glass">
             <h3 className="together__h3">充值余额</h3>
