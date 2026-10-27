@@ -3,9 +3,49 @@
  * recent plays, the cloud drive, and the mutations that change them.
  */
 import { defineHandler } from './registry.js'
-import { mappingContextFrom, toAlbumDTO, toArtistDTO, toPlaylistDTO, toTracksDTO } from './mappers.js'
+import { recallExternal } from '../external/registry.js'
+import { httpsCover, mappingContextFrom, toAlbumDTO, toArtistDTO, toPlaylistDTO, toTracksDTO } from './mappers.js'
 import type { AppContext } from '../context.js'
 import type { CloudSongDTO } from '@shared/ipc'
+import type { YYTrackRefDTO } from '@shared/types'
+
+
+/**
+ * 把渲染层传来的曲目 id 还原成自建账号的收藏条目：
+ * 正 id 是网易云曲目（取详情补歌名/歌手/封面），负 id 是站外合成 id（从登记表取原样曲目）。
+ * 没有网易云登录时，收藏必须走这里——这正是「站外音源的歌收不了」的修法。
+ */
+async function refOf(context: AppContext, id: number): Promise<YYTrackRefDTO | undefined> {
+  if (id < 0) {
+    const external = recallExternal(id)
+    if (!external) return undefined
+    return {
+      key: `${external.source}:${external.sourceId}`,
+      source: external.source,
+      sourceId: external.sourceId,
+      name: external.name,
+      artist: external.artists,
+      album: external.album,
+      cover: httpsCover(external.coverUrl),
+      durationMs: external.durationMS,
+      addedAt: Date.now()
+    }
+  }
+  const response = await context.api.songDetails([id]).catch(() => undefined)
+  const track = response ? toTracksDTO(response.songs, mappingContextFrom(context))[0] : undefined
+  if (!track) return undefined
+  return {
+    key: `netease:${id}`,
+    source: 'netease',
+    sourceId: String(id),
+    name: track.name,
+    artist: track.artists.map((artist) => artist.name).join(' / '),
+    album: track.album?.name,
+    cover: httpsCover(track.album?.picUrl),
+    durationMs: track.durationMS,
+    addedAt: Date.now()
+  }
+}
 
 function context0(context: AppContext) {
   return mappingContextFrom(context)
@@ -34,9 +74,14 @@ export function registerLibraryHandlers(context: AppContext): void {
       throw new Error('服务器连接失败，请检查网络后重试')
     }
     if (!context.client.isLoggedIn) {
-      // Browsing without a login still works: the daily recommendations and
-      // public playlists are served, but the personal lists are empty.
-      return { playlists: [], likedTrackIDs: [], albums: [], artists: [], recent: [] }
+      // 没有网易云登录时，个人库由我们自己的账号接管（自建收藏 / 自建歌单）。
+      // 这里只把「网易云曲目」的收藏 id 还给渲染层，心形状态照旧用 likedTrackIDs 判断；
+      // 站外曲目的收藏在自建「我的音乐」页里直接读 account:* 数据。
+      const liked = context.youyouAccount.favoriteList
+        .filter((item) => item.source === 'netease')
+        .map((item) => Number(item.sourceId))
+        .filter((value) => Number.isFinite(value) && value > 0)
+      return { playlists: [], likedTrackIDs: liked, albums: [], artists: [], recent: [] }
     }
     const profile = await requireProfile(context)
     const uid = profile.userId
@@ -77,6 +122,12 @@ export function registerLibraryHandlers(context: AppContext): void {
   })
 
   defineHandler('library:likeTrack', async ({ id, like }) => {
+    if (!context.client.isLoggedIn) {
+      const ref = await refOf(context, id)
+      if (!ref) throw new Error('这首歌暂时收不进收藏')
+      await context.youyouAccount.toggleFavorite(ref, like)
+      return
+    }
     await context.api.likeTrack(id, like)
   })
 
