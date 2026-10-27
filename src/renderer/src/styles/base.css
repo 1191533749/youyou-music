@@ -713,3 +713,183 @@ button.source-track:hover {
   padding: 6px;
   border: 1px solid var(--glass-border);
 }
+
+/* --- 登录页（正式版） -------------------------------------------------- */
+
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 40px 24px;
+  background: var(--bg);
+}
+
+.login__panel {
+  width: 352px;
+  padding: 30px 30px 26px;
+  border-radius: 10px;
+  border: 1px solid var(--border-solid);
+  background: var(--glass-solid-strong);
+  box-shadow: var(--glass-shadow-soft);
+  text-align: left;
+}
+
+.login__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 26px;
+}
+
+.login__brand {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.login__form {
+  display: block;
+}
+
+.login__title {
+  margin: 0 0 20px;
+  font-size: 19px;
+  font-weight: 620;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.login__mail {
+  margin: -12px 0 16px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.login__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.login__field input {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong-solid);
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.login__field input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.login__field input:focus {
+  border-color: var(--accent);
+}
+
+.login__submit {
+  width: 100%;
+  height: 40px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.login__submit:not(:disabled):hover {
+  filter: brightness(1.07);
+}
+
+.login__submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.login__links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.login__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.login__link:not(:disabled):hover {
+  color: var(--accent);
+}
+
+.login__link:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.login__note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* --- 登录页布局修正（覆盖上面那版） ------------------------------------ */
+/*
+ * 之前给 .login 铺了 var(--bg) 实底，而它只是 .content 里的一块普通流式区块，
+ * 结果在内容区左上角糊出一个惨白大方块，非常难看。
+ * 现在：背景透明（露出内容区自己的玻璃），占满内容区高度，卡片在垂直方向居中。
+ */
+.page-slot:has(> .login) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.login {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  padding: 32px 24px;
+  background: transparent;
+}
+
+.login__panel {
+  width: 360px;
+  padding: 30px 30px 28px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-solid-strong);
+  backdrop-filter: blur(var(--blur-md)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(160%);
+  box-shadow: var(--glass-shadow);
+}
+
+/* 设置页账号行：头像缩略 + 昵称 */
+.settings__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings__avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-2, rgba(255, 255, 255, 0.16));
+}
