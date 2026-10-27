@@ -21,6 +21,7 @@ import {
   usePlayerStore
 } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
+import { useAccountStore } from '../store/account'
 import {
   IconCalendar,
   IconDiamond,
@@ -45,14 +46,22 @@ export default function Home(): JSX.Element {
   const navigation = useNavigation()
   const player = usePlayerStore()
   const auth = useAuthStore()
+  const account = useAccountStore()
+  /** 自建账号登录即可看到个性化内容；网易云账号只是音源增强。 */
+  const signedIn = auth.loggedIn || account.loggedIn
 
   // 每块各自取数：某一块失败只影响它自己，重试也只重试那一块。
   const feed = useAsync<HomeFeedDTO>(() => call('home:feed'), [])
   // 今日热歌：主进程从飙升榜 / 热歌榜 / 新歌榜随机洗牌取 12 首，每次进首页换一批；
   // 未登录返回空数组，所以这里沿用「登录后再请求」的写法，省一次无用的 IPC。
   const hot = useAsync<TrackDTO[]>(
-    () => (auth.loggedIn ? call('home:hotSongs') : Promise.resolve([])),
-    [auth.loggedIn]
+    () =>
+      auth.loggedIn
+        ? call('home:hotSongs')
+        : account.loggedIn
+          ? call('account:daily')
+          : Promise.resolve([]),
+    [auth.loggedIn, account.loggedIn]
   )
   const artists = useAsync<ArtistSummaryDTO[]>(
     () => call('explore:topArtists', { limit: ARTIST_LIMIT }),
@@ -76,8 +85,8 @@ export default function Home(): JSX.Element {
   }, [feedData])
 
   const hotSongs = hot.data ?? []
-  const nickname = auth.profile?.nickname
-  const title = auth.loggedIn && nickname ? `${greeting()}，${nickname}` : '猜你喜欢'
+  const nickname = auth.profile?.nickname ?? account.profile?.nickname
+  const title = signedIn && nickname ? `${greeting()}，${nickname}` : '猜你喜欢'
 
   return (
     <div className="page home">
@@ -85,7 +94,7 @@ export default function Home(): JSX.Element {
         <div>
           <h1 className="page__title">{title}</h1>
           <div className="page__subtitle">
-            {auth.loggedIn ? '推荐每天更新' : '登录后可以拿到属于你的每日推荐'}
+            {signedIn ? '推荐每天更新' : '登录后可以拿到属于你的每日推荐'}
           </div>
         </div>
       </header>
@@ -108,7 +117,7 @@ export default function Home(): JSX.Element {
             ) : null
           }
         />
-        {!auth.loggedIn && !auth.loading ? (
+        {!signedIn && !auth.loading && !account.loading ? (
           <div className="home-hint">
             <div className="home-hint__title">登录后就能看到每日推荐</div>
             <button
@@ -121,7 +130,7 @@ export default function Home(): JSX.Element {
           </div>
         ) : (
           <SectionShell
-            loading={auth.loading || hot.loading}
+            loading={auth.loading || account.loading || hot.loading}
             error={hot.error}
             onRetry={hot.reload}
             isEmpty={hotSongs.length === 0}
