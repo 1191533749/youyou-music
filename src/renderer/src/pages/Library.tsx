@@ -1,691 +1,585 @@
 /**
- * 我的音乐 —— 顶部用户卡 + 三个区段入口卡（手机端「我的」页的排版）。
+ * 我的音乐 —— 自建账号的收藏与歌单。
  *
- * 三类数据来自同一次 `library:overview`，所以全部平铺在一个页面里：没有切换，
- * 也就没有「切过去才发现数据没加载」的等待。喜欢的歌曲另有一步：接口只给 id，
- * 详情要按批另取，所以它自己维护加载/错误状态，不拖累其它卡片。
+ * 布局按「账号条 + 分组卡」重做：一行账号信息，下面两张紧凑卡片，
+ * 空状态只占一行，不再有大块居中留白。
+ * 数据来自我们自己的服务器（`account:*`）；收藏条目存 `source + sourceId`，
+ * 所以汽水 / 酷狗 / 酷我 / QQ 源的歌也能收进来。
  */
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { usePlayerStore } from '../store/player'
+import { useAccountStore } from '../store/account'
+import { useNavigation } from '../store/navigation'
+import { call, formatDuration } from '../lib/contract'
+import { absoluteCover } from '../lib/covers'
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent
-} from 'react'
-import {
-  ArtCard,
-  SongList,
-  artistLine,
-  call,
-  coverUrl,
-  formatDuration,
-  formatPlayCount,
-  useAuthStore,
-  useNavigation,
-  usePlayerStore
-} from '../lib/contract'
-import { useAsync } from '../lib/hooks'
-import { applyLikeOverrides, clearLikeOverride, markLike } from '../lib/likes'
-import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
-import Dialog from '../components/Dialog'
-import { BackButton } from '../components/BackButton'
-import {
-  IconClock,
   IconHeartFilled,
-  IconMore,
+  IconMusic,
   IconPause,
+  IconPencil,
   IconPlay,
   IconPlus,
   IconQueue,
+  IconTrash,
   IconUser
 } from '../components/Icons'
+import AccountAvatar from '../components/AccountAvatar'
 import { useToast } from '../components/Toast'
-import type { LibraryDTO, PlayRecordDTO } from '@shared/ipc'
-import type { PlaylistSummaryDTO, TrackDTO } from '@shared/types'
+import type { ExternalItemSource, TrackDTO, YYTrackRefDTO } from '@shared/types'
 
 /**
- * 喜欢的歌曲接口只返回 id，详情要拿这批 id 去 song/detail 换。一次带太多 id
- * 服务端会拒绝，所以按 200 一批串行取 —— 并发几十个请求比慢一点更糟。
+ * 行内封面。收藏条目里的 `cover` 可能是网易云的 p1~p4 分片：
+ * p3 在部分网络下会一直卡在加载中（见 lib/format.ts 的说明），而且给非网易云
+ * 音源的图追加 `param=` 反而会 404 —— 所以这里只对网易云图加缩放参数，
+ * 加载失败先退回不带 param 的原图，再失败就用歌名 + 歌手在网易云重新找一张，
+ * 都失败才显示音符占位，不留破图。
  */
-const LIKED_BATCH = 200
-
-/** 最近播放默认只露几条，其余收在「展开」后面，免得单张卡吃掉整屏。 */
-const RECENT_PREVIEW = 6
-
-interface ConfirmRequest {
-  title: string
-  body: string
-  confirmLabel: string
-  run: () => void
-}
-
-interface MenuState {
-  x: number
-  y: number
-  items: ContextMenuItem[]
-}
-
-export default function Library(): JSX.Element {
-  const navigation = useNavigation()
-  const player = usePlayerStore()
-  const auth = useAuthStore()
-  const toast = useToast()
-
-  const overview = useAsync<LibraryDTO>(() => call('library:overview'), [])
-
-  // 本地副本：删除歌单、取消收藏、喜欢一首歌之后只改这里，不为了一个写操作
-  // 重新拉整个 overview。
-  const [playlists, setPlaylists] = useState<PlaylistSummaryDTO[]>([])
-  const [recent, setRecent] = useState<PlayRecordDTO[]>([])
-  // serverLikedIDs 是「服务器那份」，渲染统一走下面的 likedIDs（套了本地乐观覆盖）。
-  const [serverLikedIDs, setServerLikedIDs] = useState<Set<number>>(new Set())
-
-  const [likedTracks, setLikedTracks] = useState<TrackDTO[]>([])
-  const [likedLoading, setLikedLoading] = useState(false)
-  const [likedError, setLikedError] = useState<string | undefined>()
-
-  // 两张「预览 + 展开」卡的折叠状态，纯展示。
-  const [expanded, setExpanded] = useState<{ liked: boolean; recent: boolean }>({
-    liked: false,
-    recent: false
-  })
-
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [confirm, setConfirm] = useState<ConfirmRequest | undefined>()
-  const [menu, setMenu] = useState<MenuState | undefined>()
-  /** 头像与「喜欢的音乐」封面加载失败时退回各自现有的占位图标，不露出浏览器的破图图标。 */
-  const [avatarBroken, setAvatarBroken] = useState(false)
-  const [likedCoverBroken, setLikedCoverBroken] = useState(false)
-
-  // StrictMode 下 effect 会跑两次，详情只该取一轮。
-  const likedRequested = useRef(false)
-
-  useEffect(() => {
-    const data = overview.data
-    if (!data) return
-    setPlaylists(data.playlists)
-    setRecent(data.recent)
-    setServerLikedIDs(new Set(data.likedTrackIDs))
-  }, [overview.data])
-
-  /**
-   * 渲染用的喜欢集合 = 服务器数据 + 本地乐观覆盖。
-   * 重新拉 overview 时服务器那份可能还是旧的，套上覆盖后 TTL 内不会被盖回去
-   * —— 这正是「点完喜欢、鼠标一悬停又变回未喜欢」的根因。
-   */
-  const likedIDs = useMemo(() => applyLikeOverrides(serverLikedIDs), [serverLikedIDs])
-
-  const loadLiked = useCallback(async (ids: number[]): Promise<void> => {
-    if (ids.length === 0) {
-      setLikedTracks([])
-      return
-    }
-    setLikedLoading(true)
-    setLikedError(undefined)
-    try {
-      const collected: TrackDTO[] = []
-      for (let index = 0; index < ids.length; index += LIKED_BATCH) {
-        const batch = ids.slice(index, index + LIKED_BATCH)
-        collected.push(...(await call('track:detail', { ids: batch })))
-      }
-      setLikedTracks(collected)
-    } catch (cause) {
-      setLikedError(messageOf(cause))
-    } finally {
-      setLikedLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!overview.data || likedRequested.current) return
-    likedRequested.current = true
-    void loadLiked(overview.data.likedTrackIDs)
-  }, [overview.data, loadLiked])
-
-  /** 列表按 likedIDs 裁剪，取消喜欢后回滚只要还原 id 集合。 */
-  const visibleLiked = useMemo(
-    () => likedTracks.filter((track) => likedIDs.has(track.id)),
-    [likedTracks, likedIDs]
-  )
-
-  const toggleLike = async (track: TrackDTO): Promise<void> => {
-    const liked = likedIDs.has(track.id)
-    const next = new Set(serverLikedIDs)
-    if (liked) next.delete(track.id)
-    else next.add(track.id)
-    const previous = serverLikedIDs
-    // 乐观覆盖 + 乐观状态：刷新回来的旧数据在 TTL 内都盖不掉这一下。
-    markLike(track.id, !liked)
-    setServerLikedIDs(next)
-    try {
-      await call('library:likeTrack', { id: track.id, like: !liked })
-    } catch (cause) {
-      clearLikeOverride(track.id)
-      setServerLikedIDs(previous)
-      toast.show(`操作失败：${messageOf(cause)}`, 'error')
-    }
-  }
-
-  const createPlaylist = async (): Promise<void> => {
-    const name = newName.trim()
-    if (!name || busy) return
-    setBusy(true)
-    try {
-      await call('library:createPlaylist', { name })
-      setNewName('')
-      setCreating(false)
-      toast.show(`已创建歌单「${name}」`, 'success')
-      // 新歌单只有 id，没有封面和曲目数，本地补不出一张完整卡片，重取一次。
-      overview.reload()
-    } catch (cause) {
-      toast.show(`创建失败：${messageOf(cause)}`, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const deletePlaylist = async (playlist: PlaylistSummaryDTO): Promise<void> => {
-    try {
-      await call('library:deletePlaylist', { id: playlist.id })
-      setPlaylists((current) => current.filter((item) => item.id !== playlist.id))
-      toast.show(`已删除歌单「${playlist.name}」`, 'success')
-    } catch (cause) {
-      toast.show(`删除失败：${messageOf(cause)}`, 'error')
-    }
-  }
-
-  const unsubscribePlaylist = async (playlist: PlaylistSummaryDTO): Promise<void> => {
-    try {
-      await call('library:subscribePlaylist', { id: playlist.id, subscribe: false })
-      setPlaylists((current) => current.filter((item) => item.id !== playlist.id))
-      toast.show(`已取消收藏「${playlist.name}」`, 'success')
-    } catch (cause) {
-      toast.show(`取消收藏失败：${messageOf(cause)}`, 'error')
-    }
-  }
-
-  /**
-   * 卡片的「更多」按钮和右键走同一个菜单：按钮从自己下沿弹出（键盘也能点到），
-   * 右键跟随光标。
-   */
-  const openTileMenu = (event: MouseEvent<HTMLElement>, items: ContextMenuItem[]): void => {
-    event.preventDefault()
-    event.stopPropagation()
-    const fromPointer = event.type === 'contextmenu'
-    const rect = event.currentTarget.getBoundingClientRect()
-    setMenu({
-      x: fromPointer ? event.clientX : rect.right - 4,
-      y: fromPointer ? event.clientY : rect.bottom + 4,
-      items
-    })
-  }
-
-  const uid = auth.profile?.userId
-  const isMine = useCallback(
-    (playlist: PlaylistSummaryDTO): boolean =>
-      playlist.isLikedSongsList ||
-      // 归属优先看 userId；本页自己订阅的 auth:state 还没回来时退回 subscribed ——
-      // 网易云对「我创建的」返回 false，「我收藏的」返回 true。
-      (uid !== undefined ? playlist.creator?.userId === uid : !playlist.subscribed),
-    [uid]
-  )
-
-  const created = useMemo(() => playlists.filter(isMine), [playlists, isMine])
-  const collected = useMemo(() => playlists.filter((item) => !isMine(item)), [playlists, isMine])
-  const recentSongs = useMemo(() => recent.map((record) => record.song), [recent])
-
-  /**
-   * 整表播放：让主进程随机起播，「播放全部」不再永远从第一首开始。
-   * store 的 playTracks 还没有 randomStart 参数，所以这里直接走通道；主进程
-   * 每次状态变化都会广播 player:state，store 会自己跟上。
-   */
-  const playAll = (tracks: TrackDTO[]): void => {
-    if (tracks.length === 0) return
-    void call('player:playTracks', { tracks, startIndex: 0, randomStart: true }).catch(() => undefined)
-  }
-
-  /** 顶部用户卡的轻信息：只报真实存在的数字，没有就不显示，不硬凑。 */
-  const heroStats = [
-    playlists.length > 0 ? `${playlists.length} 个歌单` : '',
-    likedIDs.size > 0 ? `${likedIDs.size} 首喜欢` : '',
-  ].filter(Boolean)
-
-  // 封面优先用「我喜欢的音乐」歌单封面，没有就退到第一首的专辑图。
-  const likedCover = coverUrl(
-    playlists.find((item) => item.isLikedSongsList)?.coverURL ?? visibleLiked[0]?.album.picUrl,
-    160
-  )
-  const recentRows = expanded.recent ? recent : recent.slice(0, RECENT_PREVIEW)
-
-  // 换头像 / 换封面（或歌单封面后到）时重新尝试加载。
-  useEffect(() => setAvatarBroken(false), [auth.profile?.avatarUrl])
-  useEffect(() => setLikedCoverBroken(false), [likedCover])
-
-  if (overview.loading) {
-    return (
-      <div className="page">
-        <div className="page__header">
-          <h1 className="page__title">我的音乐</h1>
-        </div>
-        <div className="placeholder">正在加载你的音乐库</div>
-      </div>
-    )
-  }
-
-  if (overview.error) {
-    return (
-      <div className="page">
-        <div className="page__header">
-          <h1 className="page__title">我的音乐</h1>
-        </div>
-        <div className="page__error">{overview.error}</div>
-        <button type="button" className="button glass-btn" onClick={overview.reload}>
-          重试
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="page library">
-      {/* 顶部用户卡：渐变玻璃，只放头像、昵称与真实存在的统计。 */}
-      <section className="library__hero">
-        <div className="library__hero-avatar">
-          {auth.profile?.avatarUrl && !avatarBroken ? (
-            <img src={coverUrl(auth.profile.avatarUrl, 160)} alt="" onError={() => setAvatarBroken(true)} />
-          ) : (
-            <IconUser size={26} />
-          )}
-        </div>
-        <div className="library__hero-body">
-          <h1 className="library__hero-name">{auth.profile?.nickname ?? '我的音乐'}</h1>
-          {auth.profile?.signature ? (
-            <p className="library__hero-sign">{auth.profile.signature}</p>
-          ) : null}
-          {heroStats.length > 0 ? <div className="library__hero-stats">{heroStats.join(' · ')}</div> : null}
-        </div>
-      </section>
-
-      <div className="library__grid">
-        {/*
-          喜欢的音乐 —— 一行歌单封面 + 播放按钮，需要时展开完整列表。
-          恒定通栏一行一张（展开/收起只影响内部列表，不再影响卡宽）：半宽卡里
-          SongList 的六列会把歌名那一列挤到只剩几像素，看起来就像被圆形播放键盖住。
-        */}
-        <section className="library__card library__card--wide">
-          <header className="library__card-head">
-            <span className="library__card-icon">
-              <IconHeartFilled size={18} />
-            </span>
-            <h2 className="library__card-title">喜欢的音乐</h2>
-            {likedIDs.size > 0 ? <span className="library__card-count">{likedIDs.size} 首</span> : null}
-            <div className="library__card-tools">
-              {visibleLiked.length > 0 ? (
-                <button
-                  type="button"
-                  className="library__link glass-btn"
-                  onClick={() => setExpanded((current) => ({ ...current, liked: !current.liked }))}
-                >
-                  {expanded.liked ? '收起' : '查看全部'}
-                </button>
-              ) : null}
-            </div>
-          </header>
-
-          <div className="library__row">
-            <div className="library__row-art">
-              {likedCover && !likedCoverBroken ? (
-                <img src={likedCover} alt="" loading="lazy" onError={() => setLikedCoverBroken(true)} />
-              ) : (
-                <IconHeartFilled size={24} />
-              )}
-            </div>
-            <div className="library__row-body">
-              <div className="library__row-title">我喜欢的音乐</div>
-              <div className="library__row-meta">
-                {likedIDs.size > 0 ? `${likedIDs.size} 首` : '还没有喜欢的歌曲'}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="library__round library__round--primary"
-              title="播放全部"
-              aria-label="播放全部"
-              disabled={visibleLiked.length === 0}
-              onClick={() => playAll(visibleLiked)}
-            >
-              <IconPlay size={16} />
-            </button>
-          </div>
-
-          {likedLoading ? (
-            <div className="library__hint">正在加载喜欢的歌曲</div>
-          ) : likedError ? (
-            <div className="library__hint">
-              <span>{likedError}</span>
-              <button
-                type="button"
-                className="library__link glass-btn"
-                onClick={() => void loadLiked(overview.data?.likedTrackIDs ?? [])}
-              >
-                重试
-              </button>
-            </div>
-          ) : expanded.liked ? (
-            <>
-              {/* 展开是页面内状态，顶部导航的返回按钮管不到，所以列表上方再给一个返回。 */}
-              <div className="library__list-bar">
-                <BackButton onClick={() => setExpanded((current) => ({ ...current, liked: false }))} />
-                <span className="library__list-count">共 {visibleLiked.length} 首</span>
-              </div>
-              <div className="library__list">
-                <SongList
-                  tracks={visibleLiked}
-                  likedTrackIDs={likedIDs}
-                  currentTrackID={player.state.track?.id}
-                  onPlay={(index) => void player.playTracks(visibleLiked, index)}
-                  onToggleLike={(track) => void toggleLike(track)}
-                  emptyMessage="还没有喜欢的歌曲，点歌曲右侧的心形按钮就会出现在这里"
-                />
-              </div>
-            </>
-          ) : null}
-        </section>
-
-        {/* 我的歌单 —— 通栏一行一张；卡头「+」直接开新建歌单对话框。 */}
-        <section className="library__card library__card--wide">
-          <header className="library__card-head">
-            <span className="library__card-icon">
-              <IconQueue size={18} />
-            </span>
-            <h2 className="library__card-title">我的歌单</h2>
-            {playlists.length > 0 ? <span className="library__card-count">{playlists.length} 个</span> : null}
-            <div className="library__card-tools">
-              <button
-                type="button"
-                className="library__round"
-                title="新建歌单"
-                aria-label="新建歌单"
-                onClick={() => setCreating(true)}
-              >
-                <IconPlus size={16} />
-              </button>
-            </div>
-          </header>
-
-          {playlists.length === 0 ? (
-            <div className="library__empty">
-              <div className="library__empty-title">还没有歌单</div>
-              <div>点右上角新建一个，或者去发现页收藏别人的歌单</div>
-            </div>
-          ) : (
-            <>
-              {created.length > 0 ? (
-                <div className="library__sub">
-                  <div className="library__sub-title">创建的歌单（{created.length}）</div>
-                  <div className="library__mini-grid">
-                    {created.map((playlist) => (
-                      <PlaylistTile
-                        key={playlist.id}
-                        playlist={playlist}
-                        badge={playlist.isLikedSongsList ? '我喜欢' : undefined}
-                        onOpen={() =>
-                          navigation.push({ name: 'playlist', id: playlist.id, title: playlist.name })
-                        }
-                        onMenu={(event) =>
-                          openTileMenu(
-                            event,
-                            playlist.isLikedSongsList
-                              ? []
-                              : [
-                                  {
-                                    label: '删除歌单',
-                                    danger: true,
-                                    onSelect: () =>
-                                      setConfirm({
-                                        title: '删除歌单',
-                                        body: `确定删除歌单「${playlist.name}」吗？此操作不可撤销。`,
-                                        confirmLabel: '删除',
-                                        run: () => void deletePlaylist(playlist)
-                                      })
-                                  }
-                                ]
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {collected.length > 0 ? (
-                <div className="library__sub">
-                  <div className="library__sub-title">收藏的歌单（{collected.length}）</div>
-                  <div className="library__mini-grid">
-                    {collected.map((playlist) => (
-                      <PlaylistTile
-                        key={playlist.id}
-                        playlist={playlist}
-                        onOpen={() =>
-                          navigation.push({ name: 'playlist', id: playlist.id, title: playlist.name })
-                        }
-                        onMenu={(event) =>
-                          openTileMenu(event, [
-                            {
-                              label: '取消收藏',
-                              danger: true,
-                              onSelect: () =>
-                                setConfirm({
-                                  title: '取消收藏',
-                                  body: `确定取消收藏歌单「${playlist.name}」吗？`,
-                                  confirmLabel: '取消收藏',
-                                  run: () => void unsubscribePlaylist(playlist)
-                                })
-                            }
-                          ])
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </>
-          )}
-        </section>
-
-        {/* 最近播放 —— 预览若干行，可展开成完整列表。 */}
-        <section className="library__card library__card--wide">
-          <header className="library__card-head">
-            <span className="library__card-icon">
-              <IconClock size={18} />
-            </span>
-            <h2 className="library__card-title">最近播放</h2>
-            {recent.length > 0 ? <span className="library__card-count">{recent.length} 首</span> : null}
-            <div className="library__card-tools">
-              {recent.length > RECENT_PREVIEW ? (
-                <button
-                  type="button"
-                  className="library__link glass-btn"
-                  onClick={() => setExpanded((current) => ({ ...current, recent: !current.recent }))}
-                >
-                  {expanded.recent ? '收起' : '展开'}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="library__round library__round--primary"
-                title="播放全部"
-                aria-label="播放全部"
-                disabled={recentSongs.length === 0}
-                onClick={() => playAll(recentSongs)}
-              >
-                <IconPlay size={16} />
-              </button>
-            </div>
-          </header>
-          {recent.length === 0 ? (
-            <div className="library__empty">
-              <div className="library__empty-title">暂无播放记录</div>
-              <div>听过的歌会按播放次数排在这里</div>
-            </div>
-          ) : (
-            <>
-              {/* 展开态同样给一个页面内的返回入口。 */}
-              {expanded.recent ? (
-                <div className="library__list-bar">
-                  <BackButton onClick={() => setExpanded((current) => ({ ...current, recent: false }))} />
-                  <span className="library__list-count">共 {recent.length} 首</span>
-                </div>
-              ) : null}
-              <div className={`library-recent${expanded.recent ? ' is-scroll' : ''}`}>
-              {recentRows.map((record, index) => {
-                const current = player.state.track?.id === record.song.id
-                return (
-                  <div
-                    key={`${record.song.id}-${index}`}
-                    className={`library-recent__row${current ? ' is-current' : ''}`}
-                    onDoubleClick={() => void player.playTracks(recentSongs, index)}
-                    title={`${record.song.name} — ${artistLine(record.song)}`}
-                  >
-                    <div className="library-recent__index">{index + 1}</div>
-                    <div className="library-recent__title">
-                      <button
-                        type="button"
-                        className="song-row__play glass-btn"
-                        title={current ? '正在播放' : '播放'}
-                        aria-label={current ? '正在播放' : '播放'}
-                        onClick={() => void player.playTracks(recentSongs, index)}
-                      >
-                        {current ? <IconPause size={14} /> : <IconPlay size={14} />}
-                      </button>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="song-row__name">{record.song.name}</div>
-                        <div className="song-row__sub">{artistLine(record.song)}</div>
-                      </div>
-                    </div>
-                    <div className="library-recent__album">{record.song.album.name}</div>
-                    <div className="library-recent__count">{record.playCount} 次</div>
-                    <div className="song-row__duration">{formatDuration(record.song.durationMS / 1000)}</div>
-                  </div>
-                )
-              })}
-              </div>
-            </>
-          )}
-        </section>
-      </div>
-
-      {menu ? (
-        <ContextMenu items={menu.items} x={menu.x} y={menu.y} onClose={() => setMenu(undefined)} />
-      ) : null}
-
-      <Dialog
-        title="新建歌单"
-        open={creating}
-        onClose={() => setCreating(false)}
-        width={380}
-        footer={
-          <>
-            <button type="button" className="button glass-btn" onClick={() => setCreating(false)}>
-              取消
-            </button>
-            <button
-              type="button"
-              className="button button--primary glass-btn"
-              disabled={busy || !newName.trim()}
-              onClick={() => void createPlaylist()}
-            >
-              {busy ? '创建中' : '创建'}
-            </button>
-          </>
-        }
-      >
-        <label className="library__field">
-          <span>歌单名称</span>
-          <input
-            className="text-input"
-            value={newName}
-            placeholder="例如：通勤循环"
-            onChange={(event) => setNewName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void createPlaylist()
-            }}
-          />
-        </label>
-      </Dialog>
-
-      <Dialog
-        title={confirm?.title ?? ''}
-        open={confirm !== undefined}
-        onClose={() => setConfirm(undefined)}
-        width={380}
-        footer={
-          <>
-            <button type="button" className="button glass-btn" onClick={() => setConfirm(undefined)}>
-              取消
-            </button>
-            <button
-              type="button"
-              className="button button--primary glass-btn"
-              onClick={() => {
-                const action = confirm?.run
-                setConfirm(undefined)
-                action?.()
-              }}
-            >
-              {confirm?.confirmLabel ?? '确定'}
-            </button>
-          </>
-        }
-      >
-        <p className="library__dialog-text">{confirm?.body}</p>
-      </Dialog>
-
-      {toast.node}
-    </div>
-  )
-}
-
-/** 歌单卡片：ArtCard 整个是一个按钮，更多操作只能是它的兄弟节点。 */
-function PlaylistTile({
-  playlist,
-  badge,
-  onOpen,
-  onMenu
+function RowArt({
+  cover,
+  name,
+  artist,
+  size = 18
 }: {
-  playlist: PlaylistSummaryDTO
-  badge?: string
-  onOpen: () => void
-  onMenu: (event: MouseEvent<HTMLElement>) => void
+  cover?: string
+  name?: string
+  artist?: string
+  size?: number
 }): JSX.Element {
-  const subtitle = `${playlist.trackCount} 首${
-    playlist.playCount > 0 ? ` · ${formatPlayCount(playlist.playCount)} 次播放` : ''
-  }`
+  const [attempt, setAttempt] = useState(0)
+  const [rescued, setRescued] = useState<string | undefined>(undefined)
+  const asked = useRef(false)
+  // 老数据可能存 http 封面（CSP 拦）、p3 分片（会卡住）或需要 App 密钥的相对地址。
+  const base = absoluteCover(cover, 120)
+  const stripped = base ? base.replace(/[?&]param=\d+y\d+/g, '').replace(/\?$/, '') : undefined
+  const src = rescued ?? (attempt === 0 ? base : stripped)
+  const exhausted = attempt > 1 && !rescued
+
+  // 三轮都失败（典型是汽水封面链接已过期）时，用歌名 + 歌手重新找一张封面。
+  useEffect(() => {
+    if (!exhausted || asked.current || !name) return
+    asked.current = true
+    let alive = true
+    void call('account:cover', { name, artist: artist ?? '' })
+      .then((result) => {
+        const next = absoluteCover(result.cover, 120)
+        if (alive && next) setRescued(next)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [exhausted, name, artist])
+
+  if (!src || exhausted) {
+    return (
+      <span className="me__row-art">
+        <IconMusic size={size} />
+      </span>
+    )
+  }
+
   return (
-    <div className="library-tile" onContextMenu={onMenu}>
-      <ArtCard
-        title={playlist.name}
-        subtitle={subtitle}
-        imageUrl={coverUrl(playlist.coverURL, 320)}
-        badge={badge}
-        onClick={onOpen}
+    <span className="me__row-art">
+      <img
+        key={src}
+        src={src}
+        alt=""
+        loading="lazy"
+        onError={() =>
+          setAttempt((value) => {
+            // 第二次换的是「去掉 param 的原图」；地址没变说明没得再试，直接进兜底。
+            if (value === 0) return stripped && stripped !== base ? 1 : 2
+            return value + 1
+          })
+        }
       />
-      <button
-        type="button"
-        className="icon-button library-tile__more"
-        title="更多操作"
-        aria-label="更多操作"
-        onClick={onMenu}
-      >
-        <IconMore size={16} />
-      </button>
-    </div>
+    </span>
   )
 }
 
 function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
+}
+
+/** 把收藏条目还原成可播的队列：网易云走详情接口，站外走音源直连。 */
+async function playRefs(
+  items: YYTrackRefDTO[],
+  index: number,
+  playTracks: (tracks: TrackDTO[], startIndex?: number) => Promise<void>
+): Promise<void> {
+  const target = items[Math.max(0, Math.min(index, items.length - 1))]
+  if (!target) return
+  if (target.source === 'netease') {
+    const ids = items
+      .filter((item) => item.source === 'netease')
+      .map((item) => Number(item.sourceId))
+      .filter((id) => Number.isFinite(id) && id > 0)
+    if (ids.length === 0) throw new Error('这首歌暂时播不了')
+    const tracks = await call('track:detail', { ids })
+    const start = Math.max(0, ids.indexOf(Number(target.sourceId)))
+    await playTracks(tracks, start)
+    return
+  }
+  await call('player:playExternalList', {
+    items: [
+      {
+        source: target.source as ExternalItemSource,
+        sourceId: target.sourceId,
+        name: target.name,
+        artists: target.artist,
+        album: target.album,
+        durationMS: target.durationMs ?? 0,
+        coverUrl: target.cover
+      }
+    ]
+  })
+}
+
+export default function Library(): JSX.Element {
+  const account = useAccountStore()
+  const player = usePlayerStore()
+  const navigation = useNavigation()
+  const { show: showToast, node: toastNode } = useToast()
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const profile = account.profile
+  const [nickDraft, setNickDraft] = useState<string | undefined>(undefined)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+
+  const [creating, setCreating] = useState(false)
+  const [newPlaylist, setNewPlaylist] = useState('')
+  const [expanded, setExpanded] = useState<number | undefined>(undefined)
+  const [detail, setDetail] = useState<{ id: number; tracks: YYTrackRefDTO[] } | undefined>(undefined)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [renaming, setRenaming] = useState<number | undefined>(undefined)
+  const [renameDraft, setRenameDraft] = useState('')
+
+  const displayName = profile?.nickname?.trim() || profile?.email?.split('@')[0] || '悠悠听友'
+  const favorites = account.favorites
+  const playing = player.state.playing
+
+  const favoriteKeys = useMemo(() => new Set(favorites.map((item) => item.key)), [favorites])
+
+  async function withBusy(action: () => Promise<void>, success?: string): Promise<void> {
+    try {
+      await action()
+      if (success) showToast(success, 'success')
+    } catch (cause) {
+      showToast(messageOf(cause), 'error')
+    }
+  }
+
+  async function playList(items: YYTrackRefDTO[], index: number): Promise<void> {
+    await withBusy(() => playRefs(items, index, player.playTracks))
+  }
+
+  async function saveNickname(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (nickDraft === undefined) return
+    await withBusy(async () => {
+      await account.updateProfile(nickDraft.trim())
+      setNickDraft(undefined)
+    }, '昵称已更新')
+  }
+
+  async function pickAvatar(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > 480 * 1024) {
+      showToast('图片太大了，选一张 480 KB 以内的', 'error')
+      return
+    }
+    setAvatarBusy(true)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result ?? ''))
+        reader.onerror = () => reject(new Error('读取图片失败'))
+        reader.readAsDataURL(file)
+      })
+      await account.uploadAvatar(dataUrl)
+      showToast('头像已更新', 'success')
+    } catch (cause) {
+      showToast(messageOf(cause), 'error')
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
+
+  async function toggleExpand(id: number): Promise<void> {
+    if (expanded === id) {
+      setExpanded(undefined)
+      return
+    }
+    setExpanded(id)
+    setDetailLoading(true)
+    try {
+      const payload = await account.playlistDetail(id)
+      setDetail({ id, tracks: payload.tracks })
+    } catch (cause) {
+      showToast(messageOf(cause), 'error')
+      setDetail(undefined)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  async function createPlaylist(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    const name = newPlaylist.trim()
+    if (!name) return
+    await withBusy(async () => {
+      await account.createPlaylist(name)
+      setNewPlaylist('')
+      setCreating(false)
+    }, `已创建歌单「${name}」`)
+  }
+
+  async function confirmRename(id: number): Promise<void> {
+    const name = renameDraft.trim()
+    if (!name) return
+    await withBusy(async () => {
+      await account.renamePlaylist(id, name)
+      setRenaming(undefined)
+    }, '歌单已改名')
+  }
+
+  async function removePlaylist(id: number, name: string): Promise<void> {
+    await withBusy(async () => {
+      await account.deletePlaylist(id)
+      if (expanded === id) setExpanded(undefined)
+    }, `已删除歌单「${name}」`)
+  }
+
+  /** 加/删之后重新取一次歌单详情：store 的写操作只回 void，不返回新列表。 */
+  async function reloadDetail(id: number): Promise<void> {
+    const payload = await account.playlistDetail(id)
+    setDetail({ id, tracks: payload.tracks })
+  }
+
+  /** 把当前正在播放的歌加进歌单（站外曲目也能拿到 source + sourceId）。 */
+  async function addCurrent(id: number): Promise<void> {
+    await withBusy(async () => {
+      const track = await call('account:currentTrack')
+      if (!track) throw new Error('现在没有正在播放的歌')
+      await account.addToPlaylist(id, [track])
+      await reloadDetail(id)
+    }, '已加入歌单')
+  }
+
+  async function removeFromPlaylist(id: number, item: YYTrackRefDTO): Promise<void> {
+    await withBusy(async () => {
+      await account.removeFromPlaylist(id, [item])
+      await reloadDetail(id)
+    }, '已从歌单移除')
+  }
+
+  return (
+    <div className="me">
+      <section className="me__account">
+        <button
+          type="button"
+          className="me__avatar"
+          title="换头像"
+          aria-label="换头像"
+          disabled={avatarBusy}
+          onClick={() => fileInput.current?.click()}
+        >
+          <AccountAvatar src={profile?.avatar} />
+        </button>
+
+        <div className="me__id">
+          <div className="me__name-row">
+            {nickDraft === undefined ? (
+              <>
+                <span className="me__name">{displayName}</span>
+                <button type="button" className="me__link" onClick={() => setNickDraft(profile?.nickname ?? '')}>
+                  改昵称
+                </button>
+              </>
+            ) : (
+              <form className="me__inline" onSubmit={(event) => void saveNickname(event)}>
+                <input
+                  value={nickDraft}
+                  maxLength={24}
+                  autoFocus
+                  placeholder="1-24 个字"
+                  onChange={(event) => setNickDraft(event.target.value)}
+                />
+                <button type="submit" className="me__mini me__mini--primary">
+                  保存
+                </button>
+                <button type="button" className="me__mini" onClick={() => setNickDraft(undefined)}>
+                  取消
+                </button>
+              </form>
+            )}
+          </div>
+          {nickDraft === undefined ? <div className="me__meta">{profile?.email}</div> : null}
+        </div>
+
+        <div className="me__stats">
+          <span>{favorites.length} 首收藏</span>
+          <span className="me__dot" />
+          <span>{account.playlists.length} 个歌单</span>
+        </div>
+
+        <div className="me__actions">
+          <button type="button" className="me__mini" disabled={avatarBusy} onClick={() => fileInput.current?.click()}>
+            {avatarBusy ? '上传中…' : '换头像'}
+          </button>
+          <button
+            type="button"
+            className="me__mini"
+            onClick={() =>
+              void withBusy(async () => {
+                await account.logout()
+                navigation.reset({ name: 'home' })
+              }, '已退出登录')
+            }
+          >
+            退出登录
+          </button>
+        </div>
+
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          hidden
+          onChange={(event) => void pickAvatar(event)}
+        />
+      </section>
+
+      <section className="me__card">
+        <header className="me__head">
+          <span className="me__head-icon">
+            <IconHeartFilled size={15} />
+          </span>
+          <span className="me__head-title">我喜欢的音乐</span>
+          <span className="me__head-count">{favorites.length}</span>
+          <div className="me__head-right">
+            <button
+              type="button"
+              className="me__play"
+              disabled={favorites.length === 0}
+              onClick={() => void playList(favorites, 0)}
+            >
+              {playing ? <IconPause size={12} /> : <IconPlay size={12} />}
+              播放全部
+            </button>
+          </div>
+        </header>
+
+        {favorites.length === 0 ? (
+          <div className="me__empty">在搜索、漫游或歌单里点红心，歌就会收到这里。</div>
+        ) : (
+          <div className="me__rows">
+            {favorites.map((item, index) => (
+              <div className="me__row" key={item.key}>
+                <button type="button" className="me__row-main" onClick={() => void playList(favorites, index)}>
+                  <RowArt cover={item.cover} name={item.name} artist={item.artist} />
+                  <span className="me__row-text">
+                    <span className="me__row-title">{item.name || '未知歌曲'}</span>
+                    <span className="me__row-meta">
+                      {item.artist || '未知歌手'}
+                      {item.album ? ` · ${item.album}` : ''}
+                      {item.durationMs ? ` · ${formatDuration(item.durationMs / 1000)}` : ''}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="me__icon"
+                  title="取消收藏"
+                  aria-label="取消收藏"
+                  onClick={() => void withBusy(() => account.toggleFavorite(item), '已取消收藏')}
+                >
+                  <IconHeartFilled size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="me__card">
+        <header className="me__head">
+          <span className="me__head-icon">
+            <IconQueue size={15} />
+          </span>
+          <span className="me__head-title">我的歌单</span>
+          <span className="me__head-count">{account.playlists.length}</span>
+          <div className="me__head-right">
+            {creating ? (
+              <form className="me__inline" onSubmit={(event) => void createPlaylist(event)}>
+                <input
+                  value={newPlaylist}
+                  maxLength={40}
+                  autoFocus
+                  placeholder="歌单名字"
+                  onChange={(event) => setNewPlaylist(event.target.value)}
+                />
+                <button type="submit" className="me__mini me__mini--primary" disabled={!newPlaylist.trim()}>
+                  创建
+                </button>
+                <button
+                  type="button"
+                  className="me__mini"
+                  onClick={() => {
+                    setCreating(false)
+                    setNewPlaylist('')
+                  }}
+                >
+                  取消
+                </button>
+              </form>
+            ) : (
+              <button type="button" className="me__mini" onClick={() => setCreating(true)}>
+                <IconPlus size={12} />
+                新建歌单
+              </button>
+            )}
+          </div>
+        </header>
+
+        {account.playlists.length === 0 ? (
+          <div className="me__empty">还没有歌单。新建一个，把喜欢的歌按心情分开放。</div>
+        ) : (
+          <div className="me__rows">
+            {account.playlists.map((playlist) => (
+              <div className="me__group" key={playlist.id}>
+                <div className="me__row">
+                  {renaming === playlist.id ? (
+                    <form
+                      className="me__inline me__inline--grow"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        void confirmRename(playlist.id)
+                      }}
+                    >
+                      <input
+                        value={renameDraft}
+                        maxLength={40}
+                        autoFocus
+                        onChange={(event) => setRenameDraft(event.target.value)}
+                      />
+                      <button type="submit" className="me__mini me__mini--primary">
+                        保存
+                      </button>
+                      <button type="button" className="me__mini" onClick={() => setRenaming(undefined)}>
+                        取消
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <button type="button" className="me__row-main" onClick={() => void toggleExpand(playlist.id)}>
+                        <span className="me__row-art">
+                          <IconQueue size={18} />
+                        </span>
+                        <span className="me__row-text">
+                          <span className="me__row-title">{playlist.name}</span>
+                          <span className="me__row-meta">{playlist.count} 首</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="me__icon"
+                        title="把正在播的歌加进来"
+                        aria-label="把正在播的歌加进来"
+                        onClick={() => void addCurrent(playlist.id)}
+                      >
+                        <IconPlus size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="me__icon"
+                        title="改名"
+                        aria-label="改名"
+                        onClick={() => {
+                          setRenaming(playlist.id)
+                          setRenameDraft(playlist.name)
+                        }}
+                      >
+                        <IconPencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="me__icon"
+                        title="删除歌单"
+                        aria-label="删除歌单"
+                        onClick={() => void removePlaylist(playlist.id, playlist.name)}
+                      >
+                        <IconTrash size={15} />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {expanded === playlist.id ? (
+                  <div className="me__sub">
+                    {detailLoading ? (
+                      <div className="me__sub-hint">正在加载歌单</div>
+                    ) : detail && detail.id === playlist.id && detail.tracks.length > 0 ? (
+                      <>
+                        <div className="me__sub-bar">
+                          <button type="button" className="me__mini" onClick={() => void playList(detail.tracks, 0)}>
+                            <IconPlay size={12} />
+                            播放全部
+                          </button>
+                          <button type="button" className="me__mini" onClick={() => void addCurrent(playlist.id)}>
+                            把正在播的歌加进来
+                          </button>
+                        </div>
+                        {detail.tracks.map((item, index) => (
+                          <div className="me__row" key={item.key}>
+                            <button
+                              type="button"
+                              className="me__row-main"
+                              onClick={() => void playList(detail.tracks, index)}
+                            >
+                              <RowArt cover={item.cover} name={item.name} artist={item.artist} size={16} />
+                              <span className="me__row-text">
+                                <span className="me__row-title">{item.name || '未知歌曲'}</span>
+                                <span className="me__row-meta">{item.artist || '未知歌手'}</span>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="me__icon"
+                              title="从歌单移除"
+                              aria-label="从歌单移除"
+                              onClick={() => void removeFromPlaylist(playlist.id, item)}
+                            >
+                              <IconTrash size={15} />
+                            </button>
+                            {favoriteKeys.has(item.key) ? null : (
+                              <button
+                                type="button"
+                                className="me__icon"
+                                title="收藏到我喜欢"
+                                aria-label="收藏到我喜欢"
+                                onClick={() => void withBusy(() => account.toggleFavorite(item), '已收藏')}
+                              >
+                                <IconHeartFilled size={15} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="me__sub-hint">这个歌单还是空的</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {toastNode}
+    </div>
+  )
 }
