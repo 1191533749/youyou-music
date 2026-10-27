@@ -38,6 +38,15 @@ export interface TrackMappingContext {
   unblockEnabled?: boolean
 }
 
+/** 封面统一 https：渲染层 CSP 只放行 https，而网易云接口给的多是 http；
+ * 顺带把慢分片 p3 换到 p4（原因见 src/renderer/src/lib/format.ts）。 */
+export function httpsCover(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  return url
+    .replace(/^http:\/\//i, 'https://')
+    .replace('//p3.music.126.net/', '//p4.music.126.net/')
+}
+
 export function toTrackDTO(track: Track, context: TrackMappingContext): TrackDTO {
   const state: TrackPlayability = context.unblockEnabled
     ? 'playable'
