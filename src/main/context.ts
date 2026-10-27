@@ -15,12 +15,15 @@ import type { LyricsService } from './lyrics/service.js'
 import type { MediaKeys } from './media/keys.js'
 import type { CacheStore } from './storage/cache.js'
 import type { PlatformAccounts } from './accounts/platforms.js'
+import type { YouyouAccount } from './accounts/youyou.js'
 
 export interface AppContext {
   settings: SettingsStore
   dailyHistory: DailyHistoryStore
   /** 第三方平台（酷狗 / QQ音乐）的登录态；网易云仍然走 client/api。 */
   accounts: PlatformAccounts
+  /** 我们自己的账号（邮箱验证码登录 / 收藏 / 自建歌单），与音源账号互不干扰。 */
+  youyouAccount: YouyouAccount
   client: NeteaseClient
   api: NeteaseAPI
   player: PlayerController
