@@ -12,9 +12,8 @@ import {
   playModeLabel
 } from '../store/player'
 import { useNavigation } from '../store/navigation'
-import { useAuthStore } from '../store/auth'
+import { useAccountStore } from '../store/account'
 import { call, onEvent } from '../lib/ipc'
-import { clearLikeOverride, isLiked, markLike } from '../lib/likes'
 import { useFullscreenIdle } from '../lib/fullscreenIdle'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
 import { useImageReady } from './FishAvatar'
@@ -61,9 +60,9 @@ function modeIcon(mode: ReturnType<typeof currentPlayMode>): JSX.Element {
 }
 
 export default function PlayerBar(): JSX.Element {
+  const account = useAccountStore()
   const player = usePlayerStore()
   const navigation = useNavigation()
-  const auth = useAuthStore()
   const { state, current } = player
 
   /**
@@ -107,44 +106,43 @@ export default function PlayerBar(): JSX.Element {
     return onEvent('settings:changed', (next) => setDesktopLyrics(next.showDesktopLyrics))
   }, [])
 
-  const [liked, setLiked] = useState(false)
+  /**
+   * 心形接自建账号：`account:currentTrack` 还原出 `source:sourceId` 引用
+   * （站外曲目也能还原），收藏列表里有没有它决定红心状态。
+   */
+  const [currentKey, setCurrentKey] = useState<string | undefined>(undefined)
   const likePending = useRef(false)
   const trackId = current?.id
 
   useEffect(() => {
-    if (!auth.loggedIn || trackId === undefined) {
-      setLiked(false)
-      return
-    }
     let cancelled = false
-    void call('library:overview')
-      .then((overview) => {
-        // 本地覆盖优先：刚点的喜欢/取消不会被还没更新的服务器列表盖回去。
-        if (!cancelled) setLiked(isLiked(trackId, overview.likedTrackIDs))
+    void call('account:currentTrack')
+      .then((ref) => {
+        if (!cancelled) setCurrentKey(ref?.key)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setCurrentKey(undefined)
+      })
     return () => {
       cancelled = true
     }
-  }, [auth.loggedIn, trackId])
+  }, [trackId])
+
+  const liked = Boolean(currentKey && account.favorites.some((item) => item.key === currentKey))
 
   const toggleLike = async (): Promise<void> => {
-    if (!auth.loggedIn || !current) {
+    if (!account.loggedIn || !current) {
       navigation.push({ name: 'library' })
       return
     }
-    // 连点保护：请求在途时忽略后续点击。之前没有这层保护，快速连点会出现
-    // 「点了没反应、要反复点几次」——多个写入互相覆盖/回滚。
+    // 连点保护：请求在途时忽略后续点击，避免多个写入互相覆盖。
     if (likePending.current) return
     likePending.current = true
-    const next = !liked
-    setLiked(next)
-    markLike(current.id, next)
     try {
-      await call('library:likeTrack', { id: current.id, like: next })
+      const ref = await call('account:currentTrack')
+      if (ref) await account.toggleFavorite(ref)
     } catch {
-      clearLikeOverride(current.id)
-      setLiked(!next)
+      // 失败不做乐观回滚：收藏列表没变，红心自然还是原状态。
     } finally {
       likePending.current = false
     }
