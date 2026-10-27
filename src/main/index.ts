@@ -29,6 +29,8 @@ import { registerPlayerHandlers } from './ipc/player.js'
 import { registerUpdateHandlers } from './ipc/update.js'
 import { cleanUpdateCache } from './update/service.js'
 import { registerLibraryHandlers } from './ipc/library.js'
+import { registerAccountHandlers } from './ipc/account.js'
+import { YouyouAccount } from './accounts/youyou.js'
 import { registerExploreHandlers, warmFMPool } from './ipc/explore.js'
 import { registerAppHandlers } from './ipc/app.js'
 import type { AppContext } from './context.js'
@@ -500,6 +502,7 @@ async function bootstrap(): Promise<void> {
     settings,
     dailyHistory: new DailyHistoryStore(path.join(userData, 'daily-history')),
     accounts: new PlatformAccounts(userData),
+    youyouAccount: new YouyouAccount(userData, log),
     client,
     api,
     player,
@@ -520,6 +523,7 @@ async function bootstrap(): Promise<void> {
   }
   contextRef.value = context
   await context.accounts.load()
+  context.youyouAccount.load()
 
   // Refresh the profile (and with it the VIP tier that decides playability)
   // once the cookie jar has been read.
@@ -547,6 +551,7 @@ async function bootstrap(): Promise<void> {
   registerAuthHandlers(context)
   registerPlayerHandlers(context)
   registerLibraryHandlers(context)
+  registerAccountHandlers(context)
   registerExploreHandlers(context)
   // 私人漫游要「进页面就出声」：曲池得提前攒好，否则现场连打十来轮接口要二十秒。
   // 漫游曲目现在全部来自汽水音乐（免登录直连），所以不再要求先登录网易云。
