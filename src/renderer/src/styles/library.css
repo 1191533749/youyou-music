@@ -1229,3 +1229,602 @@
   color: var(--accent);
   box-shadow: var(--glass-shadow);
 }
+
+/* --- 我的音乐：正式版重排（覆盖上面的渐变用户卡与大空白） ---------------- */
+
+.library {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.library__hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  margin: 0;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-solid-strong);
+  box-shadow: none;
+  color: var(--text);
+  overflow: visible;
+}
+
+.library__hero::after {
+  display: none;
+}
+
+.library__hero-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  border: 1px solid var(--border-solid);
+  background: var(--glass-weak);
+  box-shadow: none;
+}
+
+.library__hero-avatar::after {
+  display: none;
+}
+
+.library__hero-avatar img {
+  border-radius: 9px;
+  box-shadow: none;
+}
+
+.library__hero-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.library__hero-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.library__hero-sign {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.library__hero-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.library__hero .library__card-tools {
+  margin-left: auto;
+}
+
+.library__hero .button {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.library__card {
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-solid-strong);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.library__card--wide {
+  width: 100%;
+}
+
+.library__card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.library__card-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.library__card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.library__card-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.library__card-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.library__round {
+  width: 30px;
+  height: 30px;
+}
+
+.library__empty {
+  padding: 30px 16px;
+  text-align: center;
+}
+
+.library__empty-title {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.library__empty p {
+  display: none;
+}
+
+.library__create {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.library__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.library__field input {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong-solid);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.library__field input:focus {
+  border-color: var(--accent);
+}
+
+.library__field--inline input {
+  width: 190px;
+}
+
+.library__field .button {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.library__list-bar {
+  padding-right: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.library__list-bar:last-child {
+  border-bottom: 0;
+}
+
+.library__row {
+  padding: 8px 10px;
+}
+
+.library__row-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 7px;
+}
+
+.library__row-title {
+  font-size: 13px;
+}
+
+.library__row-meta {
+  font-size: 11px;
+}
+
+/* ==== MYMUSIC 自建账号版 ==== */
+/* ==========================================================================
+   我的音乐 · 自建账号版（账号条 + 分组卡）
+   设计约束：一行账号信息、两张紧凑卡片、空状态只占一行，不出现大块居中留白。
+   ========================================================================== */
+
+.me {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+/* --- 账号条 ------------------------------------------------------------- */
+
+.me__account {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--glass-solid-strong);
+  border: 1px solid var(--glass-border);
+}
+
+.me__avatar {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.me__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.me__avatar:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.me__id {
+  min-width: 0;
+  flex: 1;
+}
+
+.me__name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+}
+
+.me__name {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.me__link:hover {
+  color: var(--accent);
+}
+
+.me__meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me__stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.me__dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.me__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* --- 小控件 ------------------------------------------------------------- */
+
+.me__mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.me__mini:hover {
+  color: var(--text);
+}
+
+.me__mini:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.me__mini--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+}
+
+.me__mini--primary:hover {
+  color: #fff;
+}
+
+.me__inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.me__inline--grow {
+  flex: 1;
+  padding-left: 8px;
+}
+
+.me__inline input {
+  width: 168px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.me__inline input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* --- 卡片 --------------------------------------------------------------- */
+
+.me__card {
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-solid-strong);
+  overflow: hidden;
+}
+
+.me__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+}
+
+.me__head-icon {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.me__head-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.me__head-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.me__head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.me__play {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.me__play:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.me__empty {
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.me__rows {
+  padding: 4px 6px;
+  border-top: 1px solid var(--border);
+}
+
+.me__group + .me__group {
+  border-top: 1px solid var(--border);
+}
+
+.me__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 6px;
+  border-radius: 8px;
+}
+
+.me__row:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.me__row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.me__row-art {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.me__row-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.me__row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.me__row-title {
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me__row-meta {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me__icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.me__icon:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* 歌单展开区 */
+.me__sub {
+  padding: 2px 6px 8px;
+}
+
+.me__sub-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px 4px;
+}
+
+.me__sub .me__row-main {
+  height: 46px;
+}
+
+.me__sub .me__row-art {
+  width: 32px;
+  height: 32px;
+}
+
+.me__sub-hint {
+  padding: 10px 10px 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 1080px) {
+  .me__stats {
+    display: none;
+  }
+}
