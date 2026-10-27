@@ -4,8 +4,9 @@
 
 ## 1. 这是什么
 
-Windows 桌面音乐客户端（Electron + React + TypeScript，音频后端 mpv），对接网易云音乐账号与接口，
-包含在线播放、歌单/专辑/歌手、每日推荐、私人漫游、云盘、桌面歌词、全屏播放页与「一起听」。
+Windows 桌面音乐客户端（Electron + React + TypeScript，音频后端 mpv）。账号体系为**自建悠悠账号**
+（邮箱验证码登录，收藏 / 歌单 / 昵称 / 头像多设备 10 秒同步），音源对接网易云等平台；
+包含在线播放、歌单/专辑/歌手、每日推荐、私人漫游、桌面歌词、全屏播放页与「一起听」。云盘功能已移除。
 
 - 工程根目录：`E:\deepseek 工作区\kumone-windows`
 - 官方网站：<https://yy.ytw.asia>（源码 `website/`，部署在 `/www/wwwroot/yy.ytw.asia`）
@@ -18,7 +19,8 @@ Windows 桌面音乐客户端（Electron + React + TypeScript，音频后端 mpv
 |---|---|
 | weapi/eapi 报文格式已钉死 | `tests/netease.test.ts` 黄金值；并对真实接口 POST 得到 `code:200` |
 | **weapi 通道会对被限流的 IP 返回 200 空体；同一请求走 eapi 一定成功** | `tests/_eapi-probe` 式对照实验（12 个只走 weapi 的接口全部如此）；`api.ts` 的 `weapi()` 因此内建传输降级，`tests/transport-fallback.test.ts` 锁定该行为 |
-| 扫码登录可用 | 真实调用 `/login/qrcode/unikey`、`/login/qrcode/client/login` 成功；限流时空体会被翻译成可重试提示 |
+| 悠悠账号可用 | 邮箱验证码（`POST /player-api/auth/code` → `/auth/verify`）发信与登录全链路实测；令牌两年有效 |
+| 音源扫码绑定可用 | 网易云 / QQ 扫码绑定作为**音源账号**（`/login/qrcode/unikey`、`/login/qrcode/client/login`），限流时空体被翻译成可重试提示 |
 | **Electron 33 的 ESM 主进程完全不可用** | 连 `import { app } from 'electron'` 都崩在 `cjsPreparseModuleExports`；因此 `electron.vite.config.ts` 强制 main/preload 输出 CJS，且 package.json **不能**有 `"type": "module"` |
 | mpv JSON IPC 在 Windows 命名管道上可用 | `tests/mpv.test.ts` 7 项全过（真实播放测试音频、跳转、音量、设备枚举） |
 | 全链路可启动 | `npm run smoke` 打印 15 项 PASS + `SMOKE OK`（含队列→缓存→mpv→位置推进） |
@@ -44,7 +46,7 @@ npm run dist:portable              # 免安装 exe（未验证）
 需要真实窗口的 CDP 用例（都要先 `npm run build`；脚本自己开独立 `YOYOU_USER_DATA` 与调试端口）：
 
 ```powershell
-node scripts/test-platforms.mjs   # 登录页（只有网易云）+ 设置→音源账号 扫码绑定
+node scripts/test-platforms.mjs   # 设置→音源账号 扫码绑定（主登录已是邮箱验证码）
 node scripts/test-playlist.mjs    # QQ 歌单：展开曲目 → 播放全部 → 真的出声 → 解绑
 node scripts/test-speed.mjs       # 播放速度（私人漫游首声、切歌）
 node scripts/test-fm.mjs          # 私人漫游：全部由汽水音乐供曲、能出声、换曲、不喜欢
@@ -157,7 +159,7 @@ npm run verify:packaged
 6. **封面主色采样退回令牌色。** 网易 CDN 无 CORS 头，渲染进程 canvas 取不到像素；
    若要真采样需在主进程加 palette 通道。当前沉浸感由模糊封面 + 渐变蒙层承担。
 7. **`electron-updater` 依赖已装但未接线。** `publish: null`。
-8. **手机号登录受网易云风控限制**，扫码是主路径。
+8. **网易云手机号/扫码登录仅用于「音源账号」绑定**（主账号是悠悠账号的邮箱验证码）。
 9. **队列无「跳到某一首」通道。** 页面用重排队列等价实现。
 10. **数据目录已改名** `%APPDATA%\youyou-music`，启动时会把旧目录 `kumone-windows` 里的
     `cookies.json` / `settings.json` 一次性迁移过来（`migrateLegacyUserData`）；旧目录的缓存不迁移。
