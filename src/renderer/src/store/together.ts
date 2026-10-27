@@ -5,8 +5,13 @@
  *  - 房主（room.hostId === 我的 clientId）在播放状态变化时节流广播；
  *  - 其他成员收到广播后校正本地播放（换歌 → 重设队列并定位；同曲 → 偏差过大才 seek，
  *    播放/暂停状态不一致则跟随），避免双方互相抖动。
+ *
+ * 实现说明（重要）：这是一个**模块级单例**。App 外壳在启动时用它自动连接中继，
+ * 一起听页面读的是同一份状态——两者必须是同一个 store。历史上它曾被写成
+ * per-component Hook（每个组件各自 useState），导致「App 连上了、页面却永远显示
+ * 正在连接…」的 bug，不要改回 Hook 形态。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { call } from '../lib/ipc'
 import {
   DEFAULT_RELAY_TOKEN,
@@ -127,263 +132,311 @@ export interface TogetherStore {
   requestBalance: () => void
 }
 
-export function useTogetherStore(): TogetherStore {
-  const persisted = useMemo(loadPersisted, [])
-  const clientRef = useRef<RelayClient>()
-  const [status, setStatus] = useState<RelayStatus>('idle')
-  const [detail, setDetail] = useState<string | undefined>()
-  const [url, setUrlState] = useState(persisted.url)
-  const [token, setTokenState] = useState(persisted.token)
-  const [profile, setProfileState] = useState<RelayProfile>(persisted.profile)
-  const [gifts, setGifts] = useState<RelayGift[]>([])
-  const [balance, setBalance] = useState(0)
-  const [rooms, setRooms] = useState<RelayRoom[]>([])
-  const [listeners, setListeners] = useState<RelayListener[]>([])
-  const [room, setRoom] = useState<TogetherRoomView | undefined>()
-  const [messages, setMessages] = useState<RelayChatMessage[]>([])
-  const [giftEvents, setGiftEvents] = useState<RelayGiftEvent[]>([])
-  const [order, setOrder] = useState<RelayOrderResult | undefined>()
-  const [orderStatus, setOrderStatus] = useState<RelayOrderStatus | undefined>()
-  const [error, setError] = useState<string | undefined>()
-  /** 一次性提示（例如首次使用赠送的 1 元礼物额度）。 */
-  const [notice, setNotice] = useState<string | undefined>()
-  /** 最近一次跟随同步的结果，显示给用户（也便于排查"跟随不上"）。 */
-  const [syncInfo, setSyncInfo] = useState<string | undefined>()
+interface TogetherState {
+  status: RelayStatus
+  detail?: string
+  url: string
+  token: string
+  profile: RelayProfile
+  gifts: RelayGift[]
+  balance: number
+  rooms: RelayRoom[]
+  listeners: RelayListener[]
+  room?: TogetherRoomView
+  messages: RelayChatMessage[]
+  giftEvents: RelayGiftEvent[]
+  order?: RelayOrderResult
+  orderStatus?: RelayOrderStatus
+  error?: string
+  syncInfo?: string
+  notice?: string
+}
 
-  // 同步用：房主身份、最近一次广播时间、以及正在应用远端状态时避免回环。
-  const roomRef = useRef<TogetherRoomView | undefined>()
-  const applyingRef = useRef(false)
-  const lastPublishRef = useRef(0)
-  /** 本地最新播放状态：房主被要求同步时（有新人进房）立即用它广播一次。 */
-  const lastLocalStateRef = useRef<RelayRoomState | undefined>()
+const persisted = loadPersisted()
 
-  /** 立刻广播本地状态（绕过节流），用于「新人进房必须马上同步听歌」。 */
-  const publishNow = useCallback(() => {
-    const state = lastLocalStateRef.current
-    if (state) clientRef.current?.broadcastState(state)
-  }, [])
+let state: TogetherState = {
+  status: 'idle',
+  detail: undefined,
+  url: persisted.url,
+  token: persisted.token,
+  profile: persisted.profile,
+  gifts: [],
+  balance: 0,
+  rooms: [],
+  listeners: [],
+  room: undefined,
+  messages: [],
+  giftEvents: [],
+  order: undefined,
+  orderStatus: undefined,
+  error: undefined,
+  syncInfo: undefined,
+  notice: undefined
+}
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ url, token, profile }))
-  }, [url, token, profile])
+const listeners = new Set<() => void>()
+let version = 0
 
-  /** 把远端播放状态落到本地播放器。 */
-  const applyRemoteState = useCallback(async (state: RelayRoomState) => {
-    if (!state?.track) return
-    applyingRef.current = true
-    const elapsed = state.playing ? Math.max(0, (Date.now() - (state.at ?? Date.now())) / 1000) : 0
-    const target = (state.position ?? 0) + elapsed
-    // 先给出提示再执行动作：mpv 正在加载新曲时 seek/play 可能长时间不返回，
-    // 若把提示放在最后，用户会看到"点了没反应、也没有任何说明"。
-    setSyncInfo(`已跟随房主：${state.track.name} @ ${Math.floor(target)}s`)
-    try {
-      const current = (await withTimeout(call('player:state') as Promise<PlayerStateDTO>, 5000, '读取播放状态'))
-      if (current.track?.id !== state.track.id) {
-        await withTimeout(
-          call('player:playTracks', { tracks: [state.track as TrackDTO], startIndex: 0 }),
-          15000,
-          '切换歌曲'
-        )
-        if (target > 1) {
-          await withTimeout(call('player:seek', { seconds: target }), 5000, '定位进度').catch(() => undefined)
-        }
-      } else if (Math.abs((current.position ?? 0) - target) > 3) {
+function patch(next: Partial<TogetherState>): void {
+  state = { ...state, ...next }
+  version += 1
+  for (const listener of listeners) listener()
+  syncOrderPolling()
+}
+
+function persist(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ url: state.url, token: state.token, profile: state.profile }))
+  } catch {
+    // 存储失败不影响功能
+  }
+}
+
+// ---- 中继客户端（模块级单例） ----
+let client: RelayClient | undefined
+
+/** 房主身份、最近一次广播时间、以及正在应用远端状态时避免回环。 */
+let roomRef: TogetherRoomView | undefined
+let applyingRef = false
+let lastPublishRef = 0
+/** 本地最新播放状态：房主被要求同步时（有新人进房）立即用它广播一次。 */
+let lastLocalStateRef: RelayRoomState | undefined
+
+/** 支付后自动查询到账：每 3 秒查一次，查到已支付或弹窗关闭就停。 */
+let pollTimer: number | undefined
+
+function syncOrderPolling(): void {
+  if (pollTimer !== undefined) {
+    window.clearInterval(pollTimer)
+    pollTimer = undefined
+  }
+  if (state.order?.ok && state.order.outTradeNo && !state.orderStatus?.paid) {
+    const outTradeNo = state.order.outTradeNo
+    pollTimer = window.setInterval(() => client?.pollOrder(outTradeNo), 3000)
+  }
+}
+
+function ensureClient(): RelayClient {
+  if (!client) {
+    client = new RelayClient({
+      url: state.url,
+      token: state.token,
+      profile: state.profile,
+      onMessage: handleMessage,
+      onStatus: (next, why) => patch({ status: next, detail: why })
+    })
+  }
+  return client
+}
+
+/** 立刻广播本地状态（绕过节流），用于「新人进房必须马上同步听歌」。 */
+function publishNow(): void {
+  const local = lastLocalStateRef
+  if (local) client?.broadcastState(local)
+}
+
+/** 把远端播放状态落到本地播放器。 */
+async function applyRemoteState(remote: RelayRoomState): Promise<void> {
+  if (!remote?.track) return
+  applyingRef = true
+  const elapsed = remote.playing ? Math.max(0, (Date.now() - (remote.at ?? Date.now())) / 1000) : 0
+  const target = (remote.position ?? 0) + elapsed
+  // 先给出提示再执行动作：mpv 正在加载新曲时 seek/play 可能长时间不返回，
+  // 若把提示放在最后，用户会看到"点了没反应、也没有任何说明"。
+  patch({ syncInfo: `已跟随房主：${remote.track.name} @ ${Math.floor(target)}s` })
+  try {
+    const current = (await withTimeout(call('player:state') as Promise<PlayerStateDTO>, 5000, '读取播放状态'))
+    if (current.track?.id !== remote.track.id) {
+      await withTimeout(
+        call('player:playTracks', { tracks: [remote.track as TrackDTO], startIndex: 0 }),
+        15000,
+        '切换歌曲'
+      )
+      if (target > 1) {
         await withTimeout(call('player:seek', { seconds: target }), 5000, '定位进度').catch(() => undefined)
       }
-      if (state.playing && !current.playing) {
-        await withTimeout(call('player:play'), 8000, '开始播放').catch(() => undefined)
-      }
-      if (state.playing === false && current.playing) {
-        await withTimeout(call('player:pause'), 8000, '暂停').catch(() => undefined)
-      }
-      setError(undefined)
-    } catch (cause) {
-      // 以前这里静默失败，导致「跟随不上」无从排查；现在把原因显示在页面上。
-      const message = `跟随播放失败：${cause instanceof Error ? cause.message : String(cause)}`
-      setSyncInfo(message)
-      setError(message)
-    } finally {
-      applyingRef.current = false
+    } else if (Math.abs((current.position ?? 0) - target) > 3) {
+      await withTimeout(call('player:seek', { seconds: target }), 5000, '定位进度').catch(() => undefined)
     }
-  }, [])
+    if (remote.playing && !current.playing) {
+      await withTimeout(call('player:play'), 8000, '开始播放').catch(() => undefined)
+    }
+    if (remote.playing === false && current.playing) {
+      await withTimeout(call('player:pause'), 8000, '暂停').catch(() => undefined)
+    }
+    patch({ error: undefined })
+  } catch (cause) {
+    // 以前这里静默失败，导致「跟随不上」无从排查；现在把原因显示在页面上。
+    const message = `跟随播放失败：${cause instanceof Error ? cause.message : String(cause)}`
+    patch({ syncInfo: message, error: message })
+  } finally {
+    applyingRef = false
+  }
+}
 
-  const handleMessage = useCallback(
-    (message: RelayMessage) => {
-      switch (message.type) {
-        case 'welcome':
-          setGifts(message.gifts ?? [])
-          setBalance(message.balance ?? 0)
-          setRooms(message.rooms ?? [])
-          setListeners(message.listeners ?? [])
-          setError(undefined)
-          // 首次使用一起听：服务器赠送 1 元礼物额度。
-          setNotice(message.firstGift ? '首次使用赠送 1 元礼物额度' : undefined)
-          break
-        case 'rooms':
-          setRooms(message.rooms ?? [])
-          break
-        case 'listeners':
-          setListeners(message.listeners ?? [])
-          break
-        case 'roomJoined': {
-          const view: TogetherRoomView = {
-            id: message.room.id,
-            name: message.room.name,
-            hostId: message.room.hostId,
-            you: message.you,
-            isHost: message.room.hostId === message.you,
-            members: (message.members ?? []).map((member) => ({
-              id: member.id,
-              nickname: member.nickname,
-              isHost: member.id === message.room.hostId
-            }))
-          }
-          roomRef.current = view
-          setRoom(view)
-          setMessages([])
-          // 一进房就同步：房主立刻广播自己的进度；成员主动请求一次（若服务器
-          // 有缓存状态则先跟随缓存，随后仍会收到房主的实时状态）。
-          if (message.state && !view.isHost) void applyRemoteState(message.state)
-          if (view.isHost) window.setTimeout(publishNow, 300)
-          else window.setTimeout(() => clientRef.current?.requestSync(), 300)
-          break
-        }
-        case 'peerJoined':
-          setRoom((previous) => {
-            if (!previous) return previous
-            if (previous.members.some((member) => member.id === message.member.id)) return previous
-            const next = { ...previous, members: [...previous.members, { id: message.member.id, nickname: message.member.nickname }] }
-            roomRef.current = next
-            return next
-          })
-          // 有人进来：房主立刻广播一次，保证对方一进房就听到同一首、同一进度。
-          if (roomRef.current?.isHost) window.setTimeout(publishNow, 200)
-          break
-        case 'peerLeft':
-          setRoom((previous) => {
-            if (!previous) return previous
-            const next = { ...previous, members: previous.members.filter((member) => member.id !== message.member.id) }
-            roomRef.current = next
-            return next
-          })
-          break
-        case 'roomLeft':
-          roomRef.current = undefined
-          setRoom(undefined)
-          setMessages([])
-          break
-        case 'roomState':
-          if (message.from !== roomRef.current?.you && !roomRef.current?.isHost) void applyRemoteState(message.state)
-          break
-        case 'syncRequest':
-          // 有人（或自己重连后）请求同步：房主立刻广播当前状态。
-          if (roomRef.current?.isHost) publishNow()
-          break
-        case 'chat':
-          setMessages((previous) => [...previous.slice(-199), message])
-          break
-        case 'gift':
-          setGiftEvents((previous) => [...previous.slice(-19), message])
-          break
-        case 'balance':
-          setBalance(message.balance ?? 0)
-          break
-        case 'rechargeResult':
-          setOrder(message)
-          break
-        case 'orderStatus':
-          setOrderStatus(message)
-          if (typeof message.balance === 'number') setBalance(message.balance)
-          break
-        case 'error':
-          setError(message.message)
-          break
+function handleMessage(message: RelayMessage): void {
+  switch (message.type) {
+    case 'welcome':
+      patch({
+        gifts: message.gifts ?? [],
+        balance: message.balance ?? 0,
+        rooms: message.rooms ?? [],
+        listeners: message.listeners ?? [],
+        error: undefined,
+        // 首次使用一起听：服务器赠送 1 元礼物额度。
+        notice: message.firstGift ? '首次使用赠送 1 元礼物额度' : undefined
+      })
+      break
+    case 'rooms':
+      patch({ rooms: message.rooms ?? [] })
+      break
+    case 'listeners':
+      patch({ listeners: message.listeners ?? [] })
+      break
+    case 'roomJoined': {
+      const view: TogetherRoomView = {
+        id: message.room.id,
+        name: message.room.name,
+        hostId: message.room.hostId,
+        you: message.you,
+        isHost: message.room.hostId === message.you,
+        members: (message.members ?? []).map((member) => ({
+          id: member.id,
+          nickname: member.nickname,
+          isHost: member.id === message.room.hostId
+        }))
       }
+      roomRef = view
+      patch({ room: view, messages: [] })
+      // 一进房就同步：房主立刻广播自己的进度；成员主动请求一次（若服务器
+      // 有缓存状态则先跟随缓存，随后仍会收到房主的实时状态）。
+      if (message.state && !view.isHost) void applyRemoteState(message.state)
+      if (view.isHost) window.setTimeout(publishNow, 300)
+      else window.setTimeout(() => client?.requestSync(), 300)
+      break
+    }
+    case 'peerJoined':
+      if (state.room && !state.room.members.some((member) => member.id === message.member.id)) {
+        const next = { ...state.room, members: [...state.room.members, { id: message.member.id, nickname: message.member.nickname }] }
+        roomRef = next
+        patch({ room: next })
+      }
+      // 有人进来：房主立刻广播一次，保证对方一进房就听到同一首、同一进度。
+      if (roomRef?.isHost) window.setTimeout(publishNow, 200)
+      break
+    case 'peerLeft':
+      if (state.room) {
+        const next = { ...state.room, members: state.room.members.filter((member) => member.id !== message.member.id) }
+        roomRef = next
+        patch({ room: next })
+      }
+      break
+    case 'roomLeft':
+      roomRef = undefined
+      patch({ room: undefined, messages: [] })
+      break
+    case 'roomState':
+      if (message.from !== roomRef?.you && !roomRef?.isHost) void applyRemoteState(message.state)
+      break
+    case 'syncRequest':
+      // 有人（或自己重连后）请求同步：房主立刻广播当前状态。
+      if (roomRef?.isHost) publishNow()
+      break
+    case 'chat':
+      patch({ messages: [...state.messages.slice(-199), message] })
+      break
+    case 'gift':
+      patch({ giftEvents: [...state.giftEvents.slice(-19), message] })
+      break
+    case 'balance':
+      patch({ balance: message.balance ?? 0 })
+      break
+    case 'rechargeResult':
+      patch({ order: message })
+      break
+    case 'orderStatus':
+      patch({ orderStatus: message, balance: typeof message.balance === 'number' ? message.balance : state.balance })
+      break
+    case 'error':
+      patch({ error: message.message })
+      break
+  }
+}
+
+function rebuildClient(): void {
+  if (client) {
+    client.close()
+    client = undefined
+  }
+  const next = ensureClient()
+  // url/token 变了说明之前可能连过；保持「已连则继续连」的体验。
+  if (state.status === 'connected' || state.status === 'connecting') {
+    next.connect(state.profile)
+  }
+}
+
+const store: TogetherStore = {
+  get state() {
+    return state
+  },
+  setUrl: (url) => {
+    if (url === state.url) return
+    patch({ url })
+    persist()
+    rebuildClient()
+  },
+  setToken: (token) => {
+    if (token === state.token) return
+    patch({ token })
+    persist()
+    rebuildClient()
+  },
+  setProfile: (profile) => {
+    const next = { ...state.profile, ...profile }
+    patch({ profile: next })
+    persist()
+    client?.setProfile(next)
+  },
+  connect: (withProfile) => {
+    ensureClient().connect(withProfile ?? state.profile)
+  },
+  disconnect: () => client?.close(),
+  listRooms: () => client?.listRooms(),
+  listListeners: (filter) => client?.listListeners(filter),
+  createRoom: (name, roomState) => client?.createRoom(name, roomState),
+  joinRoom: (roomId) => client?.joinRoom(roomId),
+  leaveRoom: () => client?.leaveRoom(),
+  publishState: (next) => {
+    lastLocalStateRef = next
+    const now = Date.now()
+    if (now - lastPublishRef < 900) return
+    lastPublishRef = now
+    client?.broadcastState(next)
+  },
+  requestSync: () => client?.requestSync(),
+  sendChat: (text, emoji) => client?.chat(text, emoji),
+  sendGift: (giftId) => client?.sendGift(giftId),
+  recharge: (amountFen) => {
+    // 兜底校验：金额非法时不下单，避免出现「输入 95 却下成 1 元」这类静默偏差。
+    if (!Number.isFinite(amountFen) || amountFen < 100 || amountFen > 10000) {
+      patch({ order: { ok: false, message: '充值金额需在 1.00 ~ 100.00 元之间' } })
+      return
+    }
+    patch({ orderStatus: undefined })
+    ensureClient().recharge(Math.round(amountFen))
+  },
+  pollOrder: (outTradeNo) => client?.pollOrder(outTradeNo),
+  clearOrder: () => patch({ order: undefined, orderStatus: undefined }),
+  requestBalance: () => client?.requestBalance()
+}
+
+export function useTogetherStore(): TogetherStore {
+  useSyncExternalStore(
+    (onChange) => {
+      listeners.add(onChange)
+      return () => listeners.delete(onChange)
     },
-    [applyRemoteState]
+    () => version
   )
-
-  const handleMessageRef = useRef(handleMessage)
-
-  const client = useMemo(() => {
-    const instance = new RelayClient({
-      url,
-      token,
-      profile,
-      onMessage: (message) => handleMessageRef.current(message),
-      onStatus: (next, why) => {
-        setStatus(next)
-        setDetail(why)
-      }
-    })
-    return instance
-    // url/token 变化时重建客户端（由 connect() 触发重连）
-  }, [url, token])
-
-  useEffect(() => {
-    handleMessageRef.current = handleMessage
-  }, [handleMessage])
-
-  // relay.ts 在构造时用到了 options.profile；这里在 profile 变化时同步过去。
-  useEffect(() => {
-    client.setProfile(profile)
-  }, [client, profile])
-
-  useEffect(() => {
-    clientRef.current = client
-    return () => client.close()
-  }, [client])
-
-  /**
-   * 支付后自动查询到账：每 3 秒查一次，查到已支付或弹窗关闭就停。
-   * 用户不需要再点「我已支付」（他明确说过不要这个按钮）。
-   */
-  useEffect(() => {
-    if (!order?.ok || !order.outTradeNo || orderStatus?.paid) return
-    const outTradeNo = order.outTradeNo
-    const timer = window.setInterval(() => clientRef.current?.pollOrder(outTradeNo), 3000)
-    return () => window.clearInterval(timer)
-  }, [order?.ok, order?.outTradeNo, orderStatus?.paid])
-
-  return useMemo<TogetherStore>(
-    () => ({
-      state: { status, detail, url, token, profile, gifts, balance, rooms, listeners, room, messages, giftEvents, order, orderStatus, error, syncInfo, notice },
-      setUrl: setUrlState,
-      setToken: setTokenState,
-      setProfile: (patch) => setProfileState((previous) => ({ ...previous, ...patch })),
-      connect: (withProfile) => client.connect(withProfile ?? profile),
-      disconnect: () => client.close(),
-      listRooms: () => client.listRooms(),
-      listListeners: (filter) => client.listListeners(filter),
-      createRoom: (name, state) => client.createRoom(name, state),
-      joinRoom: (roomId) => client.joinRoom(roomId),
-      leaveRoom: () => client.leaveRoom(),
-      publishState: (state) => {
-        lastLocalStateRef.current = state
-        const now = Date.now()
-        if (now - lastPublishRef.current < 900) return
-        lastPublishRef.current = now
-        client.broadcastState(state)
-      },
-      requestSync: () => client.requestSync(),
-      sendChat: (text, emoji) => client.chat(text, emoji),
-      sendGift: (giftId) => client.sendGift(giftId),
-      recharge: (amountFen) => {
-        // 兜底校验：金额非法时不下单，避免出现「输入 95 却下成 1 元」这类静默偏差。
-        if (!Number.isFinite(amountFen) || amountFen < 100 || amountFen > 10000) {
-          setOrder({ ok: false, message: '充值金额需在 1.00 ~ 100.00 元之间' })
-          return
-        }
-        setOrderStatus(undefined)
-        client.recharge(Math.round(amountFen))
-      },
-      pollOrder: (outTradeNo) => client.pollOrder(outTradeNo),
-      clearOrder: () => {
-        setOrder(undefined)
-        setOrderStatus(undefined)
-      },
-      requestBalance: () => client.requestBalance()
-    }),
-    [status, detail, url, token, profile, gifts, balance, rooms, listeners, room, messages, giftEvents, order, orderStatus, error, syncInfo, notice, client]
-  )
+  return store
 }
