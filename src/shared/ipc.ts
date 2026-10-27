@@ -24,7 +24,12 @@ import type {
   PlatformPlaylistDTO,
   SettingsDTO,
   TrackDTO,
-  UserProfileDTO
+  UserProfileDTO,
+  YYAccountStateDTO,
+  YYPlaylistDTO,
+  YYPlaylistDetailDTO,
+  YYProfileDTO,
+  YYTrackRefDTO
 } from './types'
 
 export interface PlaylistDetailDTO {
@@ -224,6 +229,44 @@ export interface IPCContract {
   'library:cloud': { request: { limit?: number; offset?: number }; response: CloudPageDTO }
   'library:cloudDelete': { request: { id: number }; response: void }
 
+  // --- 悠悠账号（自建登录 / 收藏 / 自建歌单） ---
+  /** 启动时取一次账号快照：登录态 + 资料 + 收藏 + 歌单。 */
+  'account:state': { request: void; response: YYAccountStateDTO }
+  /** 多设备同步：带已知 revision 时服务器回 304；changed=false 表示没变。 */
+  'account:sync': {
+    request: { revision?: string }
+    response: { changed: boolean; revision?: string; state: YYAccountStateDTO }
+  }
+  /** 发邮箱验证码（6 位、10 分钟有效）。 */
+  'account:requestCode': { request: { email: string }; response: { ok: boolean; ttlSeconds: number } }
+  /** 验码登录；成功后返回新的账号快照。 */
+  'account:verify': { request: { email: string; code: string }; response: YYAccountStateDTO }
+  'account:updateProfile': { request: { nickname: string }; response: YYProfileDTO }
+  /** 换头像：image 是 data URL（png/jpeg/webp，最大 512 KB）。 */
+  'account:uploadAvatar': { request: { image: string }; response: YYProfileDTO }
+  'account:logout': { request: void; response: void }
+  /** 收藏 / 取消收藏任意音源的曲目；返回最新收藏列表。 */
+  'account:favorite': { request: { track: YYTrackRefDTO; like: boolean }; response: YYTrackRefDTO[] }
+  'account:playlistDetail': { request: { id: number }; response: YYPlaylistDetailDTO }
+  'account:playlistCreate': { request: { name: string }; response: YYPlaylistDTO[] }
+  'account:playlistRename': { request: { id: number; name: string }; response: YYPlaylistDTO[] }
+  'account:playlistDelete': { request: { id: number }; response: YYPlaylistDTO[] }
+  /** 把曲目加入自建歌单（重复的按 key 跳过）。 */
+  'account:playlistAdd': {
+    request: { id: number; tracks: YYTrackRefDTO[] }
+    response: YYPlaylistDetailDTO
+  }
+  'account:playlistRemove': {
+    request: { id: number; tracks: YYTrackRefDTO[] }
+    response: YYPlaylistDetailDTO
+  }
+  /** 当前播放曲目的「收藏引用」（站外曲目也能拿到 source + sourceId）。 */
+  'account:currentTrack': { request: void; response: YYTrackRefDTO | undefined }
+  /** 不依赖网易云登录的每日推荐：服务端按日期抽歌，主进程再解析成可播曲目。 */
+  'account:daily': { request: void; response: TrackDTO[] }
+  /** 封面兜底：用歌名 + 歌手在网易云重新找一张（汽水等站外封面链接会过期）。 */
+  'account:cover': { request: { name: string; artist: string }; response: { cover?: string } }
+
   // --- playlists ---
   'playlist:detail': { request: { id: number }; response: PlaylistDetailDTO }
   'playlist:manipulateTracks': {
@@ -403,6 +446,23 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'library:subscribeArtist',
   'library:cloud',
   'library:cloudDelete',
+  'account:state',
+  'account:sync',
+  'account:requestCode',
+  'account:verify',
+  'account:updateProfile',
+  'account:uploadAvatar',
+  'account:logout',
+  'account:favorite',
+  'account:playlistDetail',
+  'account:playlistCreate',
+  'account:playlistRename',
+  'account:playlistDelete',
+  'account:playlistAdd',
+  'account:playlistRemove',
+  'account:currentTrack',
+  'account:daily',
+  'account:cover',
   'playlist:detail',
   'playlist:manipulateTracks',
   'album:detail',
