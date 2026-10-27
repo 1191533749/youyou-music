@@ -6,10 +6,11 @@
     <title>悠悠音乐 · Windows 桌面音乐客户端</title>
     <meta
       name="description"
-      content="悠悠音乐是一款 Windows 桌面音乐客户端：网易云账号登录、完整音源自动匹配、桌面歌词、全屏播放页，还能和朋友一起听。"
+      content="悠悠音乐是一款 Windows 桌面音乐客户端：邮箱验证码登录悠悠账号，收藏、歌单、昵称与头像多设备实时同步；完整音源自动匹配、桌面歌词、全屏播放页，还能和朋友一起听。"
     />
     <link rel="icon" href="assets/icon.png" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="player.css?v=3" />
     <style>
       .btn--green {
         background: linear-gradient(135deg, #22c55e, #16a34a);
@@ -25,7 +26,6 @@
       .dropdown {
         position: relative;
         display: inline-block;
-        /* 悬停缓冲区，解决鼠标移动时菜单消失的问题 */
         padding-bottom: 8px;
         margin-bottom: -8px;
       }
@@ -67,7 +67,6 @@
         transition: all 0.2s;
       }
 
-      /* ===== GitHub 下载菜单：橙色悬停效果（匹配 btn--primary） ===== */
       .dropdown--github .dropdown-content a:hover {
         background: rgba(255, 90, 31, 0.1);
         color: #ff5a1f;
@@ -76,7 +75,6 @@
         color: #ff5a1f;
       }
 
-      /* ===== 本站官网下载菜单：绿色悬停效果（匹配 btn--green） ===== */
       .dropdown--site .dropdown-content a:hover {
         background: rgba(34, 197, 94, 0.1);
         color: #16a34a;
@@ -135,8 +133,8 @@
             <span class="gradient-text">完整地听下去</span>
           </h1>
           <p class="hero__sub">
-            悠悠音乐是一款 Windows 桌面音乐客户端：扫码登录网易云账号，歌单、专辑、歌手、每日推荐、
-            私人漫游一应俱全；拿不到完整音频的歌曲会自动匹配完整音源，绝不给你听半截。
+            悠悠音乐是一款 Windows 桌面音乐客户端：邮箱验证码登录悠悠账号，收藏、歌单、每日推荐、
+            私人漫游一应俱全，任何音源的歌都能收藏，换台电脑登录即恢复；拿不到完整音频的歌曲会自动匹配完整音源，绝不给你听半截。
           </p>
           
           <div class="hero__actions">
@@ -158,14 +156,14 @@
 
             <div class="dropdown dropdown--site">
               <a class="btn btn--green" href="javascript:void(0)">
-                本站官网下载
+                本站下载
               </a>
               <div class="dropdown-content">
-                <a href="https://ytw.asia/ZZZ.php?f=o34VIFfEkSPb.exe">
+                <a href="https://ytw.asia/ZZZ.php?f=AEBTHGAHtFaE.exe">
                   完整版
                   <small>Windows 10/11 · 64 位</small>
                 </a>
-                <a href="https://ytw.asia/ZZZ.php?f=Nk38d7nyFufu.exe">
+                <a href="https://ytw.asia/ZZZ.php?f=c9KtYukzQFgm.exe">
                   便携版
                   <small>免安装 · 单文件</small>
                 </a>
@@ -180,17 +178,21 @@
         </div>
 
         <div class="hero__art">
-          <div class="player glass">
-            <div class="player__cover">
+          <div class="player glass" id="demo-player">
+            <audio id="player-audio" preload="auto"></audio>
+            <div class="player__cover" id="player-cover">
+              <img class="player__avatar" id="player-avatar" alt="" aria-hidden="true" decoding="async" />
               <span class="player__disc" aria-hidden="true"></span>
             </div>
             <div class="player__body">
-              <div class="player__title">夜曲</div>
-              <div class="player__artist">周杰伦 · 十一月的萧邦</div>
-              <div class="player__bar"><span></span></div>
-              <div class="player__lyric">为你弹奏萧邦的夜曲</div>
-              <div class="player__controls" aria-hidden="true">
-                <span></span><span class="is-main"></span><span></span>
+              <div class="player__title" id="player-title">夜曲</div>
+              <div class="player__artist" id="player-artist">周杰伦 · 十一月的萧邦</div>
+              <div class="player__bar" id="player-bar" role="slider" tabindex="0" aria-label="播放进度"><span id="player-progress"></span></div>
+              <div class="player__lyric" id="player-lyric">为你弹奏萧邦的夜曲</div>
+              <div class="player__controls" id="player-controls">
+                <span id="player-prev" role="button" tabindex="0" aria-label="上一曲"></span>
+                <span class="is-main" id="player-toggle" role="button" tabindex="0" aria-label="播放或暂停"></span>
+                <span id="player-next" role="button" tabindex="0" aria-label="下一曲"></span>
               </div>
             </div>
           </div>
@@ -225,8 +227,8 @@
         <p class="section__sub">日常听歌需要的东西，都在这里。</p>
         <div class="grid">
           <article class="card glass">
-            <h3>扫码登录</h3>
-            <p>用网易云 App 扫一扫即可登录，歌单、收藏、每日推荐与云盘全部同步。</p>
+            <h3>悠悠账号</h3>
+            <p>邮箱验证码登录，收藏、歌单、昵称与头像多设备实时同步；任何音源的歌都能收藏，换台电脑登录即恢复。</p>
           </article>
           <article class="card glass">
             <h3>完整音源自动匹配</h3>
@@ -314,7 +316,7 @@
           </details>
           <details class="glass">
             <summary>需要登录吗？</summary>
-            <p>扫码登录网易云账号后可用完整功能（歌单、每日推荐、云盘、一起听）。不登录也能浏览部分公开内容。</p>
+            <p>登录悠悠账号后可用完整功能（收藏、歌单、每日推荐、一起听）。不登录也能搜索和播放。</p>
           </details>
           <details class="glass">
             <summary>提示「网易云可能正在限流」怎么办？</summary>
@@ -352,5 +354,6 @@
     </footer>
 
     <script src="app.js"></script>
+    <script src="player.js?v=3"></script>
   </body>
 </html>
