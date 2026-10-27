@@ -21,6 +21,8 @@ import {
 } from '@shared/types'
 import { formatBytes } from '../lib/format'
 import { useAuthStore } from '../store/auth'
+import { useAccountStore } from '../store/account'
+import AccountAvatar from '../components/AccountAvatar'
 import { checkForUpdateInteractive } from '../lib/updatePrompt'
 import { SKINS, applySkin, readSkin, type SkinId } from '../lib/skin'
 import {
@@ -134,6 +136,7 @@ function DraftRange({
 
 export default function Settings(): JSX.Element {
   const auth = useAuthStore()
+  const account = useAccountStore()
   const navigation = useNavigation()
   /**
    * 主进程里的设置。读取失败时保持 undefined，界面退到 DEFAULT_SETTINGS 继续渲染：
@@ -703,13 +706,20 @@ export default function Settings(): JSX.Element {
         <h2>账号</h2>
         <div className="settings__row">
           <div className="settings__row-label">
-            <span>当前账号</span>
+            <span className="settings__account">
+              <AccountAvatar src={account.profile?.avatar} className="settings__avatar" size={14} />
+              <span>悠悠账号</span>
+            </span>
             <span className="settings__row-hint">
-              {auth.loggedIn ? (auth.profile?.nickname ?? '已登录') : '未登录'}
+              {account.loggedIn
+                ? account.profile?.nickname
+                  ? `${account.profile.nickname} · ${account.profile.email}`
+                  : account.profile?.email ?? '已登录'
+                : '未登录'}
             </span>
           </div>
           <div className="settings__row-control">
-            {auth.loggedIn ? (
+            {account.loggedIn ? (
               confirmLogout ? (
                 <>
                   <button
@@ -719,7 +729,7 @@ export default function Settings(): JSX.Element {
                       setConfirmLogout(false)
                       void (async () => {
                         try {
-                          await auth.logout()
+                          await account.logout()
                           setMessage('已退出登录')
                         } catch (cause) {
                           toast.show(cause instanceof Error ? cause.message : '退出登录失败', 'error')
@@ -734,12 +744,27 @@ export default function Settings(): JSX.Element {
                   </button>
                 </>
               ) : (
-                <button type="button" className="button" onClick={() => setConfirmLogout(true)}>
-                  退出登录
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => navigation.reset({ name: 'library' })}
+                  >
+                    账号详情
+                  </button>
+                  <button type="button" className="button" onClick={() => setConfirmLogout(true)}>
+                    退出登录
+                  </button>
+                </>
               )
             ) : (
-              <span className="settings__row-hint">未登录</span>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => navigation.reset({ name: 'library' })}
+              >
+                去登录
+              </button>
             )}
           </div>
         </div>
