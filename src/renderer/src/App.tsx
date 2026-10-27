@@ -5,11 +5,14 @@
  * 所有面板都是半透明玻璃片，靠 `backdrop-filter` 做真实模糊，而不是画一个灰色方块。
  * 亮色是主色，深色只是同一套令牌的另一种取值。
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { NavigationProvider, useNavigation, type Route } from './store/navigation'
 import { useAuthStore } from './store/auth'
+import { useAccountStore } from './store/account'
 import { usePlayerStore } from './store/player'
+import { useTogetherStore } from './store/together'
+import { relayIdentity } from './lib/relayIdentity'
 import PlayerBar from './components/PlayerBar'
 import { BackButton } from './components/BackButton'
 import { useImageReady } from './components/FishAvatar'
@@ -28,13 +31,11 @@ import DailyPage from './pages/DailyPage'
 import Together from './pages/Together'
 import FM from './pages/FM'
 import ToplistPage from './pages/ToplistPage'
-import Cloud from './pages/Cloud'
 import Settings from './pages/Settings'
 import NowPlaying from './pages/NowPlaying'
 import {
   IconCalendar,
   IconClose,
-  IconCloud,
   IconCompact,
   IconCompass,
   IconDisc,
@@ -80,8 +81,7 @@ const NAV_ITEMS = [
   { name: 'library', label: '我的音乐', Icon: IconLibrary },
   { name: 'daily', label: '每日推荐', Icon: IconCalendar },
   { name: 'fm', label: '私人漫游', Icon: IconRadio },
-  { name: 'together', label: '一起听', Icon: IconGift },
-  { name: 'cloud', label: '云盘', Icon: IconCloud }
+  { name: 'together', label: '一起听', Icon: IconGift }
 ] as const
 
 /**
@@ -106,8 +106,31 @@ function TopRow(): JSX.Element {
 function Shell(): JSX.Element {
   const navigation = useNavigation()
   const auth = useAuthStore()
+  const account = useAccountStore()
   const player = usePlayerStore()
+  const together = useTogetherStore()
   const [error, setError] = useState<string | undefined>()
+  /** 中继身份：悠悠账号优先、网易云兜底（uid/昵称/头像随 10 秒账号同步更新）。 */
+  const identity = relayIdentity(auth, account)
+  /** 程序启动（登录后）就自动连接中继：不再等用户打开「一起听」页面。 */
+  const relayAutoConnected = useRef(false)
+  useEffect(() => {
+    if (!identity.signedIn || identity.uid == null) {
+      relayAutoConnected.current = false
+      return
+    }
+    if (relayAutoConnected.current) return
+    relayAutoConnected.current = true
+    together.connect({ uid: identity.uid, nickname: identity.nickname, avatar: identity.avatar })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity.signedIn, identity.uid, identity.nickname, identity.avatar])
+
+  /** 自建账号登录时把昵称/头像灌进中继 profile（改昵称/换头像后 10 秒内同步）。 */
+  useEffect(() => {
+    if (!account.loggedIn) return
+    together.setProfile({ uid: identity.uid, nickname: identity.nickname, avatar: identity.avatar })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account.loggedIn, identity.uid, identity.nickname, identity.avatar])
   /** 精简模式：窗口缩成一条悬浮播放条（主进程改窗口尺寸与置顶，见 window:setCompact）。 */
   const [compact, setCompact] = useState(false)
   const enterCompact = (): void => {
@@ -124,7 +147,7 @@ function Shell(): JSX.Element {
    * 不能用 <img onError> —— 请求被网络层直接拦掉时 error 事件不保证派发，会留下破图图标。
    * 走 CDN 缩图：原图是 1024×1024，实测要 5.7 秒才回来，而这个圆圈只有 30px。
    */
-  const avatarURL = coverUrl(auth.profile?.avatarUrl, 160)
+  const avatarURL = coverUrl(account.profile?.avatar, 160)
   const avatarReady = useImageReady(avatarURL)
 
   /**
@@ -186,7 +209,7 @@ function Shell(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [player])
 
-  if (auth.loading) {
+  if (account.loading) {
     return (
       <>
         <Backdrop />
@@ -237,11 +260,11 @@ function Shell(): JSX.Element {
                 <IconSettings size={18} />
                 <span>设置</span>
               </button>
-              {auth.loggedIn ? (
+              {account.loggedIn ? (
                 <button
                   type="button"
                   className="sidebar__account"
-                  onClick={() => navigation.reset({ name: 'settings' })}
+                  onClick={() => navigation.reset({ name: 'library' })}
                 >
                   {avatarURL && avatarReady ? (
                     <img src={avatarURL} alt="" />
@@ -250,7 +273,11 @@ function Shell(): JSX.Element {
                       <IconUser size={16} />
                     </span>
                   )}
-                  <span className="sidebar__account-name">{auth.profile?.nickname ?? '已登录'}</span>
+                  <span className="sidebar__account-name">
+                    {account.profile?.nickname?.trim() ||
+                      account.profile?.email?.split('@')[0] ||
+                      '已登录'}
+                  </span>
                 </button>
               ) : null}
               {info ? <div className="sidebar__version">v{info.version}</div> : null}
@@ -268,7 +295,7 @@ function Shell(): JSX.Element {
             </div>
           ) : null}
           {navigation.route.name !== 'settings' ? <TopRow /> : null}
-          <PageRouter authLoggedIn={auth.loggedIn} />
+          <PageRouter authLoggedIn={account.loggedIn} />
         </main>
 
         <PlayerBar />
@@ -375,7 +402,7 @@ function WallpaperLayer(): JSX.Element | null {
 function CompactBar({ onExit }: { onExit: () => void }): JSX.Element {
   const player = usePlayerStore()
   const navigation = useNavigation()
-  const auth = useAuthStore()
+  const account = useAccountStore()
   const { state, current } = player
   const artURL =
     coverUrl(current?.album.picUrl, 240) ?? coverUrl(current?.artists[0]?.picUrl, 240)
@@ -408,35 +435,40 @@ function CompactBar({ onExit }: { onExit: () => void }): JSX.Element {
     setQueueOpen(false)
   }, [])
 
-  const [liked, setLiked] = useState(false)
+  /**
+   * 心形状态来自自建账号：`account:currentTrack` 把当前曲目还原成 `source:sourceId`
+   * 引用（站外曲目也能还原），再和收藏列表比对。旧的 `library:overview` 只认网易云
+   * id，站外音源的心永远点不亮 —— 这正是这次重做收藏的原因。
+   */
+  const [currentKey, setCurrentKey] = useState<string | undefined>(undefined)
   const trackId = current?.id
   useEffect(() => {
-    if (!auth.loggedIn || trackId === undefined) {
-      setLiked(false)
-      return
-    }
     let cancelled = false
-    void call('library:overview')
-      .then((overview) => {
-        if (!cancelled) setLiked(isLiked(trackId, overview.likedTrackIDs))
+    void call('account:currentTrack')
+      .then((ref) => {
+        if (!cancelled) setCurrentKey(ref?.key)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setCurrentKey(undefined)
+      })
     return () => {
       cancelled = true
     }
-  }, [auth.loggedIn, trackId])
+  }, [trackId])
+
+  const liked = useMemo(
+    () => (currentKey ? account.favorites.some((item) => item.key === currentKey) : false),
+    [account.favorites, currentKey]
+  )
 
   const toggleLike = async (): Promise<void> => {
-    if (!current) return
-    const next = !liked
-    setLiked(next)
-    markLike(current.id, next)
-    try {
-      await call('library:likeTrack', { id: current.id, like: next })
-    } catch {
-      clearLikeOverride(current.id)
-      setLiked(!next)
+    if (!account.loggedIn) {
+      navigation.push({ name: 'library' })
+      return
     }
+    const ref = await call('account:currentTrack').catch(() => undefined)
+    if (!ref) return
+    await account.toggleFavorite(ref).catch(() => undefined)
   }
 
   /** 精简条的「破碎爱心（不喜欢）」：网易云曲目上报不喜欢拿替换曲，然后统一切下一曲。 */
@@ -601,7 +633,6 @@ const KEEP_ALIVE_PAGES = [
   'daily',
   'fm',
   'together',
-  'cloud',
   'settings',
   'search'
 ] as const
@@ -626,8 +657,6 @@ function renderKeepAlivePage(name: KeepAliveName, authLoggedIn: boolean): JSX.El
       return <FM />
     case 'together':
       return <Together />
-    case 'cloud':
-      return authLoggedIn ? <Cloud /> : <Login />
     case 'settings':
       return <Settings />
     case 'search':
