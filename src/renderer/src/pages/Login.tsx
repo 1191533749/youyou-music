@@ -1,114 +1,156 @@
 /**
- * 登录页：只有网易云扫码。
+ * 登录页：邮箱验证码（我们自己的账号）。
  *
- * 其它平台（QQ音乐）不再占用登录页——它们只在「设置 → 音源账号」里按需绑定，
- * 主账号始终是网易云，两者互不影响（见 components/SourceAccount.tsx）。
+ * 为什么不再用网易云扫码：站外曲目没有网易云 id，收藏只能往网易云歌单里塞 id，
+ * 天然收不了。自建账号后收藏与歌单都落在我们服务器上，任何音源的歌都能收。
  *
- * 手机号（短信）登录已按用户要求移除：该通道受网易云风控限制，几乎必然失败。
- * 二维码由主进程准备：网易云给的是要编码的地址，主进程编码成矩阵，渲染进程只负责显示。
+ * 两步：填邮箱 → 收 6 位验证码 → 登录。验证码 10 分钟有效，
+ * 登录令牌由服务器签发并在本地加密保存（升级不会掉登录）。
  */
-import { useEffect, useState } from 'react'
-import { useAuthStore } from '../store/auth'
-import { call } from '../lib/ipc'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useNavigation } from '../store/navigation'
+import { useAccountStore } from '../store/account'
 import { LogoMark } from '../components/Icons'
-import type { QRLoginStateDTO } from '@shared/types'
 
-interface QRMatrix {
-  size: number
-  modules: boolean[][]
-}
-
-const SCAN_HINT = '打开网易云音乐 App，扫一扫登录'
+const EMAIL_KEY = 'youyou.login.email'
 
 export default function Login(): JSX.Element {
-  const auth = useAuthStore()
-  const [matrix, setMatrix] = useState<QRMatrix | undefined>()
-  const [qrError, setQrError] = useState<string | undefined>()
+  const navigation = useNavigation()
+  const account = useAccountStore()
+
+  const [step, setStep] = useState<'email' | 'code'>('email')
+  const [email, setEmail] = useState(() => localStorage.getItem(EMAIL_KEY) ?? '')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | undefined>()
+  const [countdown, setCountdown] = useState(0)
+  const codeInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    void auth.startQR('netease')
-    return () => auth.cancelQR()
-    // 仅在挂载时发起一次握手；轮询与取消由 store 内部管理。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (countdown <= 0) return
+    const timer = window.setTimeout(() => setCountdown((value) => value - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [countdown])
 
-  // 登录地址 → 二维码矩阵。编码放在主进程：那里既是可信侧，也是生成地址的地方。
   useEffect(() => {
-    const url = auth.qr?.url
-    if (!url) {
-      setMatrix(undefined)
-      return
-    }
-    let cancelled = false
-    setQrError(undefined)
-    void call('app:qrMatrix', { url })
-      .then((result) => {
-        if (!cancelled) setMatrix(result)
-      })
-      .catch((cause) => {
-        if (!cancelled) setQrError(cause instanceof Error ? cause.message : String(cause))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [auth.qr?.url])
+    if (step === 'code') codeInput.current?.focus()
+  }, [step])
 
-  const status = describeStatus(auth.qr)
-  const needsRefresh = auth.qr?.status === 'expired' || auth.qr?.status === 'error'
+  useEffect(() => {
+    if (!account.error) return
+    setMessage(account.error)
+    setBusy(false)
+  }, [account.error])
+
+  const emailLooksValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())
+
+  async function sendCode(event?: FormEvent): Promise<void> {
+    event?.preventDefault()
+    if (!emailLooksValid || busy) return
+    setBusy(true)
+    setMessage(undefined)
+    try {
+      await account.requestCode(email.trim())
+      localStorage.setItem(EMAIL_KEY, email.trim())
+      setStep('code')
+      setCountdown(60)
+      setMessage('验证码已发送')
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitCode(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (busy || code.trim().length < 6) return
+    setBusy(true)
+    setMessage(undefined)
+    try {
+      await account.verify(email.trim(), code.trim())
+      navigation.reset({ name: 'library' })
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause))
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="login">
-      <div className="login__card glass">
-        <div className="login__brand">
-          <LogoMark size={58} />
-          <h1>悠悠音乐</h1>
-          <p>小鱼の音乐</p>
+      <div className="login__panel">
+        <div className="login__head">
+          <LogoMark size={26} />
+          <span className="login__brand">悠悠音乐</span>
         </div>
 
-        <div className="login__qr">
-          <div className="login__qr-frame">
-            {matrix ? (
-              <div
-                className="qr-grid"
-                style={{ gridTemplateColumns: `repeat(${matrix.size}, 1fr)` }}
-                aria-label="登录二维码"
-              >
-                {matrix.modules.flatMap((row, rowIndex) =>
-                  row.map((dark, colIndex) => (
-                    <span key={`${rowIndex}-${colIndex}`} className={dark ? 'qr-grid__on' : 'qr-grid__off'} />
-                  ))
-                )}
-              </div>
-            ) : (
-              <div className="login__qr-placeholder">{qrError ?? '正在获取二维码…'}</div>
-            )}
-          </div>
-          <p className={`login__status login__status--${auth.qr?.status ?? 'waiting'}`}>{status}</p>
-          {needsRefresh ? (
-            <button type="button" className="button button--primary" onClick={() => void auth.refreshQR()}>
-              刷新二维码
+        {step === 'email' ? (
+          <form className="login__form" onSubmit={(event) => void sendCode(event)}>
+            <h1 className="login__title">登录</h1>
+            <label className="login__field">
+              <span>邮箱</span>
+              <input
+                type="email"
+                value={email}
+                autoFocus
+                spellCheck={false}
+                placeholder="name@example.com"
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <button
+              type="submit"
+              className="login__submit"
+              disabled={!emailLooksValid || busy}
+            >
+              {busy ? '发送中' : '获取验证码'}
             </button>
-          ) : (
-            <p className="login__hint">{SCAN_HINT}</p>
-          )}
-        </div>
+          </form>
+        ) : (
+          <form className="login__form" onSubmit={(event) => void submitCode(event)}>
+            <h1 className="login__title">验证码</h1>
+            <p className="login__mail">{email.trim()}</p>
+            <label className="login__field">
+              <span>6 位验证码</span>
+              <input
+                ref={codeInput}
+                value={code}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="000000"
+                onChange={(event) => setCode(event.target.value.replace(/\D+/g, '').slice(0, 6))}
+              />
+            </label>
+            <button type="submit" className="login__submit" disabled={code.trim().length < 6 || busy}>
+              {busy ? '登录中' : '登录'}
+            </button>
+            <div className="login__links">
+              <button
+                type="button"
+                className="login__link"
+                onClick={() => void sendCode()}
+                disabled={countdown > 0 || busy}
+              >
+                {countdown > 0 ? `${countdown} 秒后可重发` : '重新发送'}
+              </button>
+              <button
+                type="button"
+                className="login__link"
+                onClick={() => {
+                  setStep('email')
+                  setCode('')
+                  setMessage(undefined)
+                }}
+              >
+                更换邮箱
+              </button>
+            </div>
+          </form>
+        )}
+
+        {message ? <p className="login__note">{message}</p> : null}
       </div>
     </div>
   )
-}
-
-function describeStatus(state: QRLoginStateDTO | undefined): string {
-  if (!state) return '正在获取二维码…'
-  switch (state.status) {
-    case 'waiting':
-      return '请使用网易云音乐 App 扫码'
-    case 'scanned':
-      return state.message ?? '已扫码，请在手机上确认'
-    case 'confirmed':
-      return `登录成功${state.nickname ? `，欢迎 ${state.nickname}` : ''}`
-    case 'expired':
-      return state.message ?? '二维码已过期'
-    case 'error':
-      return state.message ?? '扫码失败'
-  }
 }
