@@ -27,6 +27,7 @@ import {
   type Route
 } from '../lib/contract'
 import { useAsync } from '../lib/hooks'
+import { useAccountStore } from '../store/account'
 import {
   IconCalendar,
   IconClose,
@@ -79,6 +80,7 @@ function recentDays(): DayEntry[] {
 }
 
 export default function DailyPage(): JSX.Element {
+  const account = useAccountStore()
   const player = usePlayerStore()
   const auth = useAuthStore()
   const navigation = useNavigation()
@@ -108,10 +110,16 @@ export default function DailyPage(): JSX.Element {
     setSelected(route.date)
   }, [route])
 
-  // 未登录时不请求：主进程只会回 needLogin，页面直接用提示卡引导登录。
+  // 网易云未登录时用自建账号的每日推荐（服务端按北京时间日期做种子），
+  // 这样「登录我们的账号 = 能看到每日推荐」，不依赖网易云账号。
   const daily = useAsync<TrackDTO[]>(
-    () => (auth.loggedIn ? call('home:dailySongs') : Promise.resolve([])),
-    [auth.loggedIn]
+    () =>
+      auth.loggedIn
+        ? call('home:dailySongs')
+        : account.loggedIn
+          ? call('account:daily')
+          : Promise.resolve([]),
+    [auth.loggedIn, account.loggedIn]
   )
 
   // 历史日推：只在选中非今天时拉取。generation 防止快速切换日期时旧响应覆盖新日期。
@@ -262,7 +270,7 @@ export default function DailyPage(): JSX.Element {
   )
 
   // 登录态还没确认完之前先当作正常路径：已登录用户不该看到一闪而过的登录提示。
-  if (!auth.loading && !auth.loggedIn) {
+  if (!auth.loading && !account.loading && !auth.loggedIn && !account.loggedIn) {
     return (
       <div className="page">
         {banner}
