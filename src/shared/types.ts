@@ -392,6 +392,57 @@ export interface PageResult<T> {
   more?: boolean
 }
 
+// --- 悠悠账号（自建登录 / 收藏 / 歌单） ---
+
+/** 服务器上的账号资料；头像为空时客户端显示默认图形。 */
+export interface YYProfileDTO {
+  id: number
+  email: string
+  nickname: string
+  /** 头像地址（服务器上的 png/jpeg/webp），未设置时为 undefined。 */
+  avatar?: string
+  createdAt: number
+}
+
+/**
+ * 一条收藏 / 歌单曲目。**与音源解耦**：source 是 'netease' / 'qishui' / 'kugou' /
+ * 'kuwo' / 'qq'，sourceId 是该源里的 id（网易云是数字字符串，站外是原始 id）。
+ * key = `${source}:${sourceId}`，收藏与去重都以它为准。
+ */
+export interface YYTrackRefDTO {
+  key: string
+  source: string
+  sourceId: string
+  name: string
+  artist: string
+  album?: string
+  cover?: string
+  durationMs?: number
+  /** 收藏时间（毫秒），歌单条目里没有。 */
+  addedAt?: number
+}
+
+/** 自建歌单摘要。 */
+export interface YYPlaylistDTO {
+  id: number
+  name: string
+  count: number
+  updatedAt: number
+}
+
+/** 自建歌单详情（含曲目）。 */
+export interface YYPlaylistDetailDTO extends YYPlaylistDTO {
+  tracks: YYTrackRefDTO[]
+}
+
+/** 账号快照：登录态 + 资料 + 收藏 + 歌单，客户端启动时一次取回。 */
+export interface YYAccountStateDTO {
+  loggedIn: boolean
+  profile?: YYProfileDTO
+  favorites: YYTrackRefDTO[]
+  playlists: YYPlaylistDTO[]
+}
+
 /** The IPC envelope: every handler either resolves `data` or rejects with `error`. */
 export interface IPCResult<T> {
   ok: boolean
