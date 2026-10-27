@@ -343,6 +343,17 @@ export class PlayerController extends EventEmitter {
 
   // MARK: - Snapshot
 
+  /**
+   * 当前队列条目的站外信息（没有则为 undefined）。
+   *
+   * 收藏 / 加自建歌单需要 `source + sourceId`：站外曲目在 DTO 里只有一个
+   * 合成的负 id，光靠它没法回到原音源，所以要从队列条目里取原始信息。
+   */
+  currentExternal(): ExternalTrackDTO | undefined {
+    const entry = this.queue[this.index]
+    return entry?.external
+  }
+
   snapshot(): PlayerSnapshot {
     const entry = this.queue[this.index]
     return {
