@@ -9,12 +9,12 @@
  */
 const SITE_CONFIG = {
   /** 当前版本（autoDetect 取不到时显示这个） */
-  version: '0.4.4',
+  version: '0.6.0',
   /** 官方下载地址；换成你自己服务器的直链也可以 */
   installerUrl:
-    'https://github.com/1191533749/youyou-music/releases/download/v0.4.4/youyou-music-setup-0.4.4.exe',
+    'https://github.com/1191533749/youyou-music/releases/download/v0.6.0/youyou-music-setup-0.6.0.exe',
   portableUrl:
-    'https://github.com/1191533749/youyou-music/releases/download/v0.4.4/youyou-music-portable-0.4.4.exe',
+    'https://github.com/1191533749/youyou-music/releases/download/v0.6.0/youyou-music-portable-0.6.0.exe',
   /** 文件大小（只用于按钮下方的说明文字，可留空） */
   installerSize: '',
   portableSize: '',
