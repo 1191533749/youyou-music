@@ -19,6 +19,7 @@ import {
   coverUrl,
   formatDuration,
   formatPlayCount,
+  onEvent,
   useNavigation,
   usePlayerStore,
   useToast
@@ -26,12 +27,13 @@ import {
 import ExternalRows from '../components/ExternalRows'
 import { isSearchRelevant } from '../lib/relevance'
 import { IconClose, IconDisc, IconLayers, IconMusic, IconPlay, IconPlus, IconSearch, IconUser } from '../components/Icons'
-import type { SearchResultDTO } from '@shared/ipc'
+import type { SearchResultDTO, SearchSuggestDTO } from '@shared/ipc'
 import {
   EXTERNAL_SOURCES,
   type ArtistSummaryDTO,
   type ExternalSource,
-  type ExternalTrackDTO
+  type ExternalTrackDTO,
+  type TrackDTO
 } from '@shared/types'
 
 
@@ -187,6 +189,82 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   /** 换页签/换关键词时的静默刷新标记（有旧内容时用它代替骨架）。 */
   const [refreshing, setRefreshing] = useState(false)
 
+  /** 单曲行下载：同一时刻只允许一个下载任务；行上的进度/转换中文案都来自它。 */
+  const [download, setDownload] = useState<{
+    key: string
+    received: number
+    total: number
+    converting?: boolean
+  } | null>(null)
+
+  const downloadLabel = download
+    ? download.converting
+      ? '转码'
+      : download.total > 0
+        ? `${Math.round((download.received / download.total) * 100)}%`
+        : '准备中'
+    : ''
+
+  const startDownload = (key: string, track: TrackDTO, external?: ExternalTrackDTO): void => {
+    if (download) return
+    setDownload({ key, received: 0, total: 0 })
+    void (async () => {
+      try {
+        const result = await call('download:track', { track, external })
+        setDownload(null)
+        if (result.ok) {
+          toast.show(`已保存：${result.path}`, 'success')
+        }
+      } catch (cause) {
+        setDownload(null)
+        toast.show(String(cause instanceof Error ? cause.message : cause), 'error')
+      }
+    })()
+  }
+
+  /** 站外曲目没有 TrackDTO，凑一个最小 DTO 给下载接口（歌名/歌手/封面）。 */
+  const startDownloadExternal = (item: ExternalTrackDTO): void => {
+    startDownload(
+      `${item.source}:${item.sourceId}`,
+      {
+        id: -1,
+        name: item.name,
+        artists: [{ id: 0, name: item.artists }],
+        album: { id: 0, name: item.album ?? '', picUrl: item.coverUrl ?? '' },
+        durationMS: item.durationMS,
+        alias: [],
+        transNames: [],
+        fee: 0,
+        mvID: 0,
+        noCopyright: false,
+        isCloud: false,
+        playability: 'playable'
+      },
+      item
+    )
+  }
+
+  useEffect(
+    () =>
+      onEvent('download:progress', (event) => {
+        if (event.done || event.error) {
+          setDownload(null)
+          return
+        }
+        setDownload((current) =>
+          current
+            ? {
+                key: current.key,
+                received: event.received,
+                total: event.total,
+                converting: event.converting ?? false
+              }
+            : null
+        )
+      }),
+    []
+  )
+
   const generationRef = useRef(0)
   const fallbackRef = useRef(0)
   const offsetRef = useRef(0)
@@ -205,13 +283,49 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
     const trimmed = value.trim()
     if (!trimmed) return
     setInput(trimmed)
+    setSuggest(undefined)
     setQuery((current) => ({ keywords: trimmed, nonce: (current?.nonce ?? 0) + 1 }))
   }, [])
 
   /** 清空输入（手动删光或点清空按钮）→ 立刻回到空态。 */
   const clear = useCallback((): void => {
     setInput('')
+    setSuggest(undefined)
     setQuery(undefined)
+  }, [])
+
+  // 输入联想：300ms 防抖只打一次接口；回车/点击联想才真正搜索。
+  // 联想只展示歌曲与歌手（用户要的是「联想歌曲名」），点任意一条按该名搜索。
+  const [suggest, setSuggest] = useState<SearchSuggestDTO | undefined>(undefined)
+  const suggestTimerRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    const value = input.trim()
+    if (suggestTimerRef.current !== undefined) window.clearTimeout(suggestTimerRef.current)
+    if (!value) {
+      setSuggest(undefined)
+      return
+    }
+    suggestTimerRef.current = window.setTimeout(() => {
+      void call('search:suggest', { keywords: value })
+        .then((next) => setSuggest(next ?? undefined))
+        .catch(() => setSuggest(undefined))
+    }, 300)
+    return () => {
+      if (suggestTimerRef.current !== undefined) window.clearTimeout(suggestTimerRef.current)
+    }
+  }, [input])
+
+  // 点击联想下拉以外的任何地方（页面空白、结果列表、别的按钮）都自动收起。
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node | null
+      if (!target) return
+      const element = target instanceof Element ? target : null
+      const inside = element?.closest('.search-suggest, .search-bar, .search-hero__field')
+      if (!inside) setSuggest(undefined)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [])
 
   /**
@@ -455,6 +569,11 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
   /** 并进单曲列表的汽水曲目（主进程已按「同名同歌手不重复」过滤）。 */
   const mergedExternal = !fallbackActive ? (result?.external ?? []) : []
 
+  const suggestNode =
+    suggest && (suggest.songs?.length || suggest.artists?.length) ? (
+      <SuggestList suggest={suggest} onPick={submit} />
+    ) : null
+
   return (
     <div className={`page search${hero ? ' search--hero' : ''}`}>
       {hero ? null : (
@@ -472,31 +591,35 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
           artists={wallArtists}
           onChange={(value) => setInput(value)}
           onSubmit={() => submit(input)}
+          suggestions={suggestNode}
         />
       ) : (
-        <div className="search-bar">
-          <span className="search-bar__icon">
-            <IconSearch size={16} />
-          </span>
-          <input
-            className="search-bar__input"
-            value={input}
-            autoFocus
-            onChange={(event) => {
-              const value = event.target.value
-              setInput(value)
-              // 手动删空 → 立刻回到空态。
-              if (!value.trim()) clear()
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') submit(input)
-            }}
-          />
-          {input ? (
-            <button type="button" className="search-bar__clear" onClick={clear} aria-label="清空">
-              <IconClose size={15} />
-            </button>
-          ) : null}
+        <div className="search-bar__holder">
+          <div className="search-bar">
+            <span className="search-bar__icon">
+              <IconSearch size={16} />
+            </span>
+            <input
+              className="search-bar__input"
+              value={input}
+              autoFocus
+              onChange={(event) => {
+                const value = event.target.value
+                setInput(value)
+                // 手动删空 → 立刻回到空态。
+                if (!value.trim()) clear()
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submit(input)
+              }}
+            />
+            {input ? (
+              <button type="button" className="search-bar__clear" onClick={clear} aria-label="清空">
+                <IconClose size={15} />
+              </button>
+            ) : null}
+          </div>
+          {suggestNode}
         </div>
       )}
 
@@ -601,6 +724,11 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
                       playingKey={playingKey}
                       currentName={player.current?.name}
                       onPlay={(item) => void playExternal(item)}
+                      download={{
+                        onSelect: startDownloadExternal,
+                        activeKey: download?.key ?? null,
+                        label: downloadLabel
+                      }}
                     />
                   ) : null}
                 </>
@@ -611,6 +739,12 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
                       tracks={songs}
                       currentTrackID={player.current?.id}
                       onPlay={(index) => void player.playTracks(songs, index)}
+                      download={{
+                        onSelect: (track) => startDownload(`netease:${track.id}`, track),
+                        keyOf: (track) => `netease:${track.id}`,
+                        activeKey: download?.key ?? null,
+                        label: downloadLabel
+                      }}
                     />
                   ) : null}
                   {/* 汽水那边有的版本并进同一张列表：网易云没版权/只有 VIP 版时，
@@ -622,6 +756,11 @@ export default function Search({ initialKeywords }: { initialKeywords?: string }
                       playingKey={playingKey}
                       currentName={player.current?.name}
                       onPlay={(item) => void playExternal(item)}
+                      download={{
+                        onSelect: startDownloadExternal,
+                        activeKey: download?.key ?? null,
+                        label: downloadLabel
+                      }}
                     />
                   ) : null}
                 </>
@@ -762,33 +901,78 @@ function HeroSearch({
   value,
   artists,
   onChange,
-  onSubmit
+  onSubmit,
+  suggestions
 }: {
   value: string
   artists: WallArtist[]
   onChange: (value: string) => void
   onSubmit: () => void
+  suggestions?: JSX.Element | null
 }): JSX.Element {
   const heroRef = useRef<HTMLDivElement>(null)
   useFillHeight(heroRef)
   return (
     <div className="search-hero" ref={heroRef}>
       <AvatarWall artists={artists} />
-      <div className="search-hero__box">
-        <span className="search-hero__icon">
-          <IconSearch size={22} />
-        </span>
-        <input
-          className="search-hero__input"
-          value={value}
-          autoFocus
-          placeholder="搜索歌曲、歌手"
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') onSubmit()
-          }}
-        />
+      <div className="search-hero__field">
+        <div className="search-hero__box">
+          <span className="search-hero__icon">
+            <IconSearch size={22} />
+          </span>
+          <input
+            className="search-hero__input"
+            value={value}
+            autoFocus
+            placeholder="搜索歌曲、歌手"
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') onSubmit()
+            }}
+          />
+        </div>
+        {suggestions}
       </div>
+    </div>
+  )
+}
+
+/** 输入联想下拉：歌曲优先，歌手其次；点一条按该名称直接搜索。 */
+function SuggestList({
+  suggest,
+  onPick
+}: {
+  suggest: SearchSuggestDTO
+  onPick: (term: string) => void
+}): JSX.Element {
+  return (
+    <div className="search-suggest" role="listbox">
+      {suggest.songs?.slice(0, 8).map((song) => (
+        <button
+          key={`song-${song.id}`}
+          type="button"
+          className="search-suggest__row"
+          role="option"
+          onClick={() => onPick(song.name)}
+        >
+          <IconMusic size={14} />
+          <span className="search-suggest__name">{song.name}</span>
+          <span className="search-suggest__sub">{artistLine(song)}</span>
+        </button>
+      ))}
+      {suggest.artists?.slice(0, 4).map((artist) => (
+        <button
+          key={`artist-${artist.id}`}
+          type="button"
+          className="search-suggest__row"
+          role="option"
+          onClick={() => onPick(artist.name)}
+        >
+          <IconUser size={14} />
+          <span className="search-suggest__name">{artist.name}</span>
+          <span className="search-suggest__sub">歌手</span>
+        </button>
+      ))}
     </div>
   )
 }
