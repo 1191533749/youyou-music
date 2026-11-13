@@ -84,6 +84,8 @@ export interface TrackDTO {
 export interface PlayerStateDTO {
   /** The track the engine is on, if any. */
   track?: TrackDTO
+  /** 当前曲目是站外音源时的原样信息（下载/收藏用）。 */
+  external?: ExternalTrackDTO
   /** The queue the user is working through. */
   queue: TrackDTO[]
   /** Index into `queue`, or -1 when nothing is playing. */
@@ -94,6 +96,8 @@ export interface PlayerStateDTO {
   duration: number
   volume: number
   muted: boolean
+  /** 播放倍速（0.5–2，步进 0.25）。 */
+  rate: number
   /** True while mpv is loading or buffering. */
   loading: boolean
   repeat: RepeatMode
@@ -205,6 +209,10 @@ export interface SettingsDTO {
   /** Fall back to a lower tier when the requested one is not entitled. */
   autoDowngradeQuality: boolean
   volume: number
+  /** 播放倍速（0.5–2，步进 0.25），下次启动时应用。 */
+  rate: number
+  /** 下载格式：保持原格式，或下载后自动转成 320k MP3。 */
+  downloadFormat: 'original' | 'mp3'
   /** Prefer `https://` and third-party mirrors for cover art. */
   showDesktopLyrics: boolean
   desktopLyricsFontSize: number
@@ -267,6 +275,8 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   quality: 'exhigh',
   autoDowngradeQuality: true,
   volume: 80,
+  rate: 1,
+  downloadFormat: 'original',
   showDesktopLyrics: false,
   desktopLyricsFontSize: 28,
   desktopLyricsOpacity: 0.92,
