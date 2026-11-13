@@ -206,6 +206,12 @@ export function registerPlayerHandlers(context: AppContext): void {
     return context.player.snapshot()
   })
 
+  defineHandler('player:setRate', async ({ rate }) => {
+    await context.player.setRate(rate)
+    await context.settings.update({ rate: context.player.snapshot().rate })
+    return context.player.snapshot()
+  })
+
   defineHandler('player:setMuted', async ({ muted }) => {
     await context.player.setMuted(muted)
     return context.player.snapshot()
