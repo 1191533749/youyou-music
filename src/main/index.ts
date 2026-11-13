@@ -30,9 +30,10 @@ import { registerUpdateHandlers } from './ipc/update.js'
 import { cleanUpdateCache } from './update/service.js'
 import { registerLibraryHandlers } from './ipc/library.js'
 import { registerAccountHandlers } from './ipc/account.js'
+import { registerDownloadHandlers } from './ipc/download.js'
 import { YouyouAccount } from './accounts/youyou.js'
 import { registerExploreHandlers, warmFMPool } from './ipc/explore.js'
-import { registerAppHandlers } from './ipc/app.js'
+import { registerAppHandlers, setSystemFullscreenFlag } from './ipc/app.js'
 import type { AppContext } from './context.js'
 import type { PlayerSnapshot } from './player/controller.js'
 import { bootLog } from './diagnostics.js'
@@ -157,8 +158,14 @@ function createMainWindow(): BrowserWindow {
   window.on('unmaximize', () => sendEvent(contextRef.value, 'window:maximized', { maximized: false }))
 
   // 系统真全屏（F11 / setFullScreen）：全屏页据此自动隐藏控件，鼠标一动即现身。
-  window.on('enter-full-screen', () => sendEvent(contextRef.value, 'window:fullscreen', { fullscreen: true }))
-  window.on('leave-full-screen', () => sendEvent(contextRef.value, 'window:fullscreen', { fullscreen: false }))
+  window.on('enter-full-screen', () => {
+    setSystemFullscreenFlag(true)
+    sendEvent(contextRef.value, 'window:fullscreen', { fullscreen: true })
+  })
+  window.on('leave-full-screen', () => {
+    setSystemFullscreenFlag(false)
+    sendEvent(contextRef.value, 'window:fullscreen', { fullscreen: false })
+  })
 
   window.on('close', (event) => {
     const settings = contextRef.value?.settings.current
@@ -552,6 +559,7 @@ async function bootstrap(): Promise<void> {
   registerPlayerHandlers(context)
   registerLibraryHandlers(context)
   registerAccountHandlers(context)
+  registerDownloadHandlers(context)
   registerExploreHandlers(context)
   // 私人漫游要「进页面就出声」：曲池得提前攒好，否则现场连打十来轮接口要二十秒。
   // 漫游曲目现在全部来自汽水音乐（免登录直连），所以不再要求先登录网易云。
@@ -603,6 +611,8 @@ async function bootstrap(): Promise<void> {
     try {
       await mpv.start()
       await mpv.setVolume(settings.current.volume)
+      // 上次会话的播放倍速同样在 mpv 起来后恢复。
+      await mpv.setPlaybackRate(settings.current.rate)
       mpvReady = true
     } catch (cause) {
       log(`mpv 启动失败（第 ${attempt}/3 次）: ${String(cause)}`)
@@ -612,6 +622,9 @@ async function bootstrap(): Promise<void> {
   }
   if (!mpvReady) {
     sendEvent(context, 'app:error', { message: '播放组件未就绪，请重启悠悠音乐' })
+  } else {
+    // 让控制器记住已恢复的倍速，界面（快照）显示与 mpv 实际一致。
+    await player.setRate(settings.current.rate).catch(() => undefined)
   }
 
   if (process.env.YOYOU_SMOKE_TEST === '1') {
