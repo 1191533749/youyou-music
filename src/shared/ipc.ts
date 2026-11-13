@@ -309,6 +309,7 @@ export interface IPCContract {
   'player:seek': { request: { seconds: number }; response: PlayerStateDTO }
   'player:setVolume': { request: { volume: number }; response: PlayerStateDTO }
   'player:setMuted': { request: { muted: boolean }; response: PlayerStateDTO }
+  'player:setRate': { request: { rate: number }; response: PlayerStateDTO }
   'player:setRepeat': { request: { mode: 'off' | 'all' | 'one' }; response: PlayerStateDTO }
   'player:cycleRepeat': { request: void; response: PlayerStateDTO }
   'player:setShuffle': { request: { shuffle: boolean }; response: PlayerStateDTO }
@@ -376,6 +377,13 @@ export interface IPCContract {
   /** QQ 群二维码（data URL），设置页「加入群聊」用。 */
   'app:qqGroupImage': { request: void; response: string | undefined }
   'app:log': { request: { level: 'info' | 'warn' | 'error'; message: string }; response: void }
+
+  // --- download ---
+  /** 把一首歌下载到用户选择的位置（主进程解析音源并流式写盘，进度走 download:progress 事件）。 */
+  'download:track': {
+    request: { track: TrackDTO; external?: ExternalTrackDTO }
+    response: { ok: boolean; canceled?: boolean; path?: string }
+  }
 }
 
 /** Artist album page — kept separate to avoid a generic that IPC cannot carry. */
@@ -402,6 +410,17 @@ export interface IPCEvents {
   'window:maximized': { maximized: boolean }
   /** 主窗口系统真全屏状态变化（F11 / 全屏按钮），全屏页据此隐藏控件。 */
   'window:fullscreen': { fullscreen: boolean }
+  /** 歌曲下载进度（主进程 → 渲染层，key 用于区分多个并发下载）。 */
+  'download:progress': {
+    key: string
+    received: number
+    total: number
+    done?: boolean
+    /** 下载完、正在 ffmpeg 转 MP3（received/total 不再有意义）。 */
+    converting?: boolean
+    path?: string
+    error?: string
+  }
 }
 
 export type IPCEventName = keyof IPCEvents
@@ -487,6 +506,7 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'player:seek',
   'player:setVolume',
   'player:setMuted',
+  'player:setRate',
   'player:setRepeat',
   'player:cycleRepeat',
   'player:setShuffle',
@@ -527,7 +547,8 @@ export const IPC_INVOKE_CHANNELS: IPCChannel[] = [
   'app:entitlements',
   'app:qrMatrix',
   'app:qqGroupImage',
-  'app:log'
+  'app:log',
+  'download:track'
 ]
 
 export const IPC_EVENT_NAMES: IPCEventName[] = [
@@ -540,5 +561,6 @@ export const IPC_EVENT_NAMES: IPCEventName[] = [
   'app:navigate',
   'settings:changed',
   'window:maximized',
-  'window:fullscreen'
+  'window:fullscreen',
+  'download:progress'
 ]
