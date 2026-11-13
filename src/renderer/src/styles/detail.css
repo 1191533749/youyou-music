@@ -626,10 +626,10 @@
   transition: color 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
 }
 
-/* 唱过去的整句：暖橙、比未唱句亮，但仍低于正在唱的这一句。 */
+/* 唱过去的整句：中灰白、比未唱句亮，但仍低于正在唱的这一句。 */
 .np-fullscreen .np-lyrics__list--karaoke .np-lyric.is-sung .np-lyric__text {
-  color: var(--np-sung);
-  opacity: 0.82;
+  color: #fff;
+  opacity: 0.72;
 }
 
 .np-fullscreen .np-lyrics__list--karaoke .np-lyric.is-active .np-lyric__text {
@@ -640,11 +640,11 @@
   opacity: 1;
 }
 
-/* 逐字格子：两段式渐变，--np-char-fill 左侧是已唱的暖橙、右侧是未唱的暗色。 */
+/* 逐字格子：两段式渐变，--np-char-fill 左侧是已唱的亮白、右侧是未唱的暗色。 */
 .np-fullscreen .np-lyrics__list--karaoke .np-lyric__char {
   background-image: linear-gradient(
     90deg,
-    var(--np-sung) var(--np-char-fill),
+    #fff var(--np-char-fill),
     var(--np-unsung) var(--np-char-fill)
   );
   background-clip: text;
@@ -653,36 +653,35 @@
   transition: --np-char-fill 0.18s linear;
 }
 
-/* 正在唱的那一个字：渐变调亮，描边加一圈贴着字形的小光晕。 */
+/* 正在唱的那一个字：保持亮白，只加一圈很淡的光晕，不再描边。 */
 .np-fullscreen .np-lyrics__list--karaoke .np-lyric__char.is-singing {
   background-image: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--np-sung) 68%, #fff) var(--np-char-fill),
+    #fff var(--np-char-fill),
     var(--np-unsung) var(--np-char-fill)
   );
-  -webkit-text-stroke: 0.5px color-mix(in srgb, var(--np-sung) 55%, #fff);
-  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--np-sung) 55%, transparent));
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.35));
 }
 
-/* 2) 经典：不加渐变、不加装饰线，只靠明暗与暖橙区分三态 ——
-   还没唱的最暗、唱过的转暖橙、当前句纯白并带一层很淡的投影。 */
+/* 2) 经典（网易云/QQ音乐那种主流效果）：全程白字，不用暖橙、不加描边 ——
+   还没唱的最暗、唱过的中灰白、当前句纯白带一层柔和投影，略放大 1.03。 */
 .np-fullscreen .np-lyric--classic .np-lyric__text {
-  color: var(--np-lyric-dim);
-  opacity: 0.45;
+  color: #fff;
+  opacity: 0.38;
   transition: color 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
 }
 
 .np-fullscreen .np-lyric--classic.is-sung .np-lyric__text {
-  color: var(--np-sung);
-  opacity: 0.78;
+  color: #fff;
+  opacity: 0.72;
 }
 
 .np-fullscreen .np-lyric--classic.is-active .np-lyric__text {
-  /* 与卡拉OK同一个处理：当前句略大，靠 transform 不走重排。 */
+  /* 当前句只放大一点点（1.03），靠 transform 不走重排。 */
   display: inline-block;
   transform-origin: left center;
-  transform: scale(1.04);
-  color: var(--text);
+  transform: scale(1.03);
+  color: #fff;
   opacity: 1;
   text-shadow: 0 1px 14px rgba(0, 0, 0, 0.45);
 }
