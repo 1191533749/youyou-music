@@ -33,6 +33,21 @@ let compactRestoreBounds: Rectangle | undefined
 let compactMode = false
 const COMPACT_QUEUE_HEIGHT = 420
 
+/**
+ * 真全屏状态（主进程自己的记账）。
+ *
+ * 主窗口是透明窗口（精简模式用），Windows 上透明窗口的 `isFullScreen()` 在
+ * `setFullScreen` 之后不会立刻反映新状态、个别情况下一直返回旧值 —— 直接拿它做
+ * 开关会让「再点一次退出全屏」失败（用户实测：全屏后按钮不变色、再点退不出来）。
+ * 所以这里用自己的布尔量记账，并以 enter/leave-full-screen 事件为准同步（index.ts）。
+ */
+let systemFullscreen = false
+
+/** 由主窗口的 enter/leave-full-screen 事件回调同步（F11 也走这里）。 */
+export function setSystemFullscreenFlag(value: boolean): void {
+  systemFullscreen = value
+}
+
 /** 标题/歌手名归一：去括号注释、小写、只留字母数字，比较用。 */
 function lyricNorm(text: string): string {
   return text
@@ -340,16 +355,19 @@ export function registerAppHandlers(context: AppContext): void {
 
   defineHandler('window:toggleFullScreen', async () => {
     const window = context.mainWindow()
-    if (!window || window.isDestroyed()) return false
-    window.setFullScreen(!window.isFullScreen())
-    return window.isFullScreen()
+    if (!window || window.isDestroyed()) return systemFullscreen
+    // 用自记账的布尔量翻转，不读 isFullScreen()（透明窗口在 Windows 上会读到旧值）。
+    systemFullscreen = !systemFullscreen
+    window.setFullScreen(systemFullscreen)
+    return systemFullscreen
   })
 
   defineHandler('window:setFullScreen', async ({ fullscreen }) => {
     const window = context.mainWindow()
-    if (!window || window.isDestroyed()) return false
-    window.setFullScreen(fullscreen)
-    return window.isFullScreen()
+    if (!window || window.isDestroyed()) return systemFullscreen
+    systemFullscreen = fullscreen === true
+    window.setFullScreen(systemFullscreen)
+    return systemFullscreen
   })
 
   defineHandler('window:minimize', async () => {
@@ -429,7 +447,9 @@ export function registerAppHandlers(context: AppContext): void {
   // 真全屏的最终裁判：渲染层在收起控件前先问一次，避免状态不同步时误收。
   defineHandler('window:isFullScreen', async () => {
     const window = context.mainWindow()
-    return !!window && !window.isDestroyed() && window.isFullScreen()
+    // 自记账优先（透明窗口的 isFullScreen() 可能读到旧值）；窗口销毁则按假。
+    if (!window || window.isDestroyed()) return systemFullscreen
+    return systemFullscreen
   })
 
   defineHandler('window:close', async () => {
