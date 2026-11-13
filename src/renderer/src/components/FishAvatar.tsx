@@ -52,6 +52,9 @@ export default function FishAvatar({ className, label = '封面加载中' }: Fis
  * 用 `new Image()` 在后台预热，而不是把 `<img>` 挂在页面上：加载中和失败都不会
  * 露出浏览器破图图标；等它返回 true 再渲染真实 `<img>` 时图片已在缓存里，
  * 因此是「一下就换成真图」，不会先闪一张半成品。
+ *
+ * 请求偶发会挂起（无 load 也无 error）：10 秒还没结果就带缓存破坏参数重试一次，
+ * 再失败才返回 false（占位），避免头像永久卡在占位上。
  */
 export function useImageReady(src: string | undefined): boolean {
   const [ready, setReady] = useState(false)
@@ -62,17 +65,31 @@ export function useImageReady(src: string | undefined): boolean {
       return
     }
     let cancelled = false
+    let timer: number | undefined
     setReady(false)
-    const image = new Image()
-    image.onload = () => {
-      if (!cancelled) setReady(true)
+    const load = (url: string): void => {
+      const image = new Image()
+      const done = (ok: boolean): void => {
+        if (cancelled) return
+        if (timer !== undefined) window.clearTimeout(timer)
+        setReady(ok)
+      }
+      image.onload = () => done(true)
+      image.onerror = () => done(false)
+      timer = window.setTimeout(() => {
+        // 挂起超时：带破坏缓存的参数重试一轮。
+        const separator = url.includes('?') ? '&' : '?'
+        const retry = new Image()
+        retry.onload = () => done(true)
+        retry.onerror = () => done(false)
+        retry.src = `${url}${separator}yyretry=${Date.now()}`
+      }, 10_000)
+      image.src = url
     }
-    image.onerror = () => {
-      if (!cancelled) setReady(false)
-    }
-    image.src = src
+    load(src)
     return () => {
       cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
     }
   }, [src])
 
