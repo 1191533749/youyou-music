@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TrackDTO } from '@shared/types'
 import { artistLine, coverUrl, formatDuration } from '../lib/format'
 import { useFailedTrackIds } from '../store/player'
-import { IconHeart, IconHeartFilled, IconMore, IconMusic, IconPause, IconPlay } from './Icons'
+import { IconDownload, IconHeart, IconHeartFilled, IconMore, IconMusic, IconPause, IconPlay } from './Icons'
 
 export interface SongListProps {
   tracks: TrackDTO[]
@@ -25,6 +25,15 @@ export interface SongListProps {
   showIndex?: boolean
   /** Extra per-row action, e.g. "从歌单删除". */
   rowAction?: { label: string; onSelect: (track: TrackDTO, index: number) => void }
+  /** Show a per-row download button (搜索单曲列表). Omit to hide. */
+  download?: {
+    onSelect: (track: TrackDTO) => void
+    /** Row identity for the active download, to show progress on the right row. */
+    keyOf: (track: TrackDTO) => string
+    activeKey: string | null
+    /** Progress label for the downloading row（百分比 / 下载中 / 转换中）. */
+    label: string
+  }
   /** Called when the heart is clicked. Omit to hide the heart. */
   onToggleLike?: (track: TrackDTO) => void
   likedTrackIDs?: Set<number>
@@ -40,6 +49,7 @@ export default function SongList({
   showAlbum = true,
   showIndex = true,
   rowAction,
+  download,
   onToggleLike,
   likedTrackIDs,
   onReachEnd,
@@ -85,9 +95,10 @@ export default function SongList({
     parts.push('1fr')
     parts.push('minmax(110px, 200px)')
     if (showAlbum) parts.push('minmax(120px, 220px)')
-    parts.push('60px', '66px')
+    // 操作区：有下载按钮时同时可能出现「下载图标 + 红心」，轨道要留够，否则会顶出圆角外。
+    parts.push('60px', download ? '96px' : '66px')
     return parts.join(' ')
-  }, [showAlbum, showIndex])
+  }, [download, showAlbum, showIndex])
 
   if (visible.length === 0) {
     return <div className="placeholder">{emptyMessage}</div>
@@ -133,6 +144,34 @@ export default function SongList({
             <div className="song-row__duration">{formatDuration(track.durationMS / 1000)}</div>
 
             <div className="song-row__actions">
+              {download ? (
+                (() => {
+                  const isActive = download.activeKey !== null && download.activeKey === download.keyOf(track)
+                  // 进行中的这一行不画按钮（32px 圆钮装不下文字，会顶出圆角），直接显示进度文字。
+                  if (isActive) {
+                    return (
+                      <span className="song-row__dl-label" title="正在下载">
+                        {download.label}
+                      </span>
+                    )
+                  }
+                  return (
+                    <button
+                      type="button"
+                      className="icon-button"
+                      disabled={download.activeKey !== null}
+                      title="下载这首歌"
+                      aria-label={`下载 ${track.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        download.onSelect(track)
+                      }}
+                    >
+                      <IconDownload size={16} />
+                    </button>
+                  )
+                })()
+              ) : null}
               {onToggleLike ? (
                 <button
                   type="button"
