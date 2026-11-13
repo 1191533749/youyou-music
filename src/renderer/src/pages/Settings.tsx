@@ -329,6 +329,20 @@ export default function Settings(): JSX.Element {
             </select>
           </div>
         </div>
+        <div className="settings__row">
+          <div className="settings__row-label">
+            <span>下载格式</span>
+          </div>
+          <div className="settings__row-control">
+            <select
+              value={settings.downloadFormat}
+              onChange={(event) => void patch({ downloadFormat: event.target.value as SettingsDTO['downloadFormat'] })}
+            >
+              <option value="original">保持原格式</option>
+              <option value="mp3">转 MP3（320k）</option>
+            </select>
+          </div>
+        </div>
         <SettingSwitch
           label="自动降档"
           checked={settings.autoDowngradeQuality}
