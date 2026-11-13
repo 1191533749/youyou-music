@@ -23,6 +23,11 @@ extraResources:
     to: mpv
     filter:
       - '**/*'
+  # 下载转 MP3 用的精简 ffmpeg（设置「转 MP3」时才用到）。
+  - from: vendor/ffmpeg
+    to: ffmpeg
+    filter:
+      - '**/*'
   # 托盘图标与安装目录内的许可说明（许可文本随包分发，但不出现在界面里）。
   - from: build/icon.png
     to: icon.png
