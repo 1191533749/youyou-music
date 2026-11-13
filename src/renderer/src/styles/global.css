@@ -1199,7 +1199,11 @@ html[data-wallpaper='1'] .backdrop__grain {
 
 .song-row__actions {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
   opacity: 0;
   transition: opacity 0.14s ease;
 }
@@ -1207,6 +1211,26 @@ html[data-wallpaper='1'] .backdrop__grain {
 .song-row:hover .song-row__actions,
 .song-row:focus-within .song-row__actions {
   opacity: 1;
+}
+
+/* 正在下载/转换的那一行，操作区常亮（显示进度文字）。 */
+.song-row .song-row__actions:has(.is-active) {
+  opacity: 1;
+}
+
+/* 下载进度文字：只占操作区里的文字位，绝不撑出圆角（原来放在 32px 圆钮里会顶出去）。 */
+.song-row__dl-label {
+  flex: none;
+  max-width: 100%;
+  padding: 0 2px;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--accent);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .badge {
