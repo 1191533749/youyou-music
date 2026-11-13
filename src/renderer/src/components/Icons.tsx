@@ -307,6 +307,27 @@ export function IconDiamond(props: IconProps): JSX.Element {
   )
 }
 
+/** 倍速：两个向右的双三角，表示「加速」。 */
+export function IconSpeed(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <path d="M5 5.5 10.5 12 5 18.5z" />
+      <path d="M12 5.5 17.5 12 12 18.5z" />
+    </Base>
+  )
+}
+
+/** 下载：向下箭头 + 底部托盘。 */
+export function IconDownload(props: IconProps): JSX.Element {
+  return (
+    <Base {...props}>
+      <path d="M12 3.5v9" />
+      <path d="m8.5 9.5 3.5 3.5 3.5-3.5" />
+      <path d="M5 16.5h14" />
+    </Base>
+  )
+}
+
 /** 星星：用于收藏/推荐等强调性标记。 */
 export function IconSparkles(props: IconProps): JSX.Element {
   return (
