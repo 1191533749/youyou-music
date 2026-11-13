@@ -132,6 +132,17 @@ function sanitise(input: Partial<SettingsDTO>): Partial<SettingsDTO> {
           out.volume = Math.min(150, Math.max(0, Math.round(value)))
         }
         break
+      case 'rate':
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          // 只接受 0.5–2 的 0.25 步进；不合法就回落 1。
+          out.rate = value >= 0.5 && value <= 2 && Math.abs(value * 4 - Math.round(value * 4)) < 1e-6
+            ? value
+            : 1
+        }
+        break
+      case 'downloadFormat':
+        out.downloadFormat = value === 'mp3' ? 'mp3' : 'original'
+        break
       case 'desktopLyricsFontSize':
         if (typeof value === 'number' && Number.isFinite(value)) {
           out.desktopLyricsFontSize = Math.min(96, Math.max(12, Math.round(value)))
