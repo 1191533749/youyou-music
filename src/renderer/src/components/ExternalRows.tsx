@@ -9,9 +9,11 @@ import { useEffect, useState } from 'react'
 import type { ExternalTrackDTO } from '@shared/types'
 import { formatDuration } from '../lib/format'
 import { useFailedExternalKeys } from '../store/player'
-import { IconDisc, IconMusic, IconPlay } from './Icons'
+import { IconDisc, IconDownload, IconMusic, IconPlay } from './Icons'
 
 const EXTERNAL_COLUMNS = '34px 40px minmax(0, 1fr) minmax(110px, 200px) minmax(120px, 220px) 60px'
+const EXTERNAL_COLUMNS_WITH_DL =
+  '34px 40px minmax(0, 1fr) minmax(110px, 200px) minmax(120px, 220px) 60px 96px'
 
 export default function ExternalRows(props: {
   items: ExternalTrackDTO[]
@@ -19,8 +21,15 @@ export default function ExternalRows(props: {
   playingKey?: string
   currentName?: string
   onPlay: (item: ExternalTrackDTO) => void
+  /** Show a per-row download button (搜索单曲列表). Omit to hide. */
+  download?: {
+    onSelect: (item: ExternalTrackDTO) => void
+    activeKey: string | null
+    /** Progress label for the downloading row（百分比 / 下载中 / 转换中）. */
+    label: string
+  }
 }): JSX.Element {
-  const { items, offset = 0, playingKey, currentName, onPlay } = props
+  const { items, offset = 0, playingKey, currentName, onPlay, download } = props
   const failedKeys = useFailedExternalKeys()
   const visible = items.filter((item) => !failedKeys.has(`${item.source}:${item.sourceId}`))
   if (visible.length === 0) return <></>
@@ -35,7 +44,7 @@ export default function ExternalRows(props: {
           <div
             key={key}
             className={`song-row song-row--external${current ? ' is-current' : ''}`}
-            style={{ gridTemplateColumns: EXTERNAL_COLUMNS }}
+            style={{ gridTemplateColumns: download ? EXTERNAL_COLUMNS_WITH_DL : EXTERNAL_COLUMNS }}
             onDoubleClick={() => onPlay(item)}
             title={`${item.name} — ${item.artists}`}
           >
@@ -62,6 +71,30 @@ export default function ExternalRows(props: {
             <div className="song-row__artist">{item.artists}</div>
             <div className="song-row__album">{item.album ?? '—'}</div>
             <div className="song-row__duration">{formatDuration(item.durationMS / 1000)}</div>
+            {download ? (
+              <div className="song-row__actions">
+                {download.activeKey === key ? (
+                  // 进行中：不画 32px 圆钮（装不下文字会顶出圆角），直接显示进度文字。
+                  <span className="song-row__dl-label" title="正在下载">
+                    {download.label}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={download.activeKey !== null}
+                    title="下载这首歌"
+                    aria-label={`下载 ${item.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      download.onSelect(item)
+                    }}
+                  >
+                    <IconDownload size={16} />
+                  </button>
+                )}
+              </div>
+            ) : null}
           </div>
         )
       })}
