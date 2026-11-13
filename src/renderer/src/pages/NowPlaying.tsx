@@ -21,6 +21,7 @@ import {
   onEvent,
   useNavigation,
   usePlayerStore,
+  useToast,
   type Route
 } from '../lib/contract'
 // 逐字卡拉OK 的时间轴工具：contract 只转出了三个歌词查询函数，
@@ -32,6 +33,7 @@ import {
   IconClose,
   IconDisc,
   IconDiamond,
+  IconDownload,
   IconExpand,
   IconHome,
   IconLyrics,
@@ -46,6 +48,7 @@ import {
   IconRepeatOne,
   IconShuffle,
   IconSparkles,
+  IconSpeed,
   IconTrash,
   IconUser,
   IconVolume,
@@ -75,9 +78,9 @@ type Visual = (typeof VISUALS)[number]['value']
  * 存过的旧值（fade）会在 readStoredChoice 里失配，自动回默认档。
  */
 const LYRIC_EFFECTS = [
+  { value: 'classic', label: '经典' },
   { value: 'karaoke', label: '卡拉OK' },
   { value: 'zoom', label: '渐变放大' },
-  { value: 'classic', label: '经典' },
   { value: 'neon', label: '霓虹' }
 ] as const
 
@@ -142,6 +145,11 @@ function writeStoredChoice(key: string, value: string): void {
   }
 }
 
+/** 倍速显示：1 →「1x」，1.25 →「1.25x」。 */
+function formatRate(rate: number): string {
+  return `${Number.isInteger(rate) ? rate.toFixed(0) : rate.toFixed(2)}x`
+}
+
 export default function NowPlaying(): JSX.Element {
   const navigation = useNavigation()
   const player = usePlayerStore()
@@ -158,7 +166,7 @@ export default function NowPlaying(): JSX.Element {
     readStoredChoice(
       LYRIC_EFFECT_KEY,
       LYRIC_EFFECTS.map((item) => item.value),
-      'karaoke'
+      'classic'
     )
   )
   const [queueOpen, setQueueOpen] = useState(false)
@@ -167,6 +175,9 @@ export default function NowPlaying(): JSX.Element {
   const [dropIndex, setDropIndex] = useState<number | undefined>(undefined)
   const [settings, setSettings] = useState<SettingsDTO | undefined>()
   const [lyrics, setLyrics] = useState<LyricsDTO | undefined>()
+  // 下载进度（本页同时最多一个下载任务）。
+  const [download, setDownload] = useState<{ received: number; total: number; converting?: boolean } | null>(null)
+  const { show: showToast, node: toastNode } = useToast()
   const [lyricsLoading, setLyricsLoading] = useState(false)
   const [lyricsError, setLyricsError] = useState<string | undefined>()
   const [lyricsNonce, setLyricsNonce] = useState(0)
@@ -223,6 +234,19 @@ export default function NowPlaying(): JSX.Element {
       .then((value) => setSystemFullScreen(value === true))
       .catch(() => undefined)
   }, [])
+
+  /**
+   * 订阅主进程的真全屏事件（F11、窗口层退出、setFullScreen 都会广播）。
+   * 透明窗口在 Windows 上 `isFullScreen()` 会读到旧值，所以按钮态以事件为准，
+   * 上面 toggle 的 .then 只做「点了就变」的快路径。
+   */
+  useEffect(
+    () =>
+      onEvent('window:fullscreen', (event) => {
+        setSystemFullScreen(event.fullscreen === true)
+      }),
+    []
+  )
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -406,6 +430,50 @@ export default function NowPlaying(): JSX.Element {
       return LYRIC_EFFECTS[(index + 1) % LYRIC_EFFECTS.length].value
     })
   }
+
+  // 播放倍速：0.75 → 1 → 1.25 → 1.5 → 2 循环；主进程会把设置记住，重启后仍生效。
+  const RATES = [0.75, 1, 1.25, 1.5, 2]
+  const cycleRate = (): void => {
+    const index = RATES.findIndex((value) => Math.abs(value - state.rate) < 0.001)
+    const next = RATES[(index < 0 ? 1 : index + 1) % RATES.length]
+    void player.setRate(next)
+  }
+
+  // 下载当前这首歌：主进程弹「保存到」对话框并流式写盘，进度经 download:progress 推送。
+  const downloadCurrent = (): void => {
+    const track = state.track
+    if (!track) return
+    void (async () => {
+      try {
+        const result = await call('download:track', {
+          track,
+          external: state.external
+        })
+        if (result.ok) {
+          showToast(`已保存：${result.path}`)
+        }
+      } catch (cause) {
+        showToast(String(cause instanceof Error ? cause.message : cause), 'error')
+      }
+    })()
+  }
+
+  useEffect(
+    () =>
+      onEvent('download:progress', (event) => {
+        if (event.done || event.error) {
+          setDownload(null)
+          return
+        }
+        if (event.converting) {
+          // 下载完成、正在 ffmpeg 转 MP3：进度数字不再有意义。
+          setDownload({ received: 0, total: 0, converting: true })
+          return
+        }
+        setDownload({ received: event.received, total: event.total })
+      }),
+    []
+  )
 
   // 记住上次选的效果；写失败也只是记不住，不影响播放。
   useEffect(() => writeStoredChoice(VISUAL_KEY, visual), [visual])
@@ -708,6 +776,33 @@ export default function NowPlaying(): JSX.Element {
           <IconDiamond size={15} />
           {lyricLabel}
         </button>
+        <button
+          type="button"
+          className="np-fs__tool"
+          onClick={() => void cycleRate()}
+          title="播放倍速"
+          aria-label={`播放倍速，当前 ${formatRate(state.rate)}`}
+        >
+          <IconSpeed size={15} />
+          {formatRate(state.rate)}
+        </button>
+        <button
+          type="button"
+          className="np-fs__tool"
+          onClick={downloadCurrent}
+          disabled={download !== null}
+          title="下载这首歌"
+          aria-label="下载这首歌"
+        >
+          <IconDownload size={15} />
+          {download
+            ? download.converting
+              ? '转换中'
+              : download.total > 0
+                ? `${Math.round((download.received / download.total) * 100)}%`
+                : '下载中'
+            : '下载'}
+        </button>
       </div>
 
       <div
@@ -826,6 +921,7 @@ export default function NowPlaying(): JSX.Element {
           </ol>
         )}
       </aside>
+      {toastNode}
     </div>,
     document.body
   )
