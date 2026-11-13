@@ -188,6 +188,8 @@ export interface PlayerDeps {
 
 export interface PlayerSnapshot {
   track?: TrackDTO
+  /** 当前曲目是站外音源时的原样信息（下载/收藏用）。 */
+  external?: ExternalTrackDTO
   queue: TrackDTO[]
   index: number
   playing: boolean
@@ -195,6 +197,8 @@ export interface PlayerSnapshot {
   duration: number
   volume: number
   muted: boolean
+  /** 播放倍速（0.5–2，步进 0.25）。 */
+  rate: number
   loading: boolean
   repeat: RepeatMode
   shuffle: boolean
@@ -255,6 +259,7 @@ export class PlayerController extends EventEmitter {
   private source?: string
   private servedFrom?: string
   private volume = 80
+  private rate = 1
   private scrobbleSent = false
   private positionTimer?: NodeJS.Timeout
   /** 起播证据等待期间用户手动暂停了：验证成功后别把状态扶回「播放中」。 */
@@ -358,6 +363,7 @@ export class PlayerController extends EventEmitter {
     const entry = this.queue[this.index]
     return {
       track: entry ? toTrackDTO(entry) : undefined,
+      external: entry?.external,
       queue: this.queue.map(toTrackDTO),
       index: this.index,
       playing: this.playing,
@@ -365,6 +371,7 @@ export class PlayerController extends EventEmitter {
       duration: this.duration || (entry ? entry.track.durationMS / 1000 : 0),
       volume: this.volume,
       muted: this.muteState,
+      rate: this.rate,
       loading: this.loading,
       repeat: this.repeatMode,
       shuffle: this.shuffle,
@@ -1535,6 +1542,41 @@ export class PlayerController extends EventEmitter {
     this.volume = clamp(volume, 0, 150)
     await this.deps.mpv.setVolume(this.volume)
     this.emitSnapshot()
+  }
+
+  /** 播放倍速：0.5–2，按 0.25 步进取整；切歌后仍生效（mpv 全局属性）。 */
+  async setRate(rate: number): Promise<void> {
+    this.rate = Math.min(2, Math.max(0.5, Math.round(clamp(rate, 0.5, 2) * 4) / 4))
+    await this.deps.mpv.setPlaybackRate(this.rate)
+    this.emitSnapshot()
+  }
+
+  /**
+   * 给「下载歌曲」用：解析一首歌的可下载地址（复用播放解析链，不吃队列状态）。
+   * 返回 { url, cached, ext }；cached=true 时 url 是本地缓存文件路径（直接复制即可）。
+   */
+  async resolveDownloadURL(
+    track: Track,
+    external?: ExternalTrackDTO
+  ): Promise<{ url: string; cached: boolean; ext: string }> {
+    const entry: QueueEntry | undefined = external
+      ? { track: toSyntheticTrack(external), playability: 'playable', external }
+      : undefined
+    const resolved = entry
+      ? await this.resolveSource(entry.track, entry)
+      : await this.resolveSource(track)
+    const source = resolved.cached
+      ? resolved.source.startsWith('file://')
+        ? resolved.source.slice(7)
+        : resolved.source
+      : resolved.source
+    const match = /\.([A-Za-z0-9]{1,5})(?:$|\?)/.exec(source)
+    const ext = match ? match[1].toLowerCase() : 'mp3'
+    return {
+      url: source,
+      cached: resolved.cached,
+      ext: ext === 'mp3' || ext === 'flac' || ext === 'm4a' ? ext : 'mp3'
+    }
   }
 
   async setMuted(muted: boolean): Promise<void> {
