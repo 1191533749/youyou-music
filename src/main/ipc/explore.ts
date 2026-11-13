@@ -492,10 +492,39 @@ export function registerExploreHandlers(context: AppContext): void {
      */
     const externalTask: Promise<ExternalTrackDTO[]> = wantsSongs
       ? (async () => {
-          const fromQishui = await searchExternal('qishui', keywords, 12).catch(() => [] as ExternalTrackDTO[])
-          const full = await withTimeout(filterQishuiFull(fromQishui), 4_000).catch(() => fromQishui)
-          // 站外条目同样在展示前实测一遍：拿不到直链的不进列表（否则点开就是「播不了」）。
-          return verifyExternalTracks(context, full)
+          /*
+           * 三源并行（汽水 / 酷狗 / 酷我）：网易云搜不到的，多一个源就多一分希望，
+           * 用户反馈「酷狗里有 我们这里搜不出来」。每个源限 12 条、统一实测直链，
+           * 全部并行跑，等待时间不叠加；最后按「歌名+歌手」去重再合并。
+           */
+          const qishuiTask = (async () => {
+            const fromQishui = await searchExternal('qishui', keywords, 12).catch(() => [] as ExternalTrackDTO[])
+            const full = await withTimeout(filterQishuiFull(fromQishui), 4_000).catch(() => fromQishui)
+            return verifyExternalTracks(context, full)
+          })()
+          const kugouTask = (async () => {
+            const fromKugou = await searchExternal('kugou', keywords, 12).catch(() => [] as ExternalTrackDTO[])
+            return verifyExternalTracks(context, fromKugou)
+          })()
+          const kuwoTask = (async () => {
+            const fromKuwo = await searchExternal('kuwo', keywords, 12).catch(() => [] as ExternalTrackDTO[])
+            return verifyExternalTracks(context, fromKuwo)
+          })()
+          const [qishui, kugou, kuwo] = await Promise.all([
+            withTimeout(qishuiTask, 8_000).catch(() => [] as ExternalTrackDTO[]),
+            withTimeout(kugouTask, 8_000).catch(() => [] as ExternalTrackDTO[]),
+            withTimeout(kuwoTask, 8_000).catch(() => [] as ExternalTrackDTO[])
+          ])
+          // 合并三源，按「歌名+歌手」去重：汽水优先，其次酷狗，最后酷我。
+          const merged: ExternalTrackDTO[] = []
+          const seen = new Set<string>()
+          for (const item of [...qishui, ...kugou, ...kuwo]) {
+            const key = searchKey(item.name, item.artists.split(/[/&、,，;；]/)[0] ?? '')
+            if (seen.has(key)) continue
+            seen.add(key)
+            merged.push(item)
+          }
+          return merged
         })()
       : Promise.resolve([])
 
