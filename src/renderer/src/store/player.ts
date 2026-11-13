@@ -80,6 +80,7 @@ const EMPTY_STATE: PlayerStateDTO = {
   duration: 0,
   volume: 80,
   muted: false,
+  rate: 1,
   loading: false,
   repeat: 'off',
   shuffle: false,
@@ -108,6 +109,7 @@ export interface PlayerStore {
   seek: (seconds: number) => Promise<void>
   setVolume: (volume: number) => Promise<void>
   setMuted: (muted: boolean) => Promise<void>
+  setRate: (rate: number) => Promise<void>
   cycleRepeat: () => Promise<void>
   setShuffle: (shuffle: boolean) => Promise<void>
   setRepeat: (mode: RepeatMode) => Promise<void>
@@ -154,6 +156,7 @@ export function usePlayerStore(): PlayerStore {
       seek: (seconds) => command('player:seek', { seconds }),
       setVolume: (volume) => command('player:setVolume', { volume }),
       setMuted: (muted) => command('player:setMuted', { muted }),
+      setRate: (rate) => command('player:setRate', { rate }),
       cycleRepeat: () => command('player:cycleRepeat'),
       setShuffle: (shuffle) => command('player:setShuffle', { shuffle }),
       setRepeat: (mode) => command('player:setRepeat', { mode }),
